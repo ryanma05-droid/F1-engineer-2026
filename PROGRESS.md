@@ -3,7 +3,7 @@
 ## Phase 0 — foundation
 
 - [x] 1. Project setup (pyproject, .gitignore, config.yaml, CLAUDE.md, docs/architecture.md, spec saved)
-- [ ] 2. Versioned parser (`engineer/ingest/formats/f1_2025.py`)
+- [x] 2. Versioned parser (`engineer/ingest/formats/f1_2025.py`)
 - [ ] 3. UDP listener
 - [ ] 4. Recorder + SQLite session index
 - [ ] 5. Race state
