@@ -1,0 +1,15 @@
+# Race engineer configuration. Paths are relative to the project folder.
+
+listen:
+  host: 0.0.0.0     # 0.0.0.0 = accept packets from any network interface
+  port: 20777       # must match the port set in F1 25 telemetry settings
+
+# Optional: resend every packet unchanged so other apps (e.g. SimHub) keep working.
+# Give each app its own port and point that app at it.
+forward: []
+#  - host: 127.0.0.1
+#    port: 20778
+
+data_dir: data      # sessions/, tracks/, features/, models/ live under here
+
+record: true        # save every raw packet to data/sessions/
