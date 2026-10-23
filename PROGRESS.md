@@ -30,6 +30,9 @@
   with 6+ cars, the log says either "spec order confirmed" or a warning that they look swapped.
 - **Last-lap time timing**: the detector waits for `m_lastLapTimeInMS` to change after the lap number
   rolls over (up to 2 s). Confirm on real data that lap lines appear within a frame or two of the line.
+- **Final race lap**: laps are detected by the lap number going up. If the game doesn't advance
+  `m_currentLapNum` when a car takes the chequered flag (result status becomes Finished), the last
+  lap won't print. Check the final lap of a real race; if missing, also trigger on result status 3.
 - **Sector 3** is computed as lap - S1 - S2. Compare with Session History's S3 on a real recording.
 - **Flashbacks**: Phase 0 drops lap/sector baselines on FLBK so rewound laps aren't reported. It does
   not roll back other state; values refresh within one packet cycle. Revisit for Phase 4 traces.
