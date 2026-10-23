@@ -38,7 +38,6 @@
   not roll back other state; values refresh within one packet cycle. Revisit for Phase 4 traces.
 - **Windows**: developed and tested on Linux. First Windows run should confirm the UDP port binds
   and Ctrl+C stops cleanly.
-- GitHub remote: the cloud session could not create the repo; it needs to be created by the owner.
 
 ## Phase 1 notes
 
