@@ -9,7 +9,7 @@
 - [x] 5. Race state
 - [x] 6. Event bus + event detection
 - [x] 7. Replay runner
-- [ ] 8. CLI lap lines
+- [x] 8. CLI lap lines
 - [ ] 9. Tests and benchmark
 
 ## Open questions
