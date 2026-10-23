@@ -120,3 +120,124 @@ class PacketFactory:
 def split_ms(ms: int) -> tuple[int, int]:
     """Sector times come as (ms part, minutes part)."""
     return ms % 60000, ms // 60000
+
+
+class FakeRace:
+    """Generates a plausible packet stream for a short session, frame by frame at 60 Hz.
+
+    Each car drives laps of `lap_times_ms[car][lap-1]`; sectors split the lap 30/40/30 by time.
+    Options let tests inject the awkward cases: an invalid lap, a pit stop, a flashback, and the
+    last-lap time arriving a few packets late.
+    """
+
+    LAP_LEN = 5000.0
+
+    def __init__(self, lap_times_ms: dict[int, list[int]], session_type=15, track_id=10,
+                 invalid_laps: dict[int, set[int]] | None = None,
+                 pit_laps: dict[int, int] | None = None,
+                 last_lap_delay_frames: int = 0, extra_packets: bool = True,
+                 session_uid: int = SESSION_UID, telemetry_public: list[int] | None = None):
+        self.pf = PacketFactory(session_uid=session_uid)
+        self.lap_times = lap_times_ms
+        self.session_type = session_type
+        self.track_id = track_id
+        self.invalid_laps = invalid_laps or {}
+        self.pit_laps = pit_laps or {}           # car -> lap on which it pits (end of that lap)
+        self.delay = last_lap_delay_frames
+        self.extra = extra_packets
+        self.telemetry_public = telemetry_public
+        self.t0_ns = 1_700_000_000_000_000_000
+
+    def _car_at(self, car: int, t_ms: float) -> dict:
+        laps = self.lap_times[car]
+        elapsed = 0.0
+        last = 0
+        for n, lt in enumerate(laps, start=1):
+            if t_ms < elapsed + lt:
+                into = t_ms - elapsed
+                frac = into / lt
+                s1, s2 = round(lt * 0.3), round(lt * 0.4)
+                sector = 0 if into < s1 else (1 if into < s1 + s2 else 2)
+                pit = 0
+                if self.pit_laps.get(car) == n and frac > 0.95:
+                    pit = 1
+                if self.pit_laps.get(car) == n - 1 and frac < 0.05:
+                    pit = 2 if frac < 0.02 else 1
+                return dict(lap=n, into=into, frac=frac, sector=sector,
+                            s1=s1 if sector >= 1 else 0, s2=s2 if sector >= 2 else 0,
+                            last=last, last_changed_at=elapsed, pit=pit,
+                            invalid=1 if n in self.invalid_laps.get(car, set()) and frac > 0.5 else 0)
+            elapsed += lt
+            last = lt
+        return dict(lap=len(laps) + 1, into=0, frac=0, sector=0, s1=0, s2=0, last=last,
+                    last_changed_at=elapsed, pit=0, invalid=0)
+
+    def frames(self, duration_ms: float | None = None, flashback_at_ms: float | None = None,
+               flashback_back_ms: float = 20000):
+        """Yield (t_ns, raw) packets. If flashback_at_ms is given, at that moment the session
+        jumps back flashback_back_ms (an FLBK event is sent first)."""
+        pf = self.pf
+        cars = sorted(self.lap_times)
+        if duration_ms is None:
+            duration_ms = min(sum(v) for v in self.lap_times.values()) + 3000
+        frame = 0
+        wall_ms = 0.0
+        game_ms = 0.0
+        did_flashback = False
+        step = 1000 / 60
+        while wall_ms <= duration_ms:
+            t_ns = self.t0_ns + int(wall_ms * 1e6)
+            pf.session_time = game_ms / 1000
+            pf.frame = frame
+            if flashback_at_ms is not None and not did_flashback and game_ms >= flashback_at_ms:
+                did_flashback = True
+                target = game_ms - flashback_back_ms
+                yield t_ns, pf.event("FLBK", flashbackFrameIdentifier=int(target / step),
+                                     flashbackSessionTime=target / 1000)
+                game_ms = target
+                pf.session_time = game_ms / 1000
+            if frame % 30 == 0:
+                yield t_ns, pf.session(track_id=self.track_id, session_type=self.session_type,
+                                       total_laps=max(len(v) for v in self.lap_times.values()))
+            if frame % 300 == 0:
+                yield t_ns, pf.participants(num_active=len(cars),
+                                            telemetry_public=self.telemetry_public)
+            lap = {}
+            for car in cars:
+                st = self._car_at(car, game_ms)
+                last = st["last"]
+                if self.delay and game_ms - st["last_changed_at"] < self.delay * step:
+                    # simulate the game updating last-lap time a few frames late
+                    prev = self.lap_times[car][st["lap"] - 3] if st["lap"] >= 3 else 0
+                    last = prev
+                lap[car] = {
+                    "currentLapNum": st["lap"], "lastLapTimeInMS": last,
+                    "currentLapTimeInMS": int(st["into"]), "lapDistance": st["frac"] * self.LAP_LEN,
+                    "totalDistance": (st["lap"] - 1 + st["frac"]) * self.LAP_LEN,
+                    "sector": st["sector"],
+                    "sector1TimeMSPart": split_ms(st["s1"])[0],
+                    "sector1TimeMinutesPart": split_ms(st["s1"])[1],
+                    "sector2TimeMSPart": split_ms(st["s2"])[0],
+                    "sector2TimeMinutesPart": split_ms(st["s2"])[1],
+                    "pitStatus": st["pit"], "currentLapInvalid": st["invalid"],
+                    "carPosition": car + 1, "gridPosition": car + 1, "driverStatus": 4,
+                }
+            yield t_ns, pf.lap_data(lap)
+            yield t_ns, pf.car_telemetry({c: {"speed": 250, "throttle": 1.0,
+                                              "tyresSurfaceTemperature": [90, 91, 92, 93]}
+                                          for c in cars})
+            yield t_ns, pf.car_status({c: {"visualTyreCompound": 16, "actualTyreCompound": 18,
+                                           "tyresAgeLaps": lap[c]["currentLapNum"] - 1,
+                                           "fuelInTank": 50.0} for c in cars})
+            if frame % 6 == 0:
+                yield t_ns, pf.car_damage({c: {"tyresWear": [5.5, 6.0, 4.0, 4.5]} for c in cars})
+            if self.extra:
+                yield t_ns, pf.blank(f.PacketId.MOTION).tobytes()
+                yield t_ns, pf.blank(f.PacketId.MOTION_EX).tobytes()
+                if frame % 3 == 0:
+                    a = pf.blank(f.PacketId.SESSION_HISTORY)
+                    a[0]["m_carIdx"] = cars[(frame // 3) % len(cars)]
+                    yield t_ns, a.tobytes()
+            frame += 1
+            wall_ms += step
+            game_ms += step

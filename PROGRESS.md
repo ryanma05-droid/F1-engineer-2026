@@ -7,7 +7,7 @@
 - [x] 3. UDP listener
 - [x] 4. Recorder + SQLite session index
 - [x] 5. Race state
-- [ ] 6. Event bus + event detection
+- [x] 6. Event bus + event detection
 - [ ] 7. Replay runner
 - [ ] 8. CLI lap lines
 - [ ] 9. Tests and benchmark
