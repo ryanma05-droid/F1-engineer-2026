@@ -20,7 +20,7 @@ Read `docs/architecture.md` (full design) and `PROGRESS.md` (what's done / open 
 
 ## Phase plan
 
-0 foundation (current) · 1 radio director + Piper TTS + lap delta · 2 features/feature tables ·
+0 foundation (done, awaiting real-game acceptance) · 1 radio director + Piper TTS + lap delta · 2 features/feature tables ·
 3 tyre coaching · 4 traces + corner coaching · 5 strategy sim · 6 push-to-talk.
 
 ## Commands
