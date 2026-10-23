@@ -4,7 +4,7 @@
 
 - [x] 1. Project setup (pyproject, .gitignore, config.yaml, CLAUDE.md, docs/architecture.md, spec saved)
 - [x] 2. Versioned parser (`engineer/ingest/formats/f1_2025.py`)
-- [ ] 3. UDP listener
+- [x] 3. UDP listener
 - [ ] 4. Recorder + SQLite session index
 - [ ] 5. Race state
 - [ ] 6. Event bus + event detection
