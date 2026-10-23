@@ -131,8 +131,8 @@ class EventDetector:
         lap_up = known & (c.lap > b.lap)
         lap_back = known & (c.lap < b.lap)
         same_lap = known & (c.lap == b.lap)
-        pit_now = np.nan_to_num(c.pit_status) > 0
-        pit_before = np.nan_to_num(b.pit_status) > 0
+        pit_now = c.pit_status > 0  # NaN compares False
+        pit_before = b.pit_status > 0
 
         # Pit entry / exit
         for i in np.flatnonzero(known & pit_now & ~pit_before):
@@ -172,7 +172,7 @@ class EventDetector:
             b.pit_at_lap_start[i] = pit_now[i]
 
         # Latches for the lap in progress (after rollover handling, so they apply to the new lap).
-        b.invalid_latch |= c.active & (np.nan_to_num(c.current_lap_invalid) == 1)
+        b.invalid_latch |= c.active & (c.current_lap_invalid == 1)
         b.pit_during_lap |= c.active & pit_now
         new = c.active & np.isnan(b.lap)
         b.pit_at_lap_start[new] = pit_now[new]
