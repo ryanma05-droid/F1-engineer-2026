@@ -86,6 +86,12 @@ def test_grid_order_check_spec_and_swapped():
     apply(s, pf.lap_data({i: {"gridPosition": i + 1, "driverStatus": 4} for i in range(10)}))
     assert s.checks.grid_order == "spec"
 
+    # Real F1 25 grid positions are zero-based (pole = 0): still spec order.
+    s = RaceState()
+    apply(s, pf.session(session_type=15))
+    apply(s, pf.lap_data({i: {"gridPosition": i, "driverStatus": 4} for i in range(10)}))
+    assert s.checks.grid_order == "spec"
+
     s = RaceState()
     apply(s, pf.session(session_type=15))
     apply(s, pf.lap_data({i: {"gridPosition": 4, "driverStatus": i + 1} for i in range(10)}))

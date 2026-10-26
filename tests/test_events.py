@@ -84,3 +84,12 @@ def test_session_end_on_new_uid():
     ended = of(got, ev.SessionEnded)
     assert len(ended) == 1 and ended[0].session_uid == 1 and ended[0].reason == "new_session"
     assert [e.session_uid for e in of(got, ev.SessionStarted)] == [1, 2]
+
+
+def test_final_lap_at_chequered_flag_is_reported_once():
+    # Real F1 25: crossing the line at the flag doesn't advance the lap number.
+    _, got = run(FakeRace({0: [30000, 29500, 29100], 1: [30500, 30100, 29900]},
+                          chequered_flag=True), duration_ms=100000)
+    assert [(e.lap, e.lap_time_ms) for e in of(got, ev.LapCompleted, car=0)] == \
+        [(1, 30000), (2, 29500), (3, 29100)]
+    assert [e.lap for e in of(got, ev.LapCompleted, car=1)] == [1, 2, 3]

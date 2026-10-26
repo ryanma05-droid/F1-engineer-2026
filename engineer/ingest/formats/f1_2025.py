@@ -157,9 +157,10 @@ PACKET_SESSION = _dt([
 # --- 2 Lap Data --------------------------------------------------------------------------------
 
 # FIELD-ORDER NOTE: the spec lists m_gridPosition BEFORE m_driverStatus, and that is what we
-# implement. At least one developer reported that real packets have the two swapped (grid
-# positions read as 0 at race start). engineer/state/checks.py warns when the data looks swapped;
-# confirm against a real race-start recording before changing anything here.
+# implement. A community report said real packets have the two swapped (grid positions read as 0
+# at race start). CONFIRMED CORRECT on a real recording (tests/fixtures/austria_race_5laps.zst):
+# the spec order is right, but m_gridPosition is zero-based in practice (pole reads 0).
+# engineer/state/checks.py still re-checks every race and warns if the data ever looks swapped.
 LAP_DATA = _dt([
     ("m_lastLapTimeInMS", u32),
     ("m_currentLapTimeInMS", u32),
@@ -185,7 +186,7 @@ LAP_DATA = _dt([
     ("m_cornerCuttingWarnings", u8),
     ("m_numUnservedDriveThroughPens", u8),
     ("m_numUnservedStopGoPens", u8),
-    ("m_gridPosition", u8),   # see FIELD-ORDER NOTE above
+    ("m_gridPosition", u8),   # see FIELD-ORDER NOTE above; zero-based in real data (pole = 0)
     ("m_driverStatus", u8),   # see FIELD-ORDER NOTE above
     ("m_resultStatus", u8),
     ("m_pitLaneTimerActive", u8),

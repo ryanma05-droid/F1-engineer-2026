@@ -20,7 +20,7 @@ Read `docs/architecture.md` (full design) and `PROGRESS.md` (what's done / open 
 
 ## Phase plan
 
-0 foundation (done, awaiting real-game acceptance) · 1 radio director + Piper TTS + lap delta · 2 features/feature tables ·
+0 foundation (accepted) · 1 radio director + Piper TTS + lap delta · 2 features/feature tables ·
 3 tyre coaching · 4 traces + corner coaching · 5 strategy sim · 6 push-to-talk.
 
 ## Commands
@@ -33,10 +33,15 @@ uv run python -m engineer.ingest.replay <file.zst> --speed max
 uv run python -m engineer.bench <file.zst>
 ```
 
-## Known open questions
+## Real-data facts (confirmed on tests/fixtures/austria_race_5laps.zst)
 
-- Lap Data `m_gridPosition` / `m_driverStatus` order: spec order implemented; community report says
-  they're swapped in real packets. `engineer/state/checks.py` warns at race start; confirm against a
-  real recording and update `PROGRESS.md`.
-- Development happens in a Linux cloud container; the target runtime is Windows. Keep paths and
-  sockets cross-platform.
+- Lap Data spec field order is correct; `m_gridPosition` is zero-based (pole = 0).
+- At the chequered flag the lap number does NOT advance; the last-lap time changes on the same lap.
+- `m_lastLapTimeInMS` updates on the same frame as the lap number.
+- Computed S3 can differ from the game's by 1-2 ms (separate rounding).
+- The golden test (`tests/test_golden.py`) replays the fixture; keep it passing.
+
+## Environment
+
+Development happens in a Linux cloud container; the target runtime is Windows. Keep paths and
+sockets cross-platform.

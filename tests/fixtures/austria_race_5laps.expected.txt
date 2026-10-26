@@ -1,0 +1,5 @@
+Lap  1  1:17.680  S1 22.576  S2 33.444  S3 21.660  Soft (C5) age 0  wear RL 3.0% RR 2.0% FL 3.0% FR 3.0%
+Lap  2  1:09.622  S1 17.152  S2 31.398  S3 21.072  Soft (C5) age 1  wear RL 5.0% RR 5.0% FL 7.0% FR 7.0%
+Lap  3  1:09.599  S1 17.260  S2 30.841  S3 21.498  Soft (C5) age 2  wear RL 8.0% RR 7.0% FL 10.0% FR 11.0%
+Lap  4  1:09.162  S1 16.857  S2 30.994  S3 21.311  Soft (C5) age 3  wear RL 10.0% RR 10.0% FL 14.0% FR 15.0%
+Lap  5  1:09.126  S1 16.902  S2 31.159  S3 21.065  Soft (C5) age 4  wear RL 13.0% RR 12.0% FL 18.0% FR 19.0%

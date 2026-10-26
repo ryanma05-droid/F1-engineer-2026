@@ -10,34 +10,41 @@
 - [x] 6. Event bus + detection (SessionStarted/Ended, LapCompleted, SectorCompleted, PitEntry/Exit, Flashback)
 - [x] 7. Replay runner (in-process at 1x / Nx / max, or `--udp`)
 - [x] 8. CLI lap lines (`python -m engineer run`, `python -m engineer sessions`)
-- [x] 9. Tests (61 passing) and benchmark
-- [ ] Golden test with a real recording (harness ready in `tests/test_golden.py`, needs a fixture)
-- [ ] Acceptance run in the real game on Windows
+- [x] 9. Tests (63 passing, including the golden test) and benchmark
+- [x] Golden test with a real recording (`tests/fixtures/austria_race_5laps.zst`)
+- [x] Acceptance run in the real game on Windows
 
-## Verified so far (synthetic data, Linux)
+**Phase 0 accepted.**
 
-- Every dtype size matches the spec; round-trip tests catch any one-byte field shift.
-- End-to-end over real UDP: `engineer run` received 32,888 packets sent at 10x speed with no loss,
-  printed correct lap lines, recorded the session, shut down cleanly on Ctrl+C; replaying the
-  recording printed identical lines.
-- Benchmark (`python -m engineer.bench --synthetic`, 20 cars, ~91k packets): mean 32 us, p50 16 us,
-  p99 147 us, max 1.8 ms per packet. Target (mean < 1 ms) met. Lap Data is the most expensive packet
-  (~93 us) because of event detection.
+## Real-game results (Austria, 5-lap race, 20 cars, Windows, 26 Oct 2026)
 
-## Open questions / to confirm with a real recording
+- `engineer run` on Windows: port bound, 114,689 packets, 0 rejected, clean Ctrl+C.
+- Replay of the recording prints identical lap lines to the live run.
+- Every lap of all 20 cars (5 each, no duplicates) matches the game's own Session History lap times.
+  The player's 5 lap times, S1 and S2 match the game exactly; lap 5 matches the game's
+  fastest-lap event (1:09.126).
+- A flashback on lap 3 was handled: the lap was reported once, with the right time.
+- Benchmark on the real recording: mean 31 us, p50 14 us, p99 139 us, max 3.0 ms per packet.
 
-- **Lap Data field order** (`m_gridPosition` vs `m_driverStatus`): spec order implemented. In a race
-  with 6+ cars, the log says either "spec order confirmed" or a warning that they look swapped.
-- **Last-lap time timing**: the detector waits for `m_lastLapTimeInMS` to change after the lap number
-  rolls over (up to 2 s). Confirm on real data that lap lines appear within a frame or two of the line.
-- **Final race lap**: laps are detected by the lap number going up. If the game doesn't advance
-  `m_currentLapNum` when a car takes the chequered flag (result status becomes Finished), the last
-  lap won't print. Check the final lap of a real race; if missing, also trigger on result status 3.
-- **Sector 3** is computed as lap - S1 - S2. Compare with Session History's S3 on a real recording.
-- **Flashbacks**: Phase 0 drops lap/sector baselines on FLBK so rewound laps aren't reported. It does
-  not roll back other state; values refresh within one packet cycle. Revisit for Phase 4 traces.
-- **Windows**: developed and tested on Linux. First Windows run should confirm the UDP port binds
-  and Ctrl+C stops cleanly.
+## Questions settled by the real recording
+
+- **Lap Data field order**: spec order is CORRECT (not swapped). `m_gridPosition` is zero-based in
+  practice (pole = 0), which likely explains the community "grid reads 0" report.
+- **Final race lap**: the game does NOT advance `m_currentLapNum` at the chequered flag; the
+  last-lap time changes on the same lap and result status becomes Finished a frame later. The
+  detector now completes a lap on that signal. (Live run printed only 4 of 5 laps before this fix.)
+- **Last-lap time timing**: updates on the same frame as the lap number, so lap lines are instant.
+- **Restricted telemetry**: the player's own `m_yourTelemetry` can be 0 (restricted); the player car
+  is still treated as visible, as the spec says.
+
+## Still open
+
+- **Sector 3 is 1-2 ms off the game's value.** We compute S3 = lap - S1 - S2 the moment the lap ends;
+  the game rounds each sector separately (e.g. ours 21.660, game's 21.659). The game's exact S3
+  arrives in Session History up to ~1.1 s later. Fine for radio calls; revisit if exact S3 matters.
+- **Final Classification** was not in this recording (the session was stopped before the results
+  screen), so packet 8 is untested on real data. Not needed in Phase 0.
+- **Flashbacks** only reset lap/sector tracking; fuller rollback can wait until Phase 4 traces.
 
 ## Phase 1 notes
 

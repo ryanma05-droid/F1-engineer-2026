@@ -5,9 +5,15 @@ the value from the previous Lap Data packet. When it goes up, the previous lap i
 capture that lap's sector 1/2 times *before* the game resets them for the new lap, and remember
 whether the lap was ever flagged invalid or touched the pit lane.
 
-The game may update `m_lastLapTimeInMS` a packet or two after the lap number changes, so a
-completed lap is held as "pending" until the last-lap time changes (or 2 s of session time pass).
-Sector completions are held the same way until the sector time is non-zero.
+In real F1 25 data `m_lastLapTimeInMS` updates on the same frame as the lap number, but a
+completed lap is still held as "pending" until the last-lap time changes (or 2 s of session time
+pass) in case it ever lags. Sector completions are held the same way until the sector time is
+non-zero.
+
+The final lap of a race is different: at the chequered flag the game does NOT advance the lap
+number. Instead `m_lastLapTimeInMS` changes while the lap number stays put (and the result status
+turns Finished on the next frame). So a last-lap time change on the same lap also completes a lap,
+numbered as the current lap. Confirmed on a real 5-lap race at Austria.
 
 SessionStarted is published on the first Session packet of a new session UID, so it always
 carries the track and session type. SessionEnded comes from the SEND event, or from the UID changing.
@@ -156,6 +162,25 @@ class EventDetector:
             b.invalid_latch[i] = False
             b.pit_during_lap[i] = pit_now[i]
             b.pit_at_lap_start[i] = pit_now[i]
+
+        # Finish line at the chequered flag: lap number stays, last-lap time changes.
+        # Skipped for cars with a lap already pending, so a lagging update can't count twice.
+        last_changed = (c.last_lap_time_ms > 0) & (c.last_lap_time_ms != b.last_lap_ms)
+        for i in np.flatnonzero(same_lap & last_changed & ~np.isnan(b.last_lap_ms)):
+            if int(i) in self.pending_laps:
+                continue
+            self.pending_sectors.pop(int(i), None)
+            self.pending_laps[int(i)] = _PendingLap(
+                lap=int(c.lap[i]),
+                old_last_lap_ms=b.last_lap_ms[i],
+                sector1_ms=b.sector1_ms[i],
+                sector2_ms=b.sector2_ms[i],
+                invalid=bool(b.invalid_latch[i]),
+                pit_in_lap=bool(b.pit_during_lap[i] or pit_now[i]),
+                pit_out_lap=bool(b.pit_at_lap_start[i]),
+                since=t,
+            )
+            b.invalid_latch[i] = False
 
         # Sector changes within a lap: 0 -> 1 means S1 done, 1 -> 2 means S2 done.
         sec_up = same_lap & (c.sector > b.sector)

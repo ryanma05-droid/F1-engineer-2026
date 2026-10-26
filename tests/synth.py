@@ -136,7 +136,8 @@ class FakeRace:
                  invalid_laps: dict[int, set[int]] | None = None,
                  pit_laps: dict[int, int] | None = None,
                  last_lap_delay_frames: int = 0, extra_packets: bool = True,
-                 session_uid: int = SESSION_UID, telemetry_public: list[int] | None = None):
+                 session_uid: int = SESSION_UID, telemetry_public: list[int] | None = None,
+                 chequered_flag: bool = False):
         self.pf = PacketFactory(session_uid=session_uid)
         self.lap_times = lap_times_ms
         self.session_type = session_type
@@ -146,6 +147,9 @@ class FakeRace:
         self.delay = last_lap_delay_frames
         self.extra = extra_packets
         self.telemetry_public = telemetry_public
+        # Real F1 25 behaviour at the end of a race: the lap number stays on the final lap, the
+        # last-lap time updates and result status becomes 3 (finished).
+        self.chequered_flag = chequered_flag
         self.t0_ns = 1_700_000_000_000_000_000
 
     def _car_at(self, car: int, t_ms: float) -> dict:
@@ -169,8 +173,9 @@ class FakeRace:
                             invalid=1 if n in self.invalid_laps.get(car, set()) and frac > 0.5 else 0)
             elapsed += lt
             last = lt
-        return dict(lap=len(laps) + 1, into=0, frac=0, sector=0, s1=0, s2=0, last=last,
-                    last_changed_at=elapsed, pit=0, invalid=0)
+        return dict(lap=len(laps) if self.chequered_flag else len(laps) + 1, into=0, frac=0,
+                    sector=0, s1=0, s2=0, last=last, last_changed_at=elapsed, pit=0, invalid=0,
+                    finished=True)
 
     def frames(self, duration_ms: float | None = None, flashback_at_ms: float | None = None,
                flashback_back_ms: float = 20000):
@@ -220,8 +225,10 @@ class FakeRace:
                     "sector2TimeMSPart": split_ms(st["s2"])[0],
                     "sector2TimeMinutesPart": split_ms(st["s2"])[1],
                     "pitStatus": st["pit"], "currentLapInvalid": st["invalid"],
-                    "carPosition": car + 1, "gridPosition": car + 1, "driverStatus": 4,
+                    "carPosition": car + 1, "gridPosition": car, "driverStatus": 4,
                 }
+                if st.get("finished") and self.chequered_flag:
+                    lap[car]["resultStatus"] = 3
             yield t_ns, pf.lap_data(lap)
             yield t_ns, pf.car_telemetry({c: {"speed": 250, "throttle": 1.0,
                                               "tyresSurfaceTemperature": [90, 91, 92, 93]}
