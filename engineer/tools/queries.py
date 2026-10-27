@@ -15,6 +15,8 @@ from engineer.features.lap_features import (LapFeatureBuilder, Stint, fit_wear_r
                                             summarize_stints)
 from engineer.features.laps import LapHistory, LapRecord
 from engineer.features.priors import WearPriors
+from engineer.state.track_maps import Corner, TrackMap
+from engineer.state.traces import LapTrace
 
 SAME_LAP_THRESHOLD_MS = 50     # deltas smaller than this are "the same"
 
@@ -167,3 +169,69 @@ def pace_trend_ms_per_lap(features: LapFeatureBuilder, car_idx: int, fuel_s_per_
 def stint_summary(features: LapFeatureBuilder, car_idx: int) -> list[Stint]:
     """Every stint this car has done this session, oldest first."""
     return sorted(summarize_stints(features.for_car(car_idx)), key=lambda s: s.stint)
+
+
+# -- corners (Phase 4) -------------------------------------------------------------------------
+
+BRAKE_ON = 0.2
+FULL_THROTTLE = 0.95
+REASON_THRESHOLDS = {"brake_early": 10.0, "min_speed": 4.0, "throttle_late": 15.0,
+                     "exit_speed": 4.0}          # metres / kph
+
+
+@dataclass(frozen=True)
+class CornerStats:
+    """One car's run through one corner."""
+    time_s: float                 # entry to exit
+    brake_m: float | None         # where braking started (None: a lift, no braking)
+    min_speed_kph: float
+    full_throttle_m: float | None # where the car was back on full throttle after the apex
+    exit_speed_kph: float
+
+
+def corner_stats(trace: LapTrace, corner: Corner) -> CornerStats:
+    a, apex, b = trace.index(corner.entry_m), trace.index(corner.apex_m), trace.index(corner.exit_m)
+    braking = np.flatnonzero(trace.brake[a:apex + 1] > BRAKE_ON)
+    full = np.flatnonzero(trace.throttle[apex:b + 1] >= FULL_THROTTLE)
+    return CornerStats(
+        time_s=trace.time_at(corner.exit_m) - trace.time_at(corner.entry_m),
+        brake_m=float(trace.distance_m[a + braking[0]]) if braking.size else None,
+        min_speed_kph=float(np.min(trace.speed_kph[a:b + 1])),
+        full_throttle_m=float(trace.distance_m[apex + full[0]]) if full.size else None,
+        exit_speed_kph=float(trace.speed_kph[b]))
+
+
+@dataclass(frozen=True)
+class CornerDelta:
+    corner: Corner
+    mine: CornerStats
+    ref: CornerStats
+
+    @property
+    def delta_s(self) -> float:
+        """Positive = slower than the reference through this corner."""
+        return self.mine.time_s - self.ref.time_s
+
+    def reason(self) -> tuple[str, float] | None:
+        """The most likely cause of a loss: ("brake_early", metres), ("min_speed", kph),
+        ("throttle_late", metres) or ("exit_speed", kph). Each must pass its threshold; if several
+        do, the biggest relative to its threshold wins (10 kph down beats braking 10 m early)."""
+        m, r = self.mine, self.ref
+        found = []
+        if m.brake_m is not None and r.brake_m is not None:
+            found.append(("brake_early", r.brake_m - m.brake_m))
+        found.append(("min_speed", r.min_speed_kph - m.min_speed_kph))
+        if m.full_throttle_m is not None and r.full_throttle_m is not None:
+            found.append(("throttle_late", m.full_throttle_m - r.full_throttle_m))
+        found.append(("exit_speed", r.exit_speed_kph - m.exit_speed_kph))
+        scored = [(v / REASON_THRESHOLDS[k], k, v) for k, v in found if v >= REASON_THRESHOLDS[k]]
+        if not scored:
+            return None
+        _score, kind, value = max(scored)
+        return kind, value
+
+
+def corner_deltas(trace: LapTrace, ref: LapTrace, track_map: TrackMap) -> list[CornerDelta]:
+    """Compare two laps corner by corner (same track, any cars)."""
+    return [CornerDelta(c, corner_stats(trace, c), corner_stats(ref, c))
+            for c in track_map.corners]

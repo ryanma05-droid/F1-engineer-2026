@@ -138,7 +138,8 @@ class FakeRace:
                  last_lap_delay_frames: int = 0, extra_packets: bool = True,
                  session_uid: int = SESSION_UID, telemetry_public: list[int] | None = None,
                  chequered_flag: bool = False, wear_per_lap: list[float] | None = None,
-                 inner_temp=None, compound_after_pit: int = 16, fuel_per_lap: float = 0.0):
+                 inner_temp=None, compound_after_pit: int = 16, fuel_per_lap: float = 0.0,
+                 corners: list[float] | None = None, positions: dict[int, int] | None = None):
         self.pf = PacketFactory(session_uid=session_uid)
         self.lap_times = lap_times_ms
         self.session_type = session_type
@@ -157,6 +158,10 @@ class FakeRace:
         self.inner_temp = inner_temp or (lambda car, lap, sector: [90, 90, 90, 90])
         self.compound_after_pit = compound_after_pit
         self.fuel_per_lap = fuel_per_lap
+        # Corners at these fractions of the lap: speed dips from 300 to 100 km/h with braking
+        # before each apex. None = flat out all lap (250 km/h).
+        self.corners = corners
+        self.positions = positions or {}
         self.t0_ns = 1_700_000_000_000_000_000
 
     def _laps_on_set(self, car: int, lap: int, frac: float) -> float:
@@ -164,6 +169,21 @@ class FakeRace:
         pit = self.pit_laps.get(car)
         done = lap - 1 + frac
         return done - pit if pit is not None and lap > pit else done
+
+    def _driving(self, frac: float) -> dict:
+        if self.corners is None:
+            return {"speed": 250, "throttle": 1.0, "brake": 0.0}
+        speed, throttle, brake = 300.0, 1.0, 0.0
+        for apex in self.corners:
+            x = frac - apex
+            dip = 200 * np.exp(-(x / 0.03) ** 2)
+            if dip > 1:
+                speed = min(speed, 300 - dip)
+                if x < 0:
+                    throttle, brake = 0.0, 0.8
+                else:
+                    throttle, brake = 0.5, 0.0
+        return {"speed": int(speed), "throttle": throttle, "brake": brake}
 
     def _compound(self, car: int, lap: int) -> int:
         pit = self.pit_laps.get(car)
@@ -220,7 +240,8 @@ class FakeRace:
                 pf.session_time = game_ms / 1000
             if frame % 30 == 0:
                 yield t_ns, pf.session(track_id=self.track_id, session_type=self.session_type,
-                                       total_laps=max(len(v) for v in self.lap_times.values()))
+                                       total_laps=max(len(v) for v in self.lap_times.values()),
+                                       track_length=int(self.LAP_LEN))
             if frame % 300 == 0:
                 yield t_ns, pf.participants(num_active=len(cars),
                                             telemetry_public=self.telemetry_public)
@@ -242,14 +263,15 @@ class FakeRace:
                     "sector2TimeMSPart": split_ms(st["s2"])[0],
                     "sector2TimeMinutesPart": split_ms(st["s2"])[1],
                     "pitStatus": st["pit"], "currentLapInvalid": st["invalid"],
-                    "carPosition": car + 1, "gridPosition": car, "driverStatus": 4,
+                    "carPosition": self.positions.get(car, car + 1), "gridPosition": car,
+                    "driverStatus": 4,
                 }
                 if st.get("finished") and self.chequered_flag:
                     lap[car]["resultStatus"] = 3
             yield t_ns, pf.lap_data(lap)
             frac = {c: lap[c]["lapDistance"] / self.LAP_LEN for c in cars}
             yield t_ns, pf.car_telemetry({c: {
-                "speed": 250, "throttle": 1.0, "tyresSurfaceTemperature": [90, 91, 92, 93],
+                **self._driving(frac[c]), "tyresSurfaceTemperature": [90, 91, 92, 93],
                 "tyresInnerTemperature": self.inner_temp(c, lap[c]["currentLapNum"],
                                                          lap[c]["sector"])} for c in cars})
             yield t_ns, pf.car_status({c: {

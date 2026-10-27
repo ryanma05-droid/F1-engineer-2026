@@ -1,4 +1,4 @@
-"""python -m engineer.features build | query "<sql>" | tyres"""
+"""python -m engineer.features build | query "<sql>" | tyres | corners"""
 
 from __future__ import annotations
 
@@ -20,6 +20,24 @@ GROUP BY ALL ORDER BY track, compound
 """
 
 
+CORNERS_SQL = """
+-- per corner: your best and median time, vs the median of every other car (clean laps only)
+WITH c AS (
+  SELECT corners.*, laps.is_player FROM corners
+  JOIN laps USING (session_uid, car_idx, lap)
+  WHERE laps.clean AND NOT laps.safety_car
+)
+SELECT coalesce(track, track_id::VARCHAR) AS track, corner, any_value(corner_name) AS name,
+       round(min(time_s) FILTER (WHERE is_player), 3) AS your_best,
+       round(median(time_s) FILTER (WHERE is_player), 3) AS your_median,
+       round(median(time_s) FILTER (WHERE NOT is_player), 3) AS others_median,
+       round(median(min_speed_kph) FILTER (WHERE is_player)) AS your_min_kph,
+       round(median(min_speed_kph) FILTER (WHERE NOT is_player)) AS others_min_kph
+FROM c LEFT JOIN tracks USING (track_id)
+GROUP BY ALL ORDER BY track, corner
+"""
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="python -m engineer.features")
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -27,18 +45,20 @@ def main(argv: list[str] | None = None) -> int:
     q = sub.add_parser("query", help="run SQL over the tables (laps, stints)")
     q.add_argument("sql")
     sub.add_parser("tyres", help="your wear rate per lap by track and compound")
+    sub.add_parser("corners", help="your average time and minimum speed per corner")
     args = ap.parse_args(argv)
     cfg = load_config()
     out_dir = cfg.data_path / "features"
 
     if args.cmd == "build":
-        laps, stints = tables.build(cfg.sessions_path, out_dir)
+        laps, stints = tables.build(cfg.sessions_path, out_dir, tracks_dir=cfg.tracks_path)
         print(f"Wrote {laps} laps and {stints} stints to {out_dir}")
         return 0
     if not (out_dir / "stints.parquet").exists():
         print("No feature tables yet. Run: uv run python -m engineer.features build")
         return 1
-    tables.query(out_dir, TYRES_SQL if args.cmd == "tyres" else args.sql).show(max_rows=200)
+    sql = {"tyres": TYRES_SQL, "corners": CORNERS_SQL}.get(args.cmd) or args.sql
+    tables.query(out_dir, sql).show(max_rows=200)
     return 0
 
 

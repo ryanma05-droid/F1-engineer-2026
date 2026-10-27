@@ -31,7 +31,8 @@ class Radio(BaseModel):
     output_device: str | int | None = None   # None = Windows default; part of a name, or index
     lap_delta_max_wait_s: float = Field(default=3.0, gt=0)
     cooldowns_s: dict[str, float] = {"lap_delta": 5.0, "tyre_status": 30.0, "tyre_warning": 10.0,
-                                     "tyre_temp": 10.0, "tyre_dropoff": 60.0}
+                                     "tyre_temp": 10.0, "tyre_dropoff": 60.0,
+                                     "corner": 30.0}
 
 
 class Tyres(BaseModel):
@@ -48,6 +49,13 @@ class Tyres(BaseModel):
     max_wait_s: float = Field(default=20.0, gt=0)
 
 
+class Corners(BaseModel):
+    enabled: bool = True
+    min_loss_s: float = Field(default=0.1, gt=0)      # only call a corner losing at least this
+    nearby_gap_s: float = Field(default=2.0, ge=0)    # compare with the car ahead/behind within
+    max_wait_s: float = Field(default=25.0, gt=0)
+
+
 class Config(BaseModel):
     listen: Endpoint = Endpoint(host="0.0.0.0", port=20777)
     forward: list[Endpoint] = []
@@ -55,6 +63,7 @@ class Config(BaseModel):
     record: bool = True
     radio: Radio = Radio()
     tyres: Tyres = Tyres()
+    corners: Corners = Corners()
 
     @property
     def data_path(self) -> Path:
@@ -68,6 +77,10 @@ class Config(BaseModel):
     @property
     def features_path(self) -> Path:
         return self.data_path / "features"
+
+    @property
+    def tracks_path(self) -> Path:
+        return self.data_path / "tracks"
 
     @property
     def voices_path(self) -> Path:

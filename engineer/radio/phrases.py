@@ -184,3 +184,40 @@ def tyre_damage_phrase(wheel: int, pct: float, kind: str = "damage") -> str:
     if kind == "blisters":
         return _sentence(f"blistering on the {WHEEL_NAMES[wheel]}", say_percent(pct))
     return _sentence(f"{WHEEL_NAMES[wheel]} tyre damage", say_percent(pct))
+
+
+# -- corners (Phase 4) -------------------------------------------------------------------------
+
+def say_metres(m: float) -> str:
+    n = int(round(m / 5.0) * 5)
+    return "over a hundred metres" if n >= 100 else f"{number_words(max(5, n))} metres"
+
+
+def say_kph(kph: float) -> str:
+    return f"{number_words(min(99, max(1, int(round(kph)))))} k p h"
+
+
+_REASONS = {
+    "brake_early": lambda v: f"braking {say_metres(v)} earlier",
+    "min_speed": lambda v: f"minimum speed {say_kph(v)} down",
+    "throttle_late": lambda v: f"full throttle {say_metres(v)} later",
+    "exit_speed": lambda v: f"exit speed {say_kph(v)} down",
+}
+
+
+def corner_phrase(delta_s: float, corner_name: str, against: str,
+                  reason: tuple[str, float] | None = None, verbosity: str = "normal",
+                  again: bool = False) -> str:
+    """against: "ahead", "behind" or "best".
+    'Turn three, losing two tenths to the car ahead, braking ten metres earlier.'
+    'Turn four, three tenths off your best, minimum speed eight k p h down.'
+    'Gaining a tenth on the car ahead through turn nine.' (delta_s < 0)
+    again=True (same corner as the last call): 'Turn four again, ...'"""
+    gap = say_gap(int(round(delta_s * 1000)))
+    if delta_s < 0:
+        if against == "best":
+            return _sentence(f"{corner_name}, {gap} up on your best")
+        return _sentence(f"gaining {gap} on the car {against} through {corner_name}")
+    loss = f"{gap} off your best" if against == "best" else f"losing {gap} to the car {against}"
+    why = "" if reason is None or verbosity == "terse" else _REASONS[reason[0]](reason[1])
+    return _sentence(f"{corner_name} again" if again else corner_name, loss, why)

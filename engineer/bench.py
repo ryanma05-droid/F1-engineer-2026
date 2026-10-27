@@ -1,4 +1,5 @@
-"""Benchmark: parse + race-state update + event detection time per packet.
+"""Benchmark: time per packet for the whole engine (parse, race state, events, lap features,
+traces, radio analyzers and director), i.e. everything live play does on the main loop.
 
     python -m engineer.bench data/sessions/<file>.zst
     python -m engineer.bench --synthetic          # no recording needed (uses the test generator)
@@ -18,7 +19,11 @@ from pathlib import Path
 
 from engineer.ingest.formats import f1_2025 as f
 from engineer.ingest.recorder import read_recording
-from engineer.pipeline import Pipeline
+import io
+
+from engineer.app import build_engine
+from engineer.config import Config
+from engineer.features.priors import WearPriors
 
 TARGET_MS = 1.0
 
@@ -32,7 +37,9 @@ def _synthetic():
 
 
 def run(records) -> dict:
-    pipeline = Pipeline()
+    import tempfile   # a scratch data folder, so a learned track map isn't saved anywhere real
+    cfg = Config(data_dir=tempfile.mkdtemp(prefix="engineer-bench-"))
+    pipeline = build_engine(cfg, out=io.StringIO(), priors=WearPriors()).pipeline
     per_type: dict[int, list[int]] = defaultdict(list)
     all_ns = []
     perf = time.perf_counter_ns

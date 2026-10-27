@@ -8,6 +8,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TextIO
 
+from engineer.analyzers.corners import CornerAnalyzer
 from engineer.analyzers.lap_delta import LapDeltaAnalyzer
 from engineer.analyzers.tyres import TyreAnalyzer
 from engineer.config import Config
@@ -16,7 +17,10 @@ from engineer.features.lap_features import LapFeatureBuilder
 from engineer.features.laps import LapHistory
 from engineer.features.priors import WearPriors
 from engineer.pipeline import Pipeline
+from engineer.bus import events as ev
 from engineer.radio.director import RadioDirector
+from engineer.state.track_maps import TrackMaps
+from engineer.state.traces import TraceRecorder
 
 
 @dataclass
@@ -27,6 +31,8 @@ class Engine:
     lap_delta: LapDeltaAnalyzer
     features: LapFeatureBuilder
     tyres: TyreAnalyzer
+    traces: TraceRecorder
+    corners: CornerAnalyzer
 
 
 def build_engine(cfg: Config, out: TextIO | None = None,
@@ -40,6 +46,10 @@ def build_engine(cfg: Config, out: TextIO | None = None,
     history = LapHistory(bus, state, arrival_ns=lambda: pipeline.last_arrival_ns)
     features = LapFeatureBuilder(bus, state, temp_window_c=cfg.tyres.temp_window_c)
     pipeline.after_packet.append(features.after_packet)
+    traces = TraceRecorder(state)
+    bus.subscribe(ev.SessionStarted, lambda e: traces.reset())
+    bus.subscribe(ev.Flashback, lambda e: traces.rewind())
+    pipeline.after_packet.append(traces.after_packet)
     LapPrinter(bus, state, out=out)
     RadioPrinter(bus, out=out)
     director = RadioDirector(bus, state, cooldowns_s=cfg.radio.cooldowns_s)
@@ -52,4 +62,8 @@ def build_engine(cfg: Config, out: TextIO | None = None,
         priors = WearPriors.load(cfg.features_path)
     tyres = TyreAnalyzer(bus, state, features, director, cfg.tyres, priors=priors,
                          verbosity=cfg.radio.verbosity)
-    return Engine(pipeline, history, director, analyzer, features, tyres)
+    # Last: corner coaching is the least urgent call of a lap.
+    corners = CornerAnalyzer(bus, state, history, traces, TrackMaps(cfg.tracks_path), director,
+                             cfg.corners, verbosity=cfg.radio.verbosity)
+    pipeline.after_packet.append(corners.after_packet)
+    return Engine(pipeline, history, director, analyzer, features, tyres, traces, corners)

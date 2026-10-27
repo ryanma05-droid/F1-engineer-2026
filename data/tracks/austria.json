@@ -1,0 +1,56 @@
+{
+  "track_id": 17,
+  "track": "Austria",
+  "track_length_m": 4323.0,
+  "corners": [
+    {
+      "number": 1,
+      "name": "turn one",
+      "entry_m": 305.0,
+      "apex_m": 470.0,
+      "exit_m": 615.0
+    },
+    {
+      "number": 3,
+      "name": "turn three",
+      "entry_m": 1240.0,
+      "apex_m": 1405.0,
+      "exit_m": 1580.0
+    },
+    {
+      "number": 4,
+      "name": "turn four",
+      "entry_m": 2045.0,
+      "apex_m": 2230.0,
+      "exit_m": 2410.0
+    },
+    {
+      "number": 6,
+      "name": "turn six",
+      "entry_m": 2595.0,
+      "apex_m": 2775.0,
+      "exit_m": 2930.0
+    },
+    {
+      "number": 7,
+      "name": "turn seven",
+      "entry_m": 2930.0,
+      "apex_m": 3040.0,
+      "exit_m": 3245.0
+    },
+    {
+      "number": 9,
+      "name": "turn nine",
+      "entry_m": 3665.0,
+      "apex_m": 3815.0,
+      "exit_m": 3900.0
+    },
+    {
+      "number": 10,
+      "name": "turn ten",
+      "entry_m": 3900.0,
+      "apex_m": 4015.0,
+      "exit_m": 4170.0
+    }
+  ]
+}

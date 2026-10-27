@@ -2,5 +2,7 @@ RADIO    77.7s  Lap one, one seventeen six.
 RADIO   147.3s  One oh nine six.
 RADIO   216.9s  One oh nine five, same again, but gained in sector two.
 RADIO   224.3s  Tyres: front right worst at eleven percent, about four percent a lap.  (held 7.3s)
+RADIO   229.1s  Turn seven, losing two tenths to the car ahead, full throttle seventy five metres later.  (held 12.1s)
 RADIO   286.1s  One oh nine one, four tenths quicker, gained in sector one.
+RADIO   293.4s  Turn four, losing two tenths to the car ahead, minimum speed ten k p h down.  (held 7.3s)
 RADIO   355.2s  One oh nine one, same again, but gained in sector three.
