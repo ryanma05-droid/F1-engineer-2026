@@ -240,3 +240,24 @@ def test_speech_process_fails_cleanly_without_a_microphone():
         assert ok or sp.error            # no hang, and a readable reason if it can't start
     finally:
         sp.close()
+
+
+def test_speech_model_falls_back_to_cpu_when_the_gpu_fails(monkeypatch):
+    import ctranslate2
+
+    from engineer.voice import speech
+    tried = []
+
+    def fake_open(settings, device):
+        tried.append(device)
+        if device == "cuda":
+            raise RuntimeError("Library cublas64_12.dll is not found or cannot be loaded")
+        return object(), f"{settings.model} on {device}"
+
+    monkeypatch.setattr(speech, "_open_model", fake_open)
+    monkeypatch.setattr(ctranslate2, "get_cuda_device_count", lambda: 1)
+    _, desc = speech.load_model(speech.SpeechSettings(model="small.en"))
+    assert tried == ["cuda", "cpu"] and desc == "small.en on cpu"
+    tried.clear()
+    speech.load_model(speech.SpeechSettings(model="small.en", device="cpu"))
+    assert tried == ["cpu"]

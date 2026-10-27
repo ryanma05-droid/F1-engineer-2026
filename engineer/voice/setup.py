@@ -65,7 +65,8 @@ def main(argv: list[str] | None = None) -> int:
     print(f"Controllers connected: {button.connected() or 'none'}")
     print(f"Hold {v.button}, ask a question, let go. Ctrl+C to stop.")
     ptt = PushToTalk(button, lambda: (speech.press(), print("  listening...", flush=True)),
-                     speech.release, speech.cancel, v.min_press_s, v.max_question_s)
+                     lambda: (speech.release(), print("  working it out...", flush=True)),
+                     speech.cancel, v.min_press_s, v.max_question_s)
     try:
         while True:
             ptt.poll(time.monotonic())

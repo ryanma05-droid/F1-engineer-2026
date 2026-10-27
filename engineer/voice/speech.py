@@ -7,8 +7,11 @@ it heard.
 - Microphone: the Windows default recording device (the one the game uses), unless
   `voice.input_device` names another. The stream stays open and keeps the last 0.3 s, so the
   first word isn't clipped when you start talking as you press.
-- Speech to text: faster-whisper, English model (`voice.model`, default medium.en), on the GPU if
-  there's a CUDA one, else the CPU (int8). The model downloads once into data/ptt/models/.
+- Speech to text: faster-whisper, English model (`voice.model`, default medium.en), on the Nvidia
+  GPU if there's one that works (it needs Nvidia's cuBLAS and cuDNN, from the `gpu` dependency
+  group), else the CPU (int8). The model is tested with a silent clip when it loads, so a GPU
+  that can't run it falls back to the CPU at start-up instead of failing on the first question.
+  The model downloads once into data/ptt/models/.
 - Every question's audio is saved to data/ptt/clips/ (`voice.keep_audio`) so replays and new
   intent rules can be tested on your real voice.
 """
@@ -16,11 +19,13 @@ it heard.
 from __future__ import annotations
 
 import logging
+import os
 import queue as queue_mod
+import sys
 import time
 import wave
 from collections import deque
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 import numpy as np
@@ -73,22 +78,64 @@ def resolve_input_device(spec: str | int | None) -> tuple[int | None, str]:
     return match[0], match[1]
 
 
-def load_model(settings: SpeechSettings):
+def add_nvidia_dll_dirs() -> list[str]:
+    """Windows: let the speech engine find Nvidia's cuBLAS / cuDNN libraries when they came
+    from pip (the `gpu` dependency group: nvidia-cublas-cu12, nvidia-cudnn-cu12). They live in
+    site-packages/nvidia/<lib>/bin, which Windows doesn't search on its own."""
+    if sys.platform != "win32":
+        return []
+    import importlib.util
+
+    found = []
+    for pkg in ("nvidia.cublas", "nvidia.cudnn", "nvidia.cuda_nvrtc", "nvidia.cuda_runtime"):
+        try:
+            spec = importlib.util.find_spec(pkg)
+        except (ImportError, ValueError):
+            spec = None
+        for base in (spec.submodule_search_locations or []) if spec else []:
+            bin_dir = Path(base) / "bin"
+            if bin_dir.is_dir():
+                os.add_dll_directory(str(bin_dir))
+                os.environ["PATH"] = str(bin_dir) + os.pathsep + os.environ.get("PATH", "")
+                found.append(str(bin_dir))
+    return found
+
+
+def _open_model(settings: SpeechSettings, device: str):
     from faster_whisper import WhisperModel
 
-    device = settings.device
-    if device == "auto":
-        try:
-            import ctranslate2
-            device = "cuda" if ctranslate2.get_cuda_device_count() > 0 else "cpu"
-        except Exception:
-            device = "cpu"
     compute = settings.compute_type
     if compute == "auto":
         compute = "float16" if device == "cuda" else "int8"
     model = WhisperModel(settings.model, device=device, compute_type=compute,
                          download_root=settings.models_dir)
+    # A first, silent transcription: on the GPU this is where missing Nvidia libraries show up
+    # (e.g. "cublas64_12.dll is not found"), so we find out now rather than on the first
+    # question. It also takes the one-off warm-up delay out of the first real answer.
+    transcribe(model, np.zeros(SAMPLE_RATE, np.float32), beam_size=1)
     return model, f"{settings.model} on {device} ({compute})"
+
+
+def load_model(settings: SpeechSettings):
+    """The speech model, on the Nvidia GPU if there is one that works, otherwise the CPU."""
+    device = settings.device
+    if device in ("auto", "cuda"):
+        add_nvidia_dll_dirs()
+        try:
+            import ctranslate2
+            has_gpu = ctranslate2.get_cuda_device_count() > 0
+        except Exception:
+            has_gpu = False
+        if has_gpu:
+            try:
+                return _open_model(settings, "cuda")
+            except Exception as exc:
+                print(f"[voice] the GPU can't run speech recognition ({exc}); using the CPU. "
+                      f"For the GPU, run: uv sync   (installs Nvidia's cuBLAS and cuDNN)",
+                      flush=True)
+        elif device == "cuda":
+            print("[voice] no Nvidia GPU found; using the CPU", flush=True)
+    return _open_model(settings, "cpu")
 
 
 def transcribe(model, audio: np.ndarray, beam_size: int = 3) -> str:
@@ -180,20 +227,41 @@ class SpeechProcess:
         self.proc = self.inbox = self.outbox = None
         self.description: str | None = None
         self.error: str | None = None
+        self.crashed = False
         self._id = 0
 
     def start(self, wait_ready_s: float = 600.0) -> bool:
-        """Starts the process and waits until the model is loaded (the first run downloads it)."""
+        """Starts the process and waits until the model is loaded (the first run downloads it).
+        If the process dies while loading on the GPU (a missing Nvidia library can crash it
+        outright instead of raising an error), it's started again on the CPU."""
+        ok = self._start_once(wait_ready_s)
+        if not ok and self.crashed and self.settings.device != "cpu":
+            print("[voice] speech recognition crashed on the GPU; starting it on the CPU",
+                  flush=True)
+            self.close()
+            self.settings = replace(self.settings, device="cpu")
+            ok = self._start_once(wait_ready_s)
+        return ok
+
+    def _start_once(self, wait_ready_s: float) -> bool:
+        self.crashed = False
         self.proc, self.inbox, self.outbox = start_worker(speech_main, self.settings)
-        try:
-            msg = self.outbox.get(timeout=wait_ready_s)
-        except queue_mod.Empty:
-            self.error = "speech process did not start in time"
+        deadline = time.monotonic() + wait_ready_s
+        while time.monotonic() < deadline:
+            try:
+                msg = self.outbox.get(timeout=0.5)
+            except queue_mod.Empty:
+                if not self.proc.is_alive():
+                    self.crashed = True
+                    self.error = f"speech process stopped (exit code {self.proc.exitcode})"
+                    return False
+                continue
+            if msg[0] == "ready":
+                self.description = msg[1]
+                return True
+            self.error = msg[1]
             return False
-        if msg[0] == "ready":
-            self.description = msg[1]
-            return True
-        self.error = msg[1]
+        self.error = "speech process did not start in time"
         return False
 
     def press(self) -> None:

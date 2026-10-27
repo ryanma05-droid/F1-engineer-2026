@@ -87,6 +87,10 @@ uv run python -m engineer.ingest.share --pending     # push every recording not 
   Windows mic) -> `QuestionAsked` event -> `QuestionAnswerer` (wired in `build_engine`, so tests
   and replays answer the same way) -> director topic "answer" (HIGH, said even in quiet mode).
 - Answers come from the same query functions/analyzer state as the proactive calls.
+- GPU speech needs Nvidia's cuBLAS/cuDNN: the `gpu` dependency group (Windows, default group, so
+  `uv sync` installs it). `load_model` tests the GPU with a silent clip and falls back to the CPU;
+  `SpeechProcess.start` restarts on the CPU if the process crashes while loading. The installer
+  build skips the `gpu` group (friends run small.en on the CPU).
 - Intents are keyword rules in `engineer/voice/intents.py`. Every question is logged to
   `data/ptt/questions.jsonl`; "unknown" entries are the phrasings to add next. Logs for a session
   travel with its recording upload (`<recording>.questions.jsonl`).
