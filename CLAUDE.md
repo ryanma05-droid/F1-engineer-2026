@@ -20,7 +20,7 @@ Read `docs/architecture.md` (full design) and `PROGRESS.md` (what's done / open 
 
 ## Phase plan
 
-0 foundation (accepted) · 1 radio director + Piper TTS + lap delta · 2 features/feature tables ·
+0 foundation (accepted) · 1 radio director + Piper TTS + lap delta (built; awaiting voice check on Windows) · 2 features/feature tables ·
 3 tyre coaching · 4 traces + corner coaching · 5 strategy sim · 6 push-to-talk.
 
 ## Commands
@@ -31,7 +31,18 @@ uv run pytest
 uv run python -m engineer run
 uv run python -m engineer.ingest.replay <file.zst> --speed max
 uv run python -m engineer.bench <file.zst>
+uv run python -m engineer.radio.setup_voice --test   # download + hear the Piper voice
 ```
+
+## Radio rules (Phase 1)
+
+- Analyzers never speak directly: they submit a `RadioCall` to the `RadioDirector`.
+- The director runs on game time and estimates speech length from text, so replays produce the
+  same calls. Keep it that way: no wall-clock time or audio feedback in director decisions.
+- Wiring lives in `engineer/app.py:build_engine` (shared by live and replay). Subscription order
+  matters: LapHistory before analyzers.
+- The golden test also checks `tests/fixtures/*.calls.txt`; update it deliberately (and check each
+  call by hand) when phrasing changes.
 
 ## Real-data facts (confirmed on tests/fixtures/austria_race_5laps.zst)
 

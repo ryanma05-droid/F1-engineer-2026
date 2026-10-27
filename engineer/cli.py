@@ -9,25 +9,44 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-from engineer.config import load_config
-from engineer.console import LapPrinter
+from engineer.app import build_engine
+from engineer.bus import events as ev
+from engineer.config import Config, load_config
 from engineer.ingest.formats import f1_2025 as f
 from engineer.ingest.listener import UdpListener
 from engineer.ingest.recorder import Recorder, list_sessions
-from engineer.pipeline import Pipeline
+from engineer.radio.tts import AudioProcess, AudioSettings, voice_model_path
 
 log = logging.getLogger("engineer")
 
 STATUS_INTERVAL_S = 10
 
 
-async def _run(config_path: Path | None, record: bool | None) -> None:
-    cfg = load_config(config_path)
+def start_voice(cfg: Config, engine) -> AudioProcess:
+    """Start the audio process and connect it to the director's radio messages."""
+    audio = AudioProcess(AudioSettings(
+        voice_model=str(voice_model_path(cfg.voices_path, cfg.radio.voice)),
+        radio_effect=cfg.radio.radio_effect, volume=cfg.radio.volume))
+    print("Loading the engineer's voice...", flush=True)
+    backend = audio.start()
+    print(f"Voice: {backend or 'not ready'}")
+    if backend == "pyttsx3":
+        print("  (Using the Windows voice. For the Piper voice run: "
+              "python -m engineer.radio.setup_voice)")
+    engine.pipeline.bus.subscribe(ev.RadioMessage,
+                                  lambda e: audio.say(e.text, e.origin_t_ns))
+    return audio
+
+
+async def _run(cfg: Config, record: bool | None, voice: bool) -> None:
     if record is not None:
         cfg.record = record
 
-    pipeline = Pipeline()
-    LapPrinter(pipeline.bus, pipeline.state)
+    engine = build_engine(cfg)
+    pipeline = engine.pipeline
+    audio = start_voice(cfg, engine) if voice else None
+    if audio:
+        audio.say("Radio check.")
     listener = UdpListener(cfg.listen.host, cfg.listen.port,
                            forward=[(t.host, t.port) for t in cfg.forward])
     recorder = Recorder(cfg.sessions_path) if cfg.record else None
@@ -53,6 +72,8 @@ async def _run(config_path: Path | None, record: bool | None) -> None:
         listener.close()
         if recorder:
             recorder.close()
+        if audio:
+            audio.close()
         print(f"Stopped. {listener.packets_received} packets received, "
               f"{pipeline.bad_packets} rejected, {pipeline.unknown_packets} unknown id.")
 
@@ -78,6 +99,9 @@ def main(argv: list[str] | None = None) -> int:
     run = sub.add_parser("run", help="listen live and print lap lines")
     run.add_argument("--no-record", dest="record", action="store_false", default=None,
                      help="don't record this session")
+    run.add_argument("--no-voice", action="store_true", help="print radio calls, don't speak")
+    run.add_argument("--verbosity", choices=["terse", "normal", "chatty"],
+                     help="override radio.verbosity from config.yaml")
     sub.add_parser("sessions", help="list recorded sessions")
     args = ap.parse_args(argv)
 
@@ -85,8 +109,12 @@ def main(argv: list[str] | None = None) -> int:
                         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
                         datefmt="%H:%M:%S")
     if args.command == "run":
+        cfg = load_config(args.config)
+        if args.verbosity:
+            cfg.radio.verbosity = args.verbosity
+        voice = cfg.radio.enabled and not args.no_voice
         try:
-            asyncio.run(_run(args.config, args.record))
+            asyncio.run(_run(cfg, args.record, voice))
         except KeyboardInterrupt:
             pass
         except OSError as exc:

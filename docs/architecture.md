@@ -56,7 +56,25 @@ Offline: session store ──► replay ──► feature jobs ──► model r
 | `engineer/state/traces.py` | Placeholder for 5 m distance-binned traces (Phase 4). |
 | `engineer/bus/events.py` | In-process publish/subscribe; event dataclasses. |
 | `engineer/state/detectors.py` | Turns state changes into events (session start/end, lap, sector, pit entry/exit). |
-| `engineer/cli.py` | `python -m engineer run` and the lap-line printer shared by live and replay. |
+| `engineer/cli.py` | `python -m engineer run` / `sessions`. |
+| `engineer/app.py` | `build_engine()`: wires pipeline, lap history, director, analyzers and printers; used by live and replay. |
+
+## Modules (Phase 1)
+
+| Module | Role |
+| --- | --- |
+| `engineer/features/laps.py` | `LapHistory`: completed laps per car from `LapCompleted`; marks clean laps. |
+| `engineer/tools/queries.py` | `lap_delta()`: structured comparison with the previous clean lap. Shared by radio calls and (Phase 6) push-to-talk. |
+| `engineer/radio/phrases.py` | Engineer-style wording ("one oh nine one", "two tenths quicker"); verbosity levels. |
+| `engineer/radio/director.py` | `RadioDirector`: priority, expiry, cooldowns, quiet zones; publishes `RadioMessage`. Game-time only, so replay is deterministic. |
+| `engineer/analyzers/lap_delta.py` | On the player's `LapCompleted`, submits the lap delta call. |
+| `engineer/radio/tts.py` | Audio process (spawned): Piper + radio effect, pyttsx3 fallback, latency readout. |
+| `engineer/radio/effects.py` | Squelch beeps, 300-3400 Hz band-limit, light compression and static. |
+| `engineer/workers/pool.py` | `start_worker()`: spawn-based worker processes with in/out queues. |
+
+Quiet zones: the director holds a call while the player is braking, steering or off throttle, and
+checks a per-session map (50 m sections, learned from the player's previous laps, excluding race
+lap 1, in-laps and out-laps) so a call doesn't start just before a braking zone.
 
 ## Data conventions
 

@@ -4,6 +4,7 @@
     python -m engineer.ingest.replay <file> --speed 1           # real time
     python -m engineer.ingest.replay <file> --speed 4           # 4x
     python -m engineer.ingest.replay <file> --udp               # resend to 127.0.0.1:20777
+    python -m engineer.ingest.replay <file> --voice             # real time, with the radio voice
 
 In-process (default), packets go straight into `Pipeline.feed`, exactly as the listener would call
 it, and the lap lines are printed. With --udp, packets are sent over UDP instead, so a separately
@@ -85,6 +86,10 @@ def main(argv: list[str] | None = None) -> int:
                     help="resend packets over UDP instead of replaying in-process")
     ap.add_argument("--host", default="127.0.0.1", help="UDP target host (with --udp)")
     ap.add_argument("--port", type=int, default=20777, help="UDP target port (with --udp)")
+    ap.add_argument("--voice", action="store_true",
+                    help="speak the radio calls (use with --speed 1 to hear them in real time)")
+    ap.add_argument("--verbosity", choices=["terse", "normal", "chatty"],
+                    help="override radio.verbosity from config.yaml")
     args = ap.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
 
@@ -99,7 +104,21 @@ def main(argv: list[str] | None = None) -> int:
             n = replay_udp(args.file, args.host, args.port, args.speed)
             print(f"Sent {n} packets to {args.host}:{args.port}")
         else:
-            p = replay(args.file, args.speed).pipeline
+            cfg = load_config()
+            if args.verbosity:
+                cfg.radio.verbosity = args.verbosity
+            engine = build_engine(cfg)
+            audio = None
+            if args.voice:
+                from engineer.cli import start_voice
+                if args.speed is None:
+                    log.warning("--voice with --speed max: calls will pile up; use --speed 1")
+                audio = start_voice(cfg, engine)
+            try:
+                p = replay(args.file, args.speed, engine=engine).pipeline
+            finally:
+                if audio:
+                    audio.close(timeout_s=30)
             print(f"Replayed {p.packets} packets "
                   f"({p.unknown_packets} unknown id, {p.bad_packets} rejected)")
     except KeyboardInterrupt:

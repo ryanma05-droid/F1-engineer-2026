@@ -46,8 +46,35 @@
   screen), so packet 8 is untested on real data. Not needed in Phase 0.
 - **Flashbacks** only reset lap/sector tracking; fuller rollback can wait until Phase 4 traces.
 
-## Phase 1 notes
+## Phase 1 — radio director, voice, lap delta
 
-- Analyzers subscribe to `LapCompleted` on `pipeline.bus`; lap delta needs the previous valid,
-  non-pit lap of the player, which the event already flags (`invalid`, `pit_in_lap`, `pit_out_lap`).
-- TTS must run in a separate process (`engineer/workers/`), fed through a queue from the radio director.
+- [x] Lap history (`engineer/features/laps.py`) and lap delta query (`engineer/tools/queries.py`)
+- [x] Spoken phrases with verbosity terse / normal / chatty (`engineer/radio/phrases.py`)
+- [x] Radio director: priority, expiry, per-topic cooldowns, quiet zones (talk on straights)
+- [x] Lap delta analyzer (`engineer/analyzers/lap_delta.py`)
+- [x] Audio process: Piper voice + radio effect, Windows-voice fallback (`engineer/radio/tts.py`)
+- [x] Voice download / test command (`python -m engineer.radio.setup_voice --test`)
+- [x] CLI: `engineer run` speaks (`--no-voice`, `--verbosity`); replay prints calls, `--voice` speaks
+- [x] Tests (106 passing) incl. golden radio calls on the Austria recording
+- [ ] Hear the real Piper voice and radio effect on Windows (could not download voices in the cloud
+      session: huggingface.co is blocked there)
+- [ ] Acceptance: voice within 1 s of crossing the line, live. The readout
+      "(voice started X.XXs after the packet arrived)" after each call measures exactly this.
+
+### Verified so far
+
+- Austria replay: all five lap calls are released on the same frame the line is crossed (0.0 s
+  held), so the latency left is synthesis + playback start on your PC.
+- The quiet-zone map learned on Austria marks exactly the braking zones/corners (T1, T3, T4, T6-7,
+  T9-10) and leaves the flat kinks (T2, T5, T8) as straights.
+- Replay produces the same radio calls at the same game times as live (golden calls file).
+
+### Phase 1 decisions
+
+- Lap times are spoken truncated to the tenth, like a timing screen (1:09.162 = "one oh nine one").
+  Deltas are rounded ("four tenths"); under 0.05 s is "same again".
+- Race lap 1 is never compared (standing start) and never used as a reference; neither are invalid
+  laps, in-laps or out-laps. When the reference isn't the previous lap, the call says "on your last
+  clean lap".
+- Lap deltas wait up to 3 s for a straight, then are dropped (config `radio.lap_delta_max_wait_s`).
+
