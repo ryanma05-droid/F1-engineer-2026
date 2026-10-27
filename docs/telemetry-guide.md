@@ -37,3 +37,10 @@ through Windows Firewall" > Change settings > tick RaceEngineer for Private.
 Start the Race Engineer, then drive any session. Within a few seconds of crossing the line you
 should see lap lines and hear "Radio check" at start-up. If nothing shows up, check in this order:
 the IP address, the port (20777), the firewall.
+
+## If something goes wrong
+
+Everything the Race Engineer window shows is also saved to
+`%LOCALAPPDATA%\RaceEngineer\logs\race-engineer.log` (the run before is kept as
+`race-engineer.previous.log`). Paste `%LOCALAPPDATA%\RaceEngineer\logs` into the File Explorer
+address bar to find them, and send the file to whoever shared the app with you.

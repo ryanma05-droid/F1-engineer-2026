@@ -20,6 +20,42 @@ import yaml
 from engineer.config import APP_HOME, BUNDLE_DIR, load_config
 
 LOCAL_CONFIG = APP_HOME / "config.local.yaml"
+LOG_FILE = APP_HOME / "logs" / "race-engineer.log"
+
+
+class _Tee:
+    """Writes everything shown in the window to the log file too, so a friend can send it."""
+
+    def __init__(self, stream, log):
+        self.stream, self.log = stream, log
+
+    def write(self, text):
+        self.stream.write(text)
+        try:
+            self.log.write(text)
+            self.log.flush()
+        except (OSError, ValueError):
+            pass
+        return len(text)
+
+    def flush(self):
+        self.stream.flush()
+
+    def __getattr__(self, name):
+        return getattr(self.stream, name)
+
+
+def start_log() -> None:
+    try:
+        LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
+        # Keep the previous run's log too (the one that went wrong, if this is a retry).
+        if LOG_FILE.exists():
+            LOG_FILE.replace(LOG_FILE.with_suffix(".previous.log"))
+        log = open(LOG_FILE, "w", encoding="utf-8", errors="replace")
+    except OSError:
+        return
+    sys.stdout = _Tee(sys.stdout, log)
+    sys.stderr = _Tee(sys.stderr, log)
 FRIEND_SPEECH_MODEL = "small.en"
 
 
@@ -131,7 +167,7 @@ def banner(cfg) -> None:
     if cfg.platform == "console":
         print(f" Console mode: set UDP IP Address in F1 25 to {lan_ip() or '(see ipconfig)'}, "
               f"port {cfg.listen.port}")
-    print(f" Your data: {APP_HOME}")
+    print(f" Your data: {APP_HOME}   (log: logs\\race-engineer.log)")
     print(" Run 'Race Engineer setup' from the Start menu to change settings.")
     print("=" * 64)
 
@@ -180,6 +216,7 @@ def main(argv: list[str] | None = None) -> int:
     args = sys.argv[1:] if argv is None else argv
     if "--check" in args:
         return self_check()
+    start_log()
     code = 0
     try:
         if "--setup" in args or not LOCAL_CONFIG.exists():
@@ -195,6 +232,7 @@ def main(argv: list[str] | None = None) -> int:
         import traceback
         traceback.print_exc()
         print(f"\nSomething went wrong: {exc}")
+        print(f"A log of this window is saved in {LOG_FILE}")
         code = 1
     try:
         input("\nPress Enter to close this window...")

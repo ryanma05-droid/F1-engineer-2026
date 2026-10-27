@@ -35,3 +35,4 @@ config.local.yaml
 # App builds (PyInstaller / Inno Setup)
 /build/
 /dist/
+/logs/

@@ -9,3 +9,6 @@
 4. When Windows asks about the firewall, allow it on **Private networks**.
 
 Your settings and recordings are kept in `%LOCALAPPDATA%\RaceEngineer`.
+
+If something goes wrong, the window stays open with the error, and everything it showed is saved
+in `%LOCALAPPDATA%\RaceEngineer\logs\race-engineer.log`: send that file.

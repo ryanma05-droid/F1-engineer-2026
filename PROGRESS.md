@@ -297,6 +297,7 @@
 - [x] Console players: telemetry over Wi-Fi to the PC, voice on the PC, push-to-talk off
 - [x] Each run is added to the tyre/strategy history when the app closes (no manual build)
 - [x] Telemetry guide: `docs/telemetry-guide.md` (also in the Start menu)
+- [x] Window output saved to `%LOCALAPPDATA%\RaceEngineer\logs\race-engineer.log` (send it if something breaks)
 - [x] Linux test build: first-run setup in console mode + a real recording over UDP gave the same
       lap lines and calls as the golden test
 - [ ] First Windows install from the Releases page
