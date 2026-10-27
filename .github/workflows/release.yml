@@ -2,14 +2,24 @@
 # (RaceEngineer-<version>-mac.dmg, Apple Silicon).
 # - Push a tag like v0.1.0: builds both and publishes them on the repository's Releases page
 #   (the download link to share).
-# - Actions tab > "Build installers" > Run workflow: builds them as downloadable artifacts only
-#   (for testing), no release.
+# - Actions tab > "Build installers" > Run workflow: with no version, builds them as downloadable
+#   artifacts only (for testing); with a version (e.g. 0.1.0), also creates the tag v0.1.0 and
+#   publishes the release.
 name: Build installers
 
 on:
   push:
     tags: ["v*"]
   workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version to publish, e.g. 0.1.0 (leave empty for a test build)"
+        required: false
+        default: ""
+
+env:
+  # The version being released, from a pushed tag or the manual-run input; empty = test build.
+  RELEASE_VERSION: ${{ github.ref_type == 'tag' && github.ref_name || inputs.version }}
 
 permissions:
   contents: write
@@ -40,7 +50,7 @@ jobs:
         id: version
         shell: pwsh
         run: |
-          $v = if ($env:GITHUB_REF_TYPE -eq "tag") { $env:GITHUB_REF_NAME.TrimStart("v") } else { "0.0.0-dev" }
+          $v = if ($env:RELEASE_VERSION) { $env:RELEASE_VERSION.TrimStart("v") } else { "0.0.0-dev" }
           "value=$v" >> $env:GITHUB_OUTPUT
 
       - name: Build installer (Inno Setup)
@@ -56,12 +66,6 @@ jobs:
           name: RaceEngineer-Setup-windows
           path: dist/RaceEngineer-Setup-*.exe
 
-      - name: Publish release
-        if: github.ref_type == 'tag'
-        uses: softprops/action-gh-release@v2
-        with:
-          files: dist/RaceEngineer-Setup-*.exe
-          body_path: docs/release-notes.md
 
   mac:
     runs-on: macos-latest          # Apple Silicon (M1 or newer Macs)
@@ -85,8 +89,10 @@ jobs:
         run: dist/RaceEngineer/RaceEngineer --check
 
       - name: Build the .app and .dmg
+        id: version
         run: |
-          if [ "$GITHUB_REF_TYPE" = "tag" ]; then v="${GITHUB_REF_NAME#v}"; else v="0.0.0-dev"; fi
+          if [ -n "$RELEASE_VERSION" ]; then v="${RELEASE_VERSION#v}"; else v="0.0.0-dev"; fi
+          echo "value=$v" >> "$GITHUB_OUTPUT"
           packaging/macos/build_dmg.sh "$v"
 
       - uses: actions/upload-artifact@v4
@@ -94,9 +100,34 @@ jobs:
           name: RaceEngineer-mac
           path: dist/RaceEngineer-*-mac.dmg
 
+  publish:
+    # Only after BOTH builds passed, and only for a release (tag or a version given).
+    needs: [windows, mac]
+    if: github.ref_type == 'tag' || inputs.version != ''
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Version
+        id: version
+        run: |
+          v="${RELEASE_VERSION#v}"
+          echo "value=$v" >> "$GITHUB_OUTPUT"
+          ls -la dist
+
       - name: Publish release
-        if: github.ref_type == 'tag'
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/RaceEngineer-*-mac.dmg
+          tag_name: v${{ steps.version.outputs.value }}
+          target_commitish: ${{ github.sha }}
+          name: Race Engineer ${{ steps.version.outputs.value }}
+          files: |
+            dist/RaceEngineer-Setup-*.exe
+            dist/RaceEngineer-*-mac.dmg
           body_path: docs/release-notes.md
+          fail_on_unmatched_files: true
