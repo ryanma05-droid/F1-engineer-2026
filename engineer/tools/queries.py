@@ -23,7 +23,8 @@ SAME_LAP_THRESHOLD_MS = 50     # deltas smaller than this are "the same"
 class LapDelta:
     lap: LapRecord
     reference: LapRecord | None          # None: nothing clean to compare with
-    reason_not_compared: str | None      # "invalid", "in_lap", "out_lap", "race_start", "no_reference"
+    reason_not_compared: str | None      # "invalid", "in_lap", "out_lap", "race_start",
+                                         # "safety_car", "no_reference"
     delta_ms: int | None                 # lap - reference: negative = quicker
     sector_delta_ms: tuple[int | None, int | None, int | None] = (None, None, None)
     biggest_sector: int | None = None    # 1, 2 or 3: where the most time moved (either way)
@@ -46,6 +47,8 @@ def _why_not_clean(lap: LapRecord) -> str | None:
         return "out_lap"
     if lap.race_start_lap:
         return "race_start"
+    if lap.safety_car:
+        return "safety_car"
     return None
 
 
@@ -135,13 +138,24 @@ def tyre_status(features: LapFeatureBuilder, car_idx: int, limit_pct: float = 60
         damage=np.array(last.damage, dtype=float), blisters=np.array(last.blisters, dtype=float))
 
 
+MISTAKE_MS = 1000     # a lap this much slower than the typical lap around it is a mistake
+
+
 def pace_trend_ms_per_lap(features: LapFeatureBuilder, car_idx: int, fuel_s_per_kg: float = 0.03,
-                          laps: int = 4) -> float | None:
+                          laps: int = 4, skip_latest: int = 0) -> float | None:
     """How much slower each lap is getting on this set (ms per lap; positive = slower), after
     allowing for fuel burn: a lighter car is naturally quicker, so each lap time is adjusted to
     what it would be with an empty tank. Uses the last `laps` clean, non-safety-car laps of the
-    current stint, and needs all of them to be consecutive-ish (from this stint)."""
-    pts = [r for r in features.current_stint(car_idx) if r.clean and not r.safety_car][-laps:]
+    current stint. skip_latest=1 gives the trend as it stood a lap ago.
+
+    Mistake laps (more than a second slower than the median of the recent laps) are left out:
+    one off-track moment shouldn't read as the tyres going."""
+    pts = [r for r in features.current_stint(car_idx) if r.clean and not r.safety_car]
+    pts = pts[:len(pts) - skip_latest][-(laps + 1):]
+    if pts:
+        typical = float(np.median([r.lap_time_ms for r in pts]))
+        pts = [r for r in pts if r.lap_time_ms <= typical + MISTAKE_MS]
+    pts = pts[-laps:]
     if len(pts) < laps:
         return None
     x = np.array([r.stint_lap for r in pts], dtype=float)

@@ -89,9 +89,18 @@
 - [x] Tyre radio calls (`engineer/analyzers/tyres.py`), settings in `config.yaml` `tyres:`
 - [x] Tests (119 passing), incl. the Austria golden calls with the new lap-3 tyre call
 - [x] Fixed: an out-lap starting in the pit lane was also flagged as an in-lap
-- [ ] Real race of ~15 laps with one pit stop: check stint split, wear rate, laps left, temperature
-      calls against what the game's MFD shows
-- [ ] Tune the temperature window (80-110 C carcass is a first guess; Austria Softs ran 86-96 C)
+- [x] Real race: Austria, 18 laps, pit on lap 2 (Hard -> Medium) under a full safety car
+      (laps 2-4), recording `20261027T010920Z_cdb2205fbdb7a7db` on branch
+      `recording-20261027t010920z`. Stint split, wear warnings (40% lap 14, 50% lap 17) and laps
+      left (7 at 30%, 5 at 42%, 2 at 52%; actual 56% at the flag) all behaved.
+- [x] Fixed from it: safety car / VSC laps are no longer lap-delta references (lap 5 was called
+      "twenty seven seconds quicker" than the lap behind the safety car); drop-off ignores mistake
+      laps (>1 s off the recent median) and must show on two laps running; equal wear on all four
+      is said as "tyres all even at five percent".
+- [x] Share command for big recordings: `python -m engineer.ingest.share` (90 MB parts)
+- [ ] Tune the temperature window (80-110 C carcass is a first guess). Real data so far: Softs
+      86-96 C, Mediums 87-98 C in clean running, 63-75 C behind the safety car, 76-79 C on the
+      restart lap (the one cold call). No hot call yet.
 
 ### Tyre calls (your choices)
 
@@ -111,6 +120,13 @@
 - In F1 25 tyre damage equals wear in normal running, so damage calls only count damage beyond wear.
 - Temperatures use the carcass (inner) temperature; the surface is too spiky to judge.
 - Wear rate = straight-line fit over the last 8 laps of the stint (in-laps left out).
+
+### Findings from the 18-lap race
+
+- Your Medium (C4) stint: front right 3.9 %/lap, front left 3.3, rears 3.0. The AI cars on the same
+  compound wore the front right at 1.6 %/lap (median of 15 stints): you're about 2.4x harder on it.
+- Pace stepped from ~1:09.8 (laps 6-8) to ~1:11.2-1:12.4 from lap 9 on and stayed there; with the
+  new rules that's not called as tyre drop-off (it's a step, not a steady fade).
 
 ### Open questions
 

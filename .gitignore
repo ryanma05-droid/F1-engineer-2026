@@ -10,6 +10,7 @@ data/sessions/*
 data/features/*
 data/models/*
 data/share/*
+data/incoming/
 !data/*/README.md
 *.zst
 *.sqlite

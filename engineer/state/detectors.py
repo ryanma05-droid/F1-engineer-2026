@@ -52,6 +52,7 @@ class _PendingLap:
     pit_in_lap: bool
     pit_out_lap: bool
     since: float
+    safety_car: bool = False
 
 
 @dataclass
@@ -70,6 +71,7 @@ class _Baseline:
     sector1_ms: np.ndarray = field(default_factory=lambda: np.full(N, np.nan))
     sector2_ms: np.ndarray = field(default_factory=lambda: np.full(N, np.nan))
     invalid_latch: np.ndarray = field(default_factory=lambda: np.zeros(N, dtype=bool))
+    sc_latch: np.ndarray = field(default_factory=lambda: np.zeros(N, dtype=bool))
     pit_during_lap: np.ndarray = field(default_factory=lambda: np.zeros(N, dtype=bool))
     pit_at_lap_start: np.ndarray = field(default_factory=lambda: np.zeros(N, dtype=bool))
 
@@ -158,8 +160,10 @@ class EventDetector:
                 pit_in_lap=bool(b.pit_during_lap[i] or (pit_now[i] and not pit_before[i])),
                 pit_out_lap=bool(b.pit_at_lap_start[i]),
                 since=t,
+                safety_car=bool(b.sc_latch[i]),
             )
             b.invalid_latch[i] = False
+            b.sc_latch[i] = False
             b.pit_during_lap[i] = False
             b.pit_at_lap_start[i] = pit_now[i]
 
@@ -179,8 +183,10 @@ class EventDetector:
                 pit_in_lap=bool(b.pit_during_lap[i] or (pit_now[i] and not pit_before[i])),
                 pit_out_lap=bool(b.pit_at_lap_start[i]),
                 since=t,
+                safety_car=bool(b.sc_latch[i]),
             )
             b.invalid_latch[i] = False
+            b.sc_latch[i] = False
 
         # Sector changes within a lap: 0 -> 1 means S1 done, 1 -> 2 means S2 done.
         sec_up = same_lap & (c.sector > b.sector)
@@ -193,11 +199,14 @@ class EventDetector:
             self.pending_laps.pop(int(i), None)
             self.pending_sectors.pop(int(i), None)
             b.invalid_latch[i] = False
+            b.sc_latch[i] = False
             b.pit_during_lap[i] = False
             b.pit_at_lap_start[i] = pit_now[i]
 
         # Latches for the lap in progress (after rollover handling, so they apply to the new lap).
         b.invalid_latch |= c.active & (c.current_lap_invalid == 1)
+        if state.session.safety_car_status in (1, 2):      # full SC or VSC
+            b.sc_latch |= c.active
         # In-lap = the car ENTERED the pit lane during the lap. An out-lap that starts in the
         # pit lane (box after the line) is not also an in-lap.
         b.pit_during_lap |= c.active & pit_now & ~pit_before
@@ -242,6 +251,7 @@ class EventDetector:
                 position=_int_or_none(c.position[i]),
                 visual_compound=_int_or_none(c.visual_compound[i]),
                 tyre_age_laps=_int_or_none(c.tyre_age_laps[i]),
+                safety_car=p.safety_car,
             ))
         for i, p in list(self.pending_sectors.items()):
             ms = c.sector1_ms[i] if p.sector == 1 else c.sector2_ms[i]

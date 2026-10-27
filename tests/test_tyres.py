@@ -51,6 +51,9 @@ def test_phrases():
     assert phrases.tyre_dropoff_phrase(230) == "Pace dropping two tenths a lap, tyres are going."
     assert phrases.tyre_damage_phrase(2, 23) == "Front left tyre damage, twenty three percent."
     assert phrases.say_laps_left(0) == "they're at the limit"
+    even = _status(wear=np.full(4, 5.0), worst_wheel=0, worst_pct=5.0, wear_rate=np.full(4, 2.0))
+    assert phrases.tyre_status_phrase(even) == \
+        "Tyres all even at five percent, about two percent a lap."
 
 
 def test_status_every_three_laps_then_laps_left_and_warning():
@@ -105,9 +108,17 @@ def test_cold_tyres_on_race_lap_one_are_not_called():
 
 
 def test_pace_dropoff():
-    race = FakeRace({0: [30000, 30000, 30300, 30600, 30900, 31200]}, extra_packets=False)
-    _eng, radio = run(race)
+    race = FakeRace({0: [30000, 30000, 30300, 30600, 30900, 31200, 31500]}, extra_packets=False)
+    _eng, radio = run(race, duration_ms=230000)
     assert "Pace dropping three tenths a lap, tyres are going." in radio
+
+
+def test_one_slow_lap_does_not_trigger_dropoff():
+    # Lap 6 has a big mistake; the laps after it are back on pace.
+    race = FakeRace({0: [30000, 30000, 30000, 30000, 30000, 31900, 30000, 30000]},
+                    extra_packets=False)
+    _eng, radio = run(race)
+    assert not [r for r in radio if "Pace dropping" in r]
 
 
 def test_tyre_calls_can_be_switched_off():

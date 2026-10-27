@@ -4,7 +4,8 @@ This is a reader of the event stream, so live play, replays and (later) offline 
 build exactly the same history from the same packets.
 
 A lap is "clean" when it can be used as a reference for comparisons: valid, not an in-lap or
-out-lap, and not lap 1 of a race (it includes the standing start).
+out-lap, not lap 1 of a race (it includes the standing start), and no safety car or VSC during it.
+(Real Austria race: a lap behind the safety car made the next lap "twenty seven seconds quicker".)
 """
 
 from __future__ import annotations
@@ -25,12 +26,14 @@ class LapRecord:
     pit_in_lap: bool
     pit_out_lap: bool
     race_start_lap: bool        # lap 1 of a race: standing start, never a fair reference
+    safety_car: bool            # SC or VSC out at any point of the lap
     session_time: float         # when the lap was completed
     t_ns: int | None            # arrival time of the packet that completed it (for latency)
 
     @property
     def clean(self) -> bool:
-        return not (self.invalid or self.pit_in_lap or self.pit_out_lap or self.race_start_lap)
+        return not (self.invalid or self.pit_in_lap or self.pit_out_lap or self.race_start_lap
+                    or self.safety_car)
 
 
 class LapHistory:
@@ -51,6 +54,7 @@ class LapHistory:
             sector_ms=(e.sector1_ms, e.sector2_ms, e.sector3_ms),
             invalid=e.invalid, pit_in_lap=e.pit_in_lap, pit_out_lap=e.pit_out_lap,
             race_start_lap=self.state.session.is_race and e.lap == 1,
+            safety_car=e.safety_car,
             session_time=e.session_time, t_ns=self._arrival_ns(),
         )
         laps = self.laps.setdefault(e.car_idx, [])

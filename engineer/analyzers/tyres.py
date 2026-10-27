@@ -13,7 +13,8 @@ When each call happens (player's car only):
   the sector outside the carcass window. Never on race lap 1, in/out laps, or under SC/VSC. The
   same axle and direction isn't called again for 3 laps.
 - Drop-off: fuel-corrected pace over the last 4 clean laps fading by more than
-  `dropoff_ms_per_lap`; not repeated within 3 laps.
+  `dropoff_ms_per_lap`, on this lap AND the lap before (one mistake lap can't trigger it);
+  not repeated within 3 laps.
 """
 
 from __future__ import annotations
@@ -115,8 +116,12 @@ class TyreAnalyzer:
     def _dropoff_call(self, lap: LapFeatures, e: ev.LapCompleted) -> None:
         if lap.lap - self.dropoff_lap < REPEAT_LAPS:
             return
+        # Confirmed on two laps running, so one mistake lap can't trigger it.
+        limit = self.cfg.dropoff_ms_per_lap
         trend = pace_trend_ms_per_lap(self.features, e.car_idx, self.cfg.fuel_s_per_kg)
-        if trend is not None and trend > self.cfg.dropoff_ms_per_lap:
+        before = pace_trend_ms_per_lap(self.features, e.car_idx, self.cfg.fuel_s_per_kg,
+                                       skip_latest=1)
+        if trend is not None and before is not None and trend > limit and before > limit:
             self.dropoff_lap = lap.lap
             self._submit("tyre_dropoff", phrases.tyre_dropoff_phrase(trend, self.verbosity),
                          Priority.LOW, e)

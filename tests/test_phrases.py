@@ -29,7 +29,8 @@ def test_say_gap(ms, words):
 
 def lap(n, ms, sectors=(20000, 30000, 19000), **flags):
     return LapRecord(0, n, ms, sectors, flags.get("invalid", False), flags.get("pit_in", False),
-                     flags.get("pit_out", False), flags.get("race_start", False), 0.0, None)
+                     flags.get("pit_out", False), flags.get("race_start", False),
+                     flags.get("safety_car", False), 0.0, None)
 
 
 def test_compared_phrase_levels():

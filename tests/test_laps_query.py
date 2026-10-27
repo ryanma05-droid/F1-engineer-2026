@@ -70,3 +70,32 @@ def test_flashback_drops_rewound_laps():
     assert [r.lap for r in h.for_car(0)] == [1]
     done(bus, 2, 69900, t=146.0)
     assert [r.lap_time_ms for r in h.for_car(0)] == [77000, 69900]
+
+
+def test_safety_car_lap_is_not_a_reference():
+    import io
+
+    from engineer.app import build_engine
+    from engineer.config import Config
+    from engineer.features.priors import WearPriors
+    from tests.synth import FakeRace
+
+    class SCRace(FakeRace):
+        """Safety car out during lap 3 (60-90 s) of a 30 s-a-lap race."""
+        def frames(self, **kw):
+            for t_ns, raw in super().frames(**kw):
+                yield t_ns, raw
+                if 60.0 <= self.pf.session_time < 90.0 and self.pf.frame % 30 == 0:
+                    yield t_ns, self.pf.session(track_id=self.track_id, session_type=15,
+                                                total_laps=5, m_safetyCarStatus=1)
+
+    out = io.StringIO()
+    eng = build_engine(Config(data_dir="/nonexistent-test-dir"), out=out, priors=WearPriors())
+    race = SCRace({0: [30000, 30000, 45000, 30500, 30400]}, extra_packets=False)
+    for t_ns, raw in race.frames():
+        eng.pipeline.feed(raw, t_ns)
+    laps = eng.history.for_car(0)
+    assert [r.safety_car for r in laps] == [False, False, True, False, False]
+    assert lap_delta(eng.history, 0, 3).reason_not_compared == "safety_car"
+    assert lap_delta(eng.history, 0, 4).reference.lap == 2     # not the SC lap
+    assert "Safety car lap, forty five zero." in out.getvalue()

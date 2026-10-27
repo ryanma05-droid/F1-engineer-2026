@@ -72,6 +72,7 @@ def lap_delta_phrase(d: LapDelta, verbosity: str = "normal") -> str:
             "in_lap": "in lap",
             "out_lap": "out lap",
             "race_start": f"lap {number_words(d.lap.lap)}",
+            "safety_car": "safety car lap",
             "no_reference": "",
         }[d.reason_not_compared]
         if verbosity == "terse":
@@ -140,11 +141,13 @@ def tyre_status_phrase(st, verbosity: str = "normal", laps_left_from_pct: float 
     left = _laps_left_part(st, laps_left_from_pct)
     rate = st.wear_rate[st.worst_wheel]
     rate_part = "" if rate != rate else say_wear_rate(rate)       # NaN check
+    even = float(st.wear.max() - st.wear.min()) < 1.0              # all four the same
     if verbosity == "terse":
-        return _sentence(f"{wheel} {pct}", left)
+        return _sentence(f"{'all four' if even else wheel} {pct}", left)
+    head = f"tyres all even at {pct}" if even else f"tyres: {wheel} worst at {pct}"
     if verbosity == "chatty":
-        return _sentence(f"tyres: {wheel} worst at {pct}", rate_part, left)
-    return _sentence(f"tyres: {wheel} worst at {pct}", left or rate_part)
+        return _sentence(head, rate_part, left)
+    return _sentence(head, left or rate_part)
 
 
 def tyre_warning_phrase(st, threshold: float, verbosity: str = "normal",

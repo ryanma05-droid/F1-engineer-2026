@@ -46,6 +46,7 @@ class LapCompleted(Event):
     position: int | None
     visual_compound: int | None
     tyre_age_laps: int | None
+    safety_car: bool = False     # safety car or VSC out at any point of the lap
 
 
 @dataclass(frozen=True)

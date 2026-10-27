@@ -303,7 +303,7 @@ class LapFeatureBuilder:
 
         temps = self.temps.temps_for(i, e.lap)
         race_start = s.session.is_race and e.lap == 1
-        sc = bool(temps.safety_car) if temps else s.session.safety_car_status in (1, 2)
+        sc = e.safety_car or bool(temps and temps.safety_car)
         rec = LapFeatures(
             session_uid=s.session_uid or 0, track_id=s.session.track_id,
             session_type=s.session.session_type, car_idx=i, is_player=i == s.player_index,
