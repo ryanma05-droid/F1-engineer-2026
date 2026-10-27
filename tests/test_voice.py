@@ -261,3 +261,17 @@ def test_speech_model_falls_back_to_cpu_when_the_gpu_fails(monkeypatch):
     tried.clear()
     speech.load_model(speech.SpeechSettings(model="small.en", device="cpu"))
     assert tried == ["cpu"]
+
+
+def test_a_late_answer_is_not_said(tmp_path):
+    # Real race, 27 Oct: recognition on a GPU busy with the game took 41 s.
+    eng, radio = run_and_ask(race12(), {}, tmp_path, duration_ms=70000)
+    st = eng.pipeline.state
+    eng.pipeline.bus.publish(ev.QuestionAsked(st.session_uid, st.session_time,
+                                              text="Gap behind.", stt_ms=41317.0))
+    eng.pipeline.bus.publish(ev.QuestionAsked(st.session_uid, st.session_time,
+                                              text="Radio check.", stt_ms=184.0))
+    assert eng.answers.answered == [("radio_check", "Loud and clear.")]
+    entries = [json.loads(line) for line in
+               (tmp_path / "ptt" / "questions.jsonl").read_text().splitlines()]
+    assert entries[0]["answer"].startswith("(not said: speech recognition took 41 s)")

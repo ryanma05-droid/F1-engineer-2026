@@ -313,3 +313,11 @@
 - [x] "READ ME FIRST" in the dmg: Open Anyway in Privacy & Security, plus the `xattr` fallback
 - [ ] First open on a real Mac (the app is only ad-hoc signed; untested by a person yet)
 - [ ] Intel Macs aren't built (Apple Silicon only)
+
+### First real race with push-to-talk (27 Oct)
+
+- Recording and answering worked, but "Gap behind" took **41 s** to recognise: on the GPU, the
+  speech model waits for F1 25, which keeps the GPU busy in a race. Back in the menu it took
+  0.18 s. Fix: speech on the CPU by default (small.en, 4 threads, beam size 1), and an answer
+  that would come more than 10 s late isn't said (it's still logged).
+- [ ] Check CPU recognition time with the game running (voice.setup prints it; target < 1.5 s)

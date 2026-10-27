@@ -104,10 +104,14 @@ class Voice(BaseModel):
     enabled: bool = True             # push-to-talk questions
     button: str = "LB"               # Xbox controller button (XInput name: LB, RB, A, B, X, Y, ...)
     controller: int | None = None    # None = any connected controller
-    model: str = "medium.en"         # faster-whisper model: small.en, medium.en, large-v3, ...
-    device: Literal["auto", "cuda", "cpu"] = "auto"
+    model: str = "small.en"          # faster-whisper model: base.en, small.en, medium.en, ...
+    # CPU, not the GPU: in a race F1 25 keeps the GPU busy and a question waited 41 s for it
+    # (real race, 27 Oct). "auto" = the Nvidia GPU if it works, for when the game isn't running.
+    device: Literal["auto", "cuda", "cpu"] = "cpu"
+    cpu_threads: int = Field(default=4, ge=1)   # leaves the rest of the CPU to the game
     compute_type: str = "auto"
-    beam_size: int = Field(default=3, ge=1, le=10)
+    beam_size: int = Field(default=1, ge=1, le=10)
+    max_answer_delay_s: float = Field(default=10.0, gt=0)   # later than this: not answered
     input_device: str | int | None = None   # None = Windows default recording device
     min_press_s: float = Field(default=0.25, ge=0)   # shorter taps are ignored
     max_question_s: float = Field(default=10.0, gt=0)

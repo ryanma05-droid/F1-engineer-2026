@@ -81,10 +81,13 @@ voice:                  # push-to-talk questions (Phase 6)
   enabled: true
   button: LB            # Xbox controller button you hold to talk (LB, RB, A, B, X, Y, ...)
   controller: null      # null = any connected controller
-  model: medium.en      # speech model: small.en (faster), medium.en, large-v3 (slowest)
-  device: auto          # auto = Nvidia GPU if there is one, else the CPU
+  model: small.en       # speech model: base.en (fastest), small.en, medium.en (slower)
+  device: cpu           # cpu: the game keeps the GPU busy in a race (a question once waited
+                        # 41 s for it). auto = the Nvidia GPU if it works (fine with no game on)
+  cpu_threads: 4        # CPU threads for speech; the rest stay free for the game
   compute_type: auto
-  beam_size: 3          # 1 = fastest, 5 = most careful
+  beam_size: 1          # 1 = fastest, 5 = most careful
+  max_answer_delay_s: 10   # an answer that would come later than this isn't said
   input_device: null    # null = the Windows default recording device (same as the game)
                         # (list them: python -m engineer.voice.setup --mics)
   min_press_s: 0.25     # shorter taps are ignored

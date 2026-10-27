@@ -47,9 +47,12 @@ class QuestionLog:
 
 class QuestionAnswerer:
     def __init__(self, bus: ev.EventBus, engine, log_path: Path | str | None = None,
-                 verbosity: str = "normal"):
-        """engine: the app's Engine (state, director and the analyzers whose numbers we read)."""
+                 verbosity: str = "normal", max_answer_delay_s: float = 10.0):
+        """engine: the app's Engine (state, director and the analyzers whose numbers we read).
+        max_answer_delay_s: if speech recognition took longer than this, the answer would be
+        stale (a gap from 40 s ago), so it isn't said; the question is still logged."""
         self.engine = engine
+        self.max_answer_delay_s = max_answer_delay_s
         self.state = engine.pipeline.state
         self.director = engine.director
         self.verbosity = verbosity
@@ -65,6 +68,12 @@ class QuestionAnswerer:
                  "session_uid": f"{e.session_uid:016x}", "session_time": round(e.session_time, 3),
                  "lap": self._lap(), "heard": e.text, "intent": intent.name,
                  "audio": e.audio_path, "stt_ms": e.stt_ms}
+        if e.stt_ms is not None and e.stt_ms > self.max_answer_delay_s * 1000:
+            entry["answer"] = f"(not said: speech recognition took {e.stt_ms / 1000:.0f} s)"
+            log.warning("question %r not answered: recognition took %.0f s", e.text,
+                        e.stt_ms / 1000)
+            self.log.write(entry)
+            return
         handler = getattr(self, f"_a_{intent.name}", None)
         try:
             text = handler() if handler else None

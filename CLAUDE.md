@@ -87,7 +87,10 @@ uv run python -m engineer.ingest.share --pending     # push every recording not 
   Windows mic) -> `QuestionAsked` event -> `QuestionAnswerer` (wired in `build_engine`, so tests
   and replays answer the same way) -> director topic "answer" (HIGH, said even in quiet mode).
 - Answers come from the same query functions/analyzer state as the proactive calls.
-- GPU speech needs Nvidia's cuBLAS/cuDNN: the `gpu` dependency group (Windows, default group, so
+- Speech runs on the CPU by default (small.en, 4 threads, beam 1): in a race F1 25 keeps the GPU
+  busy and a question waited 41 s for it (real race, 27 Oct). Answers whose recognition took
+  longer than `voice.max_answer_delay_s` (10 s) are logged but not said.
+- GPU speech (`voice.device: auto`) needs Nvidia's cuBLAS/cuDNN: the `gpu` dependency group (Windows, default group, so
   `uv sync` installs it). `load_model` tests the GPU with a silent clip and falls back to the CPU;
   `SpeechProcess.start` restarts on the CPU if the process crashes while loading. The installer
   build skips the `gpu` group (friends run small.en on the CPU).

@@ -39,7 +39,7 @@ def main(argv: list[str] | None = None) -> int:
                               input_device=v.input_device,
                               models_dir=str(cfg.ptt_path / "models"),
                               clips_dir=str(cfg.ptt_path / "clips") if v.keep_audio else None,
-                              beam_size=v.beam_size)
+                              beam_size=v.beam_size, cpu_threads=v.cpu_threads)
     if args.wav:
         with wave.open(args.wav, "rb") as w:
             audio = np.frombuffer(w.readframes(w.getnframes()), np.int16).astype(np.float32)
@@ -55,7 +55,7 @@ def main(argv: list[str] | None = None) -> int:
     if not button.available:
         print("XInput not available (push-to-talk needs Windows and an Xbox controller).")
         return 1
-    print(f"Loading {v.model} (the first time downloads it, ~1.5 GB for medium.en)...",
+    print(f"Loading {v.model} (the first time downloads it: ~250 MB for small.en)...",
           flush=True)
     speech = SpeechProcess(settings)
     if not speech.start():
@@ -64,6 +64,7 @@ def main(argv: list[str] | None = None) -> int:
     print(f"Ready: {speech.description}")
     print(f"Controllers connected: {button.connected() or 'none'}")
     print(f"Hold {v.button}, ask a question, let go. Ctrl+C to stop.")
+    print("Tip: test with F1 25 running (in a session): that's when speed matters.")
     ptt = PushToTalk(button, lambda: (speech.press(), print("  listening...", flush=True)),
                      lambda: (speech.release(), print("  working it out...", flush=True)),
                      speech.cancel, v.min_press_s, v.max_question_s)

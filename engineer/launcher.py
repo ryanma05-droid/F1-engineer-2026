@@ -166,7 +166,8 @@ def first_run_setup() -> None:
             from engineer.voice.speech import SpeechSettings, load_model
             _model, desc = load_model(SpeechSettings(
                 model=cfg.voice.model, device=cfg.voice.device,
-                compute_type=cfg.voice.compute_type, models_dir=str(cfg.ptt_path / "models")))
+                compute_type=cfg.voice.compute_type, cpu_threads=cfg.voice.cpu_threads,
+                models_dir=str(cfg.ptt_path / "models")))
             print(f"  Ready: {desc}")
         except Exception as exc:
             print(f"  Could not download it ({exc}). Questions are off until setup is run "

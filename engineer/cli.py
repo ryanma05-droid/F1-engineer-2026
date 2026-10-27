@@ -54,7 +54,8 @@ def start_ptt(cfg: Config, engine):
     speech = SpeechProcess(SpeechSettings(
         model=v.model, device=v.device, compute_type=v.compute_type,
         input_device=v.input_device, models_dir=str(cfg.ptt_path / "models"),
-        clips_dir=str(cfg.ptt_path / "clips") if v.keep_audio else None, beam_size=v.beam_size))
+        clips_dir=str(cfg.ptt_path / "clips") if v.keep_audio else None, beam_size=v.beam_size,
+        cpu_threads=v.cpu_threads))
     print(f"Loading speech recognition ({v.model})... the first time downloads the model.",
           flush=True)
     if not speech.start():

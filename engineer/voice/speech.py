@@ -7,8 +7,9 @@ it heard.
 - Microphone: the Windows default recording device (the one the game uses), unless
   `voice.input_device` names another. The stream stays open and keeps the last 0.3 s, so the
   first word isn't clipped when you start talking as you press.
-- Speech to text: faster-whisper, English model (`voice.model`, default medium.en), on the Nvidia
-  GPU if there's one that works (it needs Nvidia's cuBLAS and cuDNN, from the `gpu` dependency
+- Speech to text: faster-whisper, English model (`voice.model`, default small.en), on the CPU by
+  default (`voice.device`): during a race F1 25 keeps the GPU busy, and on the real 27 Oct race a
+  question waited 41 s for it. With `device: auto` it uses the Nvidia GPU if there's one that works (it needs Nvidia's cuBLAS and cuDNN, from the `gpu` dependency
   group), else the CPU (int8). The model is tested with a silent clip when it loads, so a GPU
   that can't run it falls back to the CPU at start-up instead of failing on the first question.
   The model downloads once into data/ptt/models/.
@@ -49,7 +50,8 @@ class SpeechSettings:
     input_device: str | int | None = None
     models_dir: str | None = None
     clips_dir: str | None = None     # None: don't keep audio
-    beam_size: int = 3
+    beam_size: int = 1
+    cpu_threads: int = 4
     backend: str = "whisper"         # "whisper" or "null" (tests: hears nothing)
 
 
@@ -108,7 +110,7 @@ def _open_model(settings: SpeechSettings, device: str):
     if compute == "auto":
         compute = "float16" if device == "cuda" else "int8"
     model = WhisperModel(settings.model, device=device, compute_type=compute,
-                         download_root=settings.models_dir)
+                         cpu_threads=settings.cpu_threads, download_root=settings.models_dir)
     # A first, silent transcription: on the GPU this is where missing Nvidia libraries show up
     # (e.g. "cublas64_12.dll is not found"), so we find out now rather than on the first
     # question. It also takes the one-off warm-up delay out of the first real answer.
