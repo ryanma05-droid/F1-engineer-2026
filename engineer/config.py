@@ -30,7 +30,22 @@ class Radio(BaseModel):
     volume: float = Field(default=1.0, ge=0.0, le=2.0)
     output_device: str | int | None = None   # None = Windows default; part of a name, or index
     lap_delta_max_wait_s: float = Field(default=3.0, gt=0)
-    cooldowns_s: dict[str, float] = {"lap_delta": 5.0}
+    cooldowns_s: dict[str, float] = {"lap_delta": 5.0, "tyre_status": 30.0, "tyre_warning": 10.0,
+                                     "tyre_temp": 10.0, "tyre_dropoff": 60.0}
+
+
+class Tyres(BaseModel):
+    enabled: bool = True
+    limit_pct: float = Field(default=60.0, gt=0, le=100)           # "laps left" = laps to this
+    laps_left_from_pct: float = Field(default=25.0, ge=0, le=100)  # start saying laps left here
+    status_every_laps: int = Field(default=3, ge=1)
+    wear_warnings_pct: list[float] = [40.0, 50.0, 60.0]
+    temp_calls: bool = True
+    temp_window_c: tuple[float, float] = (80.0, 110.0)    # carcass (inner) temp, slicks
+    temp_min_fraction: float = Field(default=0.6, gt=0, le=1)
+    dropoff_ms_per_lap: float = Field(default=150.0, gt=0)
+    fuel_s_per_kg: float = Field(default=0.03, ge=0)
+    max_wait_s: float = Field(default=20.0, gt=0)
 
 
 class Config(BaseModel):
@@ -39,6 +54,7 @@ class Config(BaseModel):
     data_dir: Path = Path("data")
     record: bool = True
     radio: Radio = Radio()
+    tyres: Tyres = Tyres()
 
     @property
     def data_path(self) -> Path:
@@ -48,6 +64,10 @@ class Config(BaseModel):
     @property
     def sessions_path(self) -> Path:
         return self.data_path / "sessions"
+
+    @property
+    def features_path(self) -> Path:
+        return self.data_path / "features"
 
     @property
     def voices_path(self) -> Path:

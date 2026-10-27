@@ -100,3 +100,84 @@ def lap_delta_phrase(d: LapDelta, verbosity: str = "normal") -> str:
     if verbosity == "chatty" and d.reference is not None and d.reference_is_previous_lap:
         reference = f"on lap {number_words(d.reference.lap)}"
     return _sentence(lap_time, f"{change} {reference}".strip(), sector)
+
+
+# -- tyres (Phase 3) ---------------------------------------------------------------------------
+
+WHEEL_NAMES = ("rear left", "rear right", "front left", "front right")   # RL, RR, FL, FR order
+AXLE_NAMES = {(2, 3): "fronts", (0, 1): "rears"}
+
+
+def say_percent(pct: float) -> str:
+    n = int(round(pct))
+    return "a hundred percent" if n >= 100 else f"{number_words(max(0, n))} percent"
+
+
+def say_laps_left(laps: int) -> str:
+    if laps <= 0:
+        return "they're at the limit"
+    return f"about {number_words(min(laps, 99))} lap{'s' if laps != 1 else ''} left on these"
+
+
+def say_wear_rate(rate: float) -> str:
+    if rate < 0.75:
+        return "under a percent a lap"
+    return f"about {number_words(int(round(rate)))} percent a lap"
+
+
+def _laps_left_part(st, from_pct: float) -> str:
+    if st.laps_left is None or st.worst_pct is None or st.worst_pct < from_pct:
+        return ""
+    return say_laps_left(st.laps_left)
+
+
+def tyre_status_phrase(st, verbosity: str = "normal", laps_left_from_pct: float = 25.0) -> str:
+    """'Tyres: front right worst at nineteen percent, about four percent a lap.'
+    Once the worst tyre passes laps_left_from_pct: '..., about ten laps left on these.'"""
+    if st.worst_wheel is None:
+        return ""
+    wheel, pct = WHEEL_NAMES[st.worst_wheel], say_percent(st.worst_pct)
+    left = _laps_left_part(st, laps_left_from_pct)
+    rate = st.wear_rate[st.worst_wheel]
+    rate_part = "" if rate != rate else say_wear_rate(rate)       # NaN check
+    if verbosity == "terse":
+        return _sentence(f"{wheel} {pct}", left)
+    if verbosity == "chatty":
+        return _sentence(f"tyres: {wheel} worst at {pct}", rate_part, left)
+    return _sentence(f"tyres: {wheel} worst at {pct}", left or rate_part)
+
+
+def tyre_warning_phrase(st, threshold: float, verbosity: str = "normal",
+                        laps_left_from_pct: float = 25.0) -> str:
+    """'Front right at fifty percent, look after it, about six laps left on these.'"""
+    wheel = WHEEL_NAMES[st.worst_wheel]
+    left = _laps_left_part(st, laps_left_from_pct)
+    if verbosity == "terse":
+        return _sentence(f"{wheel} {say_percent(threshold)}", left)
+    return _sentence(f"{wheel} at {say_percent(threshold)}", "look after it", left)
+
+
+def tyre_temp_phrase(kind: str, wheels: list[int], sector: int) -> str:
+    """'Rears running hot in sector three.' / 'Front left is cold in sector one.'"""
+    name = AXLE_NAMES.get(tuple(sorted(wheels))) if len(wheels) == 2 else None
+    if name is None:
+        name = " and ".join(WHEEL_NAMES[w] for w in wheels)
+    verb = "running hot" if kind == "hot" else "cold"
+    plural = len(wheels) > 1
+    if kind == "cold":
+        verb = f"{'are' if plural else 'is'} cold"
+    return _sentence(f"{name} {verb} in sector {_ONES[sector]}")
+
+
+def tyre_dropoff_phrase(ms_per_lap: float, verbosity: str = "normal") -> str:
+    """'Pace dropping two tenths a lap, tyres are going.'"""
+    if verbosity == "terse":
+        return _sentence(f"pace dropping {say_gap(int(ms_per_lap))} a lap")
+    return _sentence(f"pace dropping {say_gap(int(ms_per_lap))} a lap", "tyres are going")
+
+
+def tyre_damage_phrase(wheel: int, pct: float, kind: str = "damage") -> str:
+    """'Front left tyre damage, twenty percent.' / 'Blistering on the rear right, fifteen percent.'"""
+    if kind == "blisters":
+        return _sentence(f"blistering on the {WHEEL_NAMES[wheel]}", say_percent(pct))
+    return _sentence(f"{WHEEL_NAMES[wheel]} tyre damage", say_percent(pct))

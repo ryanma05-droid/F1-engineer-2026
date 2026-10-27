@@ -30,5 +30,6 @@ def test_replay_prints_identical_lines_to_live(tmp_path):
     assert "wear RL 5.5% RR 6.0% FL 4.0% FR 4.5%" in lap_lines[0]
     assert "[INVALID]" in lap_lines[1] and "INVALID" not in lap_lines[2]
     radio = [line for line in live_lines if line.startswith("RADIO")]
-    assert len(radio) == 3                 # same lines live and replay, radio calls included
+    assert len(radio) == 4                 # same lines live and replay, radio calls included
     assert "Lap invalid" in radio[1]
+    assert "Tyres: rear right worst at six percent" in radio[3]    # stint lap 3 status call

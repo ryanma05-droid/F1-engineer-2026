@@ -5,8 +5,10 @@ description = "Personal AI race engineer for EA SPORTS F1 25"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "duckdb>=2.0.0",
     "numpy>=1.26",
     "piper-tts>=1.8.0",
+    "pyarrow>=26.0.0",
     "pydantic>=2.6",
     "pyttsx3>=2.99 ; sys_platform == 'win32'",
     "pyyaml>=6.0",

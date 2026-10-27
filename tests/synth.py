@@ -137,7 +137,8 @@ class FakeRace:
                  pit_laps: dict[int, int] | None = None,
                  last_lap_delay_frames: int = 0, extra_packets: bool = True,
                  session_uid: int = SESSION_UID, telemetry_public: list[int] | None = None,
-                 chequered_flag: bool = False):
+                 chequered_flag: bool = False, wear_per_lap: list[float] | None = None,
+                 inner_temp=None, compound_after_pit: int = 16, fuel_per_lap: float = 0.0):
         self.pf = PacketFactory(session_uid=session_uid)
         self.lap_times = lap_times_ms
         self.session_type = session_type
@@ -150,7 +151,23 @@ class FakeRace:
         # Real F1 25 behaviour at the end of a race: the lap number stays on the final lap, the
         # last-lap time updates and result status becomes 3 (finished).
         self.chequered_flag = chequered_flag
+        # Tyres: wear grows by wear_per_lap (RL RR FL FR) each lap and resets at a pit stop;
+        # inner_temp(car, lap, sector) -> 4 carcass temps (default 90 C, inside the window).
+        self.wear_per_lap = wear_per_lap
+        self.inner_temp = inner_temp or (lambda car, lap, sector: [90, 90, 90, 90])
+        self.compound_after_pit = compound_after_pit
+        self.fuel_per_lap = fuel_per_lap
         self.t0_ns = 1_700_000_000_000_000_000
+
+    def _laps_on_set(self, car: int, lap: int, frac: float) -> float:
+        """Laps driven on the current tyre set (fractional)."""
+        pit = self.pit_laps.get(car)
+        done = lap - 1 + frac
+        return done - pit if pit is not None and lap > pit else done
+
+    def _compound(self, car: int, lap: int) -> int:
+        pit = self.pit_laps.get(car)
+        return self.compound_after_pit if pit is not None and lap > pit else 16
 
     def _car_at(self, car: int, t_ms: float) -> dict:
         laps = self.lap_times[car]
@@ -230,14 +247,26 @@ class FakeRace:
                 if st.get("finished") and self.chequered_flag:
                     lap[car]["resultStatus"] = 3
             yield t_ns, pf.lap_data(lap)
-            yield t_ns, pf.car_telemetry({c: {"speed": 250, "throttle": 1.0,
-                                              "tyresSurfaceTemperature": [90, 91, 92, 93]}
-                                          for c in cars})
-            yield t_ns, pf.car_status({c: {"visualTyreCompound": 16, "actualTyreCompound": 18,
-                                           "tyresAgeLaps": lap[c]["currentLapNum"] - 1,
-                                           "fuelInTank": 50.0} for c in cars})
+            frac = {c: lap[c]["lapDistance"] / self.LAP_LEN for c in cars}
+            yield t_ns, pf.car_telemetry({c: {
+                "speed": 250, "throttle": 1.0, "tyresSurfaceTemperature": [90, 91, 92, 93],
+                "tyresInnerTemperature": self.inner_temp(c, lap[c]["currentLapNum"],
+                                                         lap[c]["sector"])} for c in cars})
+            yield t_ns, pf.car_status({c: {
+                "visualTyreCompound": self._compound(c, lap[c]["currentLapNum"]),
+                "actualTyreCompound": 18,
+                "tyresAgeLaps": int(self._laps_on_set(c, lap[c]["currentLapNum"], 0)),
+                "fuelInTank": 50.0 - self.fuel_per_lap * (lap[c]["currentLapNum"] - 1 + frac[c])}
+                for c in cars})
             if frame % 6 == 0:
-                yield t_ns, pf.car_damage({c: {"tyresWear": [5.5, 6.0, 4.0, 4.5]} for c in cars})
+                if self.wear_per_lap is None:
+                    wear = {c: [5.5, 6.0, 4.0, 4.5] for c in cars}
+                else:
+                    wear = {c: [float(int(r * self._laps_on_set(c, lap[c]["currentLapNum"],
+                                                                frac[c])))
+                                for r in self.wear_per_lap] for c in cars}
+                yield t_ns, pf.car_damage({c: {"tyresWear": wear[c], "tyresDamage": wear[c]}
+                                           for c in cars})
             if self.extra:
                 yield t_ns, pf.blank(f.PacketId.MOTION).tobytes()
                 yield t_ns, pf.blank(f.PacketId.MOTION_EX).tobytes()

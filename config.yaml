@@ -25,3 +25,20 @@ radio:
   lap_delta_max_wait_s: 3.0   # wait up to this long for a straight, then drop the call
   cooldowns_s:                # minimum gap between two calls of the same kind
     lap_delta: 5.0
+    tyre_status: 30.0
+    tyre_warning: 10.0
+    tyre_temp: 10.0
+    tyre_dropoff: 60.0
+
+tyres:                  # tyre coaching (Phase 3)
+  enabled: true
+  limit_pct: 60         # "laps left" = laps until the worst tyre reaches this wear
+  laps_left_from_pct: 25   # only start saying "laps left" once a tyre is this worn
+  status_every_laps: 3  # tyre status call every N laps of a stint
+  wear_warnings_pct: [40, 50, 60]   # a call when the worst tyre passes each of these
+  temp_calls: true      # "rears running hot in sector three"
+  temp_window_c: [80, 110]   # carcass (inner) temperature window for slicks, Celsius
+  temp_min_fraction: 0.6     # hot/cold = outside the window for this share of a sector
+  dropoff_ms_per_lap: 150    # "pace dropping" when fuel-corrected pace fades faster than this
+  fuel_s_per_kg: 0.03        # lap time cost of each kg of fuel (for the fuel correction)
+  max_wait_s: 20             # tyre calls wait up to this long for a straight
