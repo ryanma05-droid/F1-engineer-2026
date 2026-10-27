@@ -78,6 +78,14 @@ async def _run(cfg: Config, record: bool | None, voice: bool) -> None:
             audio.close()
         print(f"Stopped. {listener.packets_received} packets received, "
               f"{pipeline.bad_packets} rejected, {pipeline.unknown_packets} unknown id.")
+        if recorder and cfg.upload.auto:
+            # Shutting down anyway, so a blocking upload is fine here.
+            from engineer.ingest.share import upload_pending
+            print("Uploading this run's recordings to GitHub (Ctrl+C again to skip)...")
+            try:
+                upload_pending(cfg, recorder.paths_this_run)
+            except KeyboardInterrupt:
+                print("Upload skipped. Later: uv run python -m engineer.ingest.share --pending")
 
 
 def _sessions(config_path: Path | None) -> None:

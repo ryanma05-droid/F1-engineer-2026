@@ -49,3 +49,10 @@ corners:                # corner coaching (Phase 4)
   min_loss_s: 0.1       # only call a corner where you lost at least this much
   nearby_gap_s: 2.0     # compare with the car ahead/behind if within this gap, else your best lap
   max_wait_s: 25        # wait up to this long for a straight
+
+# Upload recordings to GitHub automatically when you stop `engineer run` (Ctrl+C).
+# Turn it on in config.local.yaml (your PC only, not shared):  upload: {auto: true}
+upload:
+  auto: false
+  remote: origin
+  min_mb: 2             # skip tiny recordings (menus, a few seconds)

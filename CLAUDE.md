@@ -37,7 +37,8 @@ uv run python -m engineer.features build             # recordings -> data/featur
 uv run python -m engineer.features tyres             # your wear per lap by track/compound
 uv run python -m engineer.features corners           # your time per corner vs the AI
 uv run python -m engineer.features query "select ..."   # SQL over laps/stints/traces/corners
-uv run python -m engineer.ingest.share               # split the newest recording to send it
+uv run python -m engineer.ingest.share --upload      # push the newest recording to its own branch
+uv run python -m engineer.ingest.share --pending     # push every recording not uploaded yet
 ```
 
 ## Radio rules (Phase 1)
@@ -65,6 +66,15 @@ uv run python -m engineer.ingest.share               # split the newest recordin
 - `data/tracks/<track>.json` is committed and hand-editable (official turn numbers). Without a
   file the map is learned from the first 2 clean laps and saved. The golden test uses
   `data/tracks/austria.json`.
+
+## Settings and uploads
+
+- `config.local.yaml` (gitignored) overrides `config.yaml` on one PC. Auto-upload lives there:
+  `upload: {auto: true}` pushes the run's recordings when `engineer run` stops.
+- Uploads never touch the working tree: parts are committed with git plumbing (hash-object,
+  mktree, commit-tree) and pushed to `recording-<time>`; `data/share/uploaded.txt` lists sent files.
+- To fetch one here: `git fetch origin <branch>`, `git show` each part into a folder, then
+  `share --join <first part>`.
 
 ## Real-data facts (confirmed on tests/fixtures/austria_race_5laps.zst)
 

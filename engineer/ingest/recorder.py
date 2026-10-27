@@ -82,6 +82,7 @@ class Recorder:
         self.db.commit()
         self._compressor = zstandard.ZstdCompressor(level=ZSTD_LEVEL)
         self._current: _OpenSession | None = None
+        self.paths_this_run: list[Path] = []      # every file written to since start (upload)
 
     @property
     def current_path(self) -> Path | None:
@@ -135,6 +136,8 @@ class Recorder:
         )
         self.db.commit()
         log.info("Recording session %016x to %s", uid, path)
+        if path not in self.paths_this_run:
+            self.paths_this_run.append(path)
         self._current = _OpenSession(uid, path, f, writer, last_flush_ns=t_ns)
         return self._current
 

@@ -173,3 +173,10 @@
 - Corner maps are learned per track and saved, rather than shipped for every track: only Austria
   has real data so far.
 - Speed is said as "k p h" for the voice.
+
+## Uploading recordings
+
+- [x] `python -m engineer.ingest.share --upload` pushes a recording to its own branch directly
+      (no branch switching; your folder is untouched); `--pending` sends everything not sent yet
+- [x] Auto-upload when `engineer run` stops, switched on per PC in `config.local.yaml`
+      (`upload: {auto: true}`); off by default so other people's copies don't try to push

@@ -56,6 +56,12 @@ class Corners(BaseModel):
     max_wait_s: float = Field(default=25.0, gt=0)
 
 
+class Upload(BaseModel):
+    auto: bool = False          # push new recordings to GitHub when `engineer run` stops
+    remote: str = "origin"
+    min_mb: float = Field(default=2.0, ge=0)   # skip tiny recordings (menus, a few seconds)
+
+
 class Config(BaseModel):
     listen: Endpoint = Endpoint(host="0.0.0.0", port=20777)
     forward: list[Endpoint] = []
@@ -64,6 +70,7 @@ class Config(BaseModel):
     radio: Radio = Radio()
     tyres: Tyres = Tyres()
     corners: Corners = Corners()
+    upload: Upload = Upload()
 
     @property
     def data_path(self) -> Path:
@@ -87,9 +94,23 @@ class Config(BaseModel):
         return self.data_path / "voices"
 
 
+def _merge(base: dict, override: dict) -> dict:
+    out = dict(base)
+    for k, v in override.items():
+        out[k] = _merge(out[k], v) if isinstance(v, dict) and isinstance(out.get(k), dict) else v
+    return out
+
+
 def load_config(path: Path | str | None = None) -> Config:
+    """config.yaml, then config.local.yaml next to it (if present) on top.
+
+    config.local.yaml holds settings for this PC only (e.g. auto-upload, the audio device). git
+    ignores it, so `git pull` never clashes with it."""
     path = Path(path) if path else DEFAULT_CONFIG
-    if not path.exists():
-        return Config()
-    raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    raw = {}
+    if path.exists():
+        raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    local = path.with_name("config.local.yaml")
+    if local.exists():
+        raw = _merge(raw, yaml.safe_load(local.read_text(encoding="utf-8")) or {})
     return Config.model_validate(raw)
