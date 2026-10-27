@@ -56,8 +56,7 @@
 - [x] Voice download / test command (`python -m engineer.radio.setup_voice --test`)
 - [x] CLI: `engineer run` speaks (`--no-voice`, `--verbosity`); replay prints calls, `--voice` speaks
 - [x] Tests (106 passing) incl. golden radio calls on the Austria recording
-- [ ] Hear the real Piper voice and radio effect on Windows (could not download voices in the cloud
-      session: huggingface.co is blocked there)
+- [x] Hear the real Piper voice and radio effect on Windows (works, through the Astro MixAmp)
 - [ ] Acceptance: voice within 1 s of crossing the line, live. The readout
       "(voice started X.XXs after the packet arrived)" after each call measures exactly this.
 
@@ -78,3 +77,43 @@
   clean lap".
 - Lap deltas wait up to 3 s for a straight, then are dropped (config `radio.lap_delta_max_wait_s`).
 
+
+## Phases 2 and 3 — feature tables and tyre coaching
+
+- [x] Lap feature record per car per lap (`engineer/features/lap_features.py`)
+- [x] Tyre temperatures per sector and wheel during each lap; flashback keeps the earlier sectors
+- [x] Stints (tyre changes, box before/after the line, drive-throughs ignored)
+- [x] Offline tables: `python -m engineer.features build`, `query`, `tyres` (Parquet + DuckDB)
+- [x] Wear history per track and compound, used while a stint is under 3 laps
+- [x] Queries: `tyre_status`, `pace_trend_ms_per_lap`, `stint_summary`
+- [x] Tyre radio calls (`engineer/analyzers/tyres.py`), settings in `config.yaml` `tyres:`
+- [x] Tests (119 passing), incl. the Austria golden calls with the new lap-3 tyre call
+- [x] Fixed: an out-lap starting in the pit lane was also flagged as an in-lap
+- [ ] Real race of ~15 laps with one pit stop: check stint split, wear rate, laps left, temperature
+      calls against what the game's MFD shows
+- [ ] Tune the temperature window (80-110 C carcass is a first guess; Austria Softs ran 86-96 C)
+
+### Tyre calls (your choices)
+
+| Call | When |
+| --- | --- |
+| Status: "Tyres: front right worst at nineteen percent, about four percent a lap." | every 3 laps of a stint |
+| ... once the worst tyre is 25%+: "..., about ten laps left on these." | laps left = laps until a tyre reaches 60% |
+| Warning: "Front right at fifty percent, look after it, ..." | worst tyre passes 40 / 50 / 60% |
+| Temperature: "Rears running hot in sector three." | carcass outside 80-110 C for 60% of a sector; not on lap 1, in/out laps, SC |
+| Drop-off: "Pace dropping two tenths a lap, tyres are going." | fuel-corrected pace fades > 0.15 s/lap over 4 clean laps |
+| Damage / blisters | blistering, or damage beyond wear, up 10+ points |
+
+### Decisions
+
+- "Laps left starting at 25%" is read as: laps left is spoken once the worst tyre reaches 25%;
+  laps left counts to a 60% limit. Both are in `config.yaml` (`laps_left_from_pct`, `limit_pct`).
+- In F1 25 tyre damage equals wear in normal running, so damage calls only count damage beyond wear.
+- Temperatures use the carcass (inner) temperature; the surface is too spiky to judge.
+- Wear rate = straight-line fit over the last 8 laps of the stint (in-laps left out).
+
+### Open questions
+
+- Is 60% the right "limit" for laps left on your setup and difficulty? Easy to change.
+- Real carcass temperature window per compound: needs a longer race (and a wet one for inters/wets,
+  which get no temperature calls for now).

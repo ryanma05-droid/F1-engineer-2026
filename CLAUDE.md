@@ -20,8 +20,8 @@ Read `docs/architecture.md` (full design) and `PROGRESS.md` (what's done / open 
 
 ## Phase plan
 
-0 foundation (accepted) · 1 radio director + Piper TTS + lap delta (built; awaiting voice check on Windows) · 2 features/feature tables ·
-3 tyre coaching · 4 traces + corner coaching · 5 strategy sim · 6 push-to-talk.
+0 foundation (accepted) · 1 radio director + Piper TTS + lap delta (done; voice works on Windows) ·
+2 features/feature tables (built) · 3 tyre coaching (built; awaiting a real longer race) · 4 traces + corner coaching · 5 strategy sim · 6 push-to-talk.
 
 ## Commands
 
@@ -32,6 +32,9 @@ uv run python -m engineer run
 uv run python -m engineer.ingest.replay <file.zst> --speed max
 uv run python -m engineer.bench <file.zst>
 uv run python -m engineer.radio.setup_voice --test   # download + hear the Piper voice
+uv run python -m engineer.features build             # recordings -> data/features/*.parquet
+uv run python -m engineer.features tyres             # your wear per lap by track/compound
+uv run python -m engineer.features query "select ..."   # SQL over laps / stints
 ```
 
 ## Radio rules (Phase 1)
@@ -44,12 +47,23 @@ uv run python -m engineer.radio.setup_voice --test   # download + hear the Piper
 - The golden test also checks `tests/fixtures/*.calls.txt`; update it deliberately (and check each
   call by hand) when phrasing changes.
 
+## Features and tyres (Phases 2-3)
+
+- `LapFeatureBuilder` is the one place lap features are computed, live and offline. Offline tables
+  are rebuilt from the recordings (`features build`); never compute features a second way.
+- `build_engine(cfg, out, priors=None)` loads tyre history from `data/features/stints.parquet`;
+  tests pass `priors=WearPriors()` so they don't depend on the local tables.
+- Tyre settings live in `config.yaml` `tyres:` (limit 60%, laps left from 25%, status every 3 laps).
+
 ## Real-data facts (confirmed on tests/fixtures/austria_race_5laps.zst)
 
 - Lap Data spec field order is correct; `m_gridPosition` is zero-based (pole = 0).
 - At the chequered flag the lap number does NOT advance; the last-lap time changes on the same lap.
 - `m_lastLapTimeInMS` updates on the same frame as the lap number.
 - Computed S3 can differ from the game's by 1-2 ms (separate rounding).
+- Tyre wear and tyre damage come as whole percents, and tyre damage equals wear in normal running.
+- Surface temps swing ~55-150 C within a lap; carcass (inner) temps move smoothly (78-96 C, Softs).
+- The recording has a real flashback on lap 3 (to 185.0 s at 194.6 s).
 - The golden test (`tests/test_golden.py`) replays the fixture; keep it passing.
 
 ## Environment

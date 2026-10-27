@@ -76,6 +76,23 @@ Quiet zones: the director holds a call while the player is braking, steering or 
 checks a per-session map (50 m sections, learned from the player's previous laps, excluding race
 lap 1, in-laps and out-laps) so a call doesn't start just before a braking zone.
 
+## Modules (Phases 2 and 3)
+
+| Module | Role |
+| --- | --- |
+| `engineer/features/lap_features.py` | `LapFeatureBuilder`: one `LapFeatures` record per car per lap (times, flags, compound, age, wear/damage/blisters, carcass and surface temps per sector, fuel, conditions). `TempAccumulator` collects temps during the lap. Stints, `fit_wear_rate()`, `summarize_stints()`. |
+| `engineer/features/tables.py` | Offline: replays every recording through the same builder and writes `data/features/laps.parquet` and `stints.parquet`; DuckDB queries. CLI: `python -m engineer.features build / query / tyres`. |
+| `engineer/features/priors.py` | `WearPriors`: your median wear rate per (track, compound) from the stint table; used while a stint is under 3 laps. |
+| `engineer/tools/queries.py` | `tyre_status()` (wear, rate, laps left), `pace_trend_ms_per_lap()` (fuel corrected), `stint_summary()`. |
+| `engineer/analyzers/tyres.py` | `TyreAnalyzer`: tyre status, wear warnings, temperatures, drop-off, damage/blisters radio calls. |
+
+Stints: a new set is a lower tyre age or a different compound. An in-lap never starts a stint
+(where the box is before the line it already ends on the new tyres); drive-throughs aren't stints.
+
+Tyre temperatures are judged on the carcass (inner) temperature: the surface swings by ~100 C
+within a corner on real data, the carcass moves smoothly. "Hot" or "cold" = outside the window
+(`tyres.temp_window_c`, slicks only) for 60%+ of a sector.
+
 ## Data conventions
 
 - Wheel arrays are ordered **RL, RR, FL, FR** everywhere (as in the game).
@@ -107,8 +124,8 @@ Packets that arrive with session UID 0 (menus) are not recorded.
 | --- | --- |
 | 0 | Foundation: parser, listener, recorder, race state, events, replay, CLI, tests, benchmark. |
 | 1 | Radio director (priority, expiry, quiet zones, cooldowns, verbosity), Piper TTS audio process, lap delta analyzer. |
-| 2 | Feature functions and offline feature tables (Parquet/DuckDB). |
-| 3 | Tyre degradation coaching and models. |
+| 2 | Lap feature records, stints, offline feature tables (Parquet/DuckDB). (built) |
+| 3 | Tyre coaching: wear status, laps left, warnings, temperatures, drop-off. (built) |
 | 4 | Distance traces (5 m bins), track maps, corner-by-corner coaching vs nearby cars. |
 | 5 | Strategy simulation (pit timing, compound) in worker processes. |
 | 6 | Push-to-talk: faster-whisper, intents, query tools. |
