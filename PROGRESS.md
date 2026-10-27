@@ -302,3 +302,14 @@
       lap lines and calls as the golden test
 - [ ] First Windows install from the Releases page
 - [ ] Not code-signed: Windows SmartScreen shows "More info > Run anyway" the first time
+
+## Mac app (for console players)
+
+- [x] Mac build in the same GitHub workflow (Apple Silicon runner): tests, PyInstaller bundle,
+      `--check`, then "Race Engineer.app" in `RaceEngineer-<version>-mac.dmg`
+- [x] Always console mode (F1 25 isn't on macOS): telemetry over Wi-Fi, voice on the Mac,
+      push-to-talk off; setup shows the Mac's IP and where to find it
+- [x] Data in `~/Library/Application Support/RaceEngineer`; fallback voice is the Mac's `say`
+- [x] "READ ME FIRST" in the dmg: Open Anyway in Privacy & Security, plus the `xattr` fallback
+- [ ] First open on a real Mac (the app is only ad-hoc signed; untested by a person yet)
+- [ ] Intel Macs aren't built (Apple Silicon only)

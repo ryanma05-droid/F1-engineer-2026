@@ -70,8 +70,13 @@ def lan_ip() -> str | None:
         return None
 
 
+MAC = sys.platform == "darwin"
+COMPUTER = "Mac" if MAC else "PC"
+
+
 def telemetry_guide(platform: str, port: int) -> str:
-    ip = (lan_ip() or "<this PC's IP, see below>") if platform == "console" else "127.0.0.1"
+    ip = (lan_ip() or f"<this {COMPUTER}'s IP, see below>") if platform == "console" \
+        else "127.0.0.1"
     lines = [
         "",
         "In F1 25: Game Options > Settings > Telemetry Settings",
@@ -83,7 +88,17 @@ def telemetry_guide(platform: str, port: int) -> str:
         "    UDP Format ........... 2025",
         "    Your Telemetry ....... Public",
     ]
-    if platform == "console":
+    if platform == "console" and MAC:
+        lines += [
+            "",
+            "The Mac must be on the same Wi-Fi / router as the console. If the IP above is",
+            "missing or wrong: System Settings > Wi-Fi > Details (next to your network) > IP",
+            "address.",
+            "When macOS asks to allow incoming connections or to find devices on your local",
+            "network, click Allow, otherwise the console's telemetry is blocked.",
+            "The engineer's voice plays on this Mac (speakers, or AirPods paired to the Mac).",
+        ]
+    elif platform == "console":
         lines += [
             "",
             "The PC must be on the same Wi-Fi / router as the console. If the IP above is",
@@ -119,9 +134,14 @@ def first_run_setup() -> None:
     print("=" * 64)
     print(" Race Engineer setup")
     print("=" * 64)
-    platform = _ask("\nWhere do you play F1 25?\n  [1] On this PC\n  [2] On an Xbox or "
-                    "PlayStation\nType 1 or 2 and press Enter: ", {"1": "pc", "2": "console"},
-                    "1")
+    if MAC:
+        # F1 25 doesn't run on macOS: the Mac is the engineer for an Xbox/PlayStation player.
+        print("\nThis Mac will be the race engineer for F1 25 on your Xbox or PlayStation.")
+        platform = "console"
+    else:
+        platform = _ask("\nWhere do you play F1 25?\n  [1] On this PC\n  [2] On an Xbox or "
+                        "PlayStation\nType 1 or 2 and press Enter: ",
+                        {"1": "pc", "2": "console"}, "1")
     ptt = False
     if platform == "pc":
         ptt = _ask("\nAsk the engineer questions by holding LB on an Xbox controller? "
@@ -138,8 +158,8 @@ def first_run_setup() -> None:
         from engineer.radio.setup_voice import download_voice
         download_voice(cfg.radio.voice, cfg.voices_path)
     except Exception as exc:
-        print(f"  Could not download the voice ({exc}). The Windows voice will be used; "
-              f"run setup again later to retry.")
+        print(f"  Could not download the voice ({exc}). The {'Mac' if MAC else 'Windows'} "
+              f"voice will be used; run setup again later to retry.")
     if ptt:
         print(f"\nDownloading speech recognition ({FRIEND_SPEECH_MODEL}, about 250 MB)...")
         try:
@@ -165,10 +185,13 @@ def banner(cfg) -> None:
     print("=" * 64)
     print(" Race Engineer")
     if cfg.platform == "console":
-        print(f" Console mode: set UDP IP Address in F1 25 to {lan_ip() or '(see ipconfig)'}, "
+        print(f" Console mode: set UDP IP Address in F1 25 to {lan_ip() or '(see setup)'}, "
               f"port {cfg.listen.port}")
-    print(f" Your data: {APP_HOME}   (log: logs\\race-engineer.log)")
-    print(" Run 'Race Engineer setup' from the Start menu to change settings.")
+    print(f" Your data: {APP_HOME}   (log: logs/race-engineer.log)")
+    if MAC:
+        print(" To run setup again: delete config.local.yaml in the folder above, then reopen.")
+    else:
+        print(" Run 'Race Engineer setup' from the Start menu to change settings.")
     print("=" * 64)
 
 
@@ -187,6 +210,7 @@ def self_check() -> int:
     from engineer.voice.controller import XInputButton
     if sys.platform == "win32":                # Windows bundles PortAudio and the SAPI voice
         import pyttsx3  # noqa: F401
+    if sys.platform in ("win32", "darwin"):     # PortAudio ships inside sounddevice there
         import sounddevice  # noqa: F401
     cfg = load_config()
     build_engine(cfg, out=io.StringIO())

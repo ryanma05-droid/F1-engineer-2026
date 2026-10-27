@@ -6,8 +6,8 @@ process does the slow part.
 
 Voices, best first:
 1. Piper (a neural voice, runs offline) with the model in data/voices/, plus the radio effect.
-2. pyttsx3: the voice built into Windows. Used if Piper or the model is missing, or audio playback
-   through sounddevice fails. No radio effect (it plays the audio itself).
+2. The computer's own voice, used if Piper or the model is missing, or audio playback through
+   sounddevice fails: pyttsx3 on Windows, the `say` command on a Mac. No radio effect.
 3. Text only: prints a warning once and stays silent.
 
 Each call carries the arrival time of the packet that triggered it, so this process can print the
@@ -121,6 +121,23 @@ class Pyttsx3Backend:
         self.engine.runAndWait()
 
 
+class SayBackend:
+    """The Mac's built-in voice (the `say` command)."""
+    name = "say"
+
+    def __init__(self, settings: AudioSettings):
+        import shutil
+
+        if sys.platform != "darwin" or shutil.which("say") is None:
+            raise RuntimeError("the say command is macOS only")
+
+    def speak(self, text: str, on_start) -> None:
+        import subprocess
+
+        on_start()
+        subprocess.run(["say", text], check=False, timeout=30)
+
+
 class NullBackend:
     """No audio: used in tests, and as the last resort."""
     name = "null"
@@ -133,8 +150,10 @@ class NullBackend:
 
 
 def _make_backend(settings: AudioSettings):
-    order = {"auto": [PiperBackend, Pyttsx3Backend], "piper": [PiperBackend],
-             "pyttsx3": [Pyttsx3Backend], "null": [NullBackend]}[settings.backend]
+    system_voice = SayBackend if sys.platform == "darwin" else Pyttsx3Backend
+    order = {"auto": [PiperBackend, system_voice], "piper": [PiperBackend],
+             "pyttsx3": [Pyttsx3Backend], "say": [SayBackend],
+             "null": [NullBackend]}[settings.backend]
     for cls in order:
         try:
             return cls(settings)
@@ -182,7 +201,7 @@ def audio_main(calls, status, settings: AudioSettings) -> None:
 
 def _fallback(settings: AudioSettings):
     try:
-        return Pyttsx3Backend(settings)
+        return SayBackend(settings) if sys.platform == "darwin" else Pyttsx3Backend(settings)
     except Exception:
         return NullBackend(settings)
 

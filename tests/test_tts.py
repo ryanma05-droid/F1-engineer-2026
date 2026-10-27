@@ -18,8 +18,8 @@ def test_missing_piper_model_falls_back_without_crashing():
     ap = AudioProcess(AudioSettings(voice_model="/nonexistent/voice.onnx", backend="auto",
                                     show_latency=False))
     backend = ap.start(wait_ready_s=60)
-    assert backend in ("pyttsx3", "null")
-    # The Windows voice needs a sound device to finish speaking; build machines (GitHub's
+    assert backend in ("pyttsx3", "say", "null")
+    # The system voice needs a sound device to finish speaking; build machines (GitHub's
     # Windows runners) have none, so the spoken round trip is only checked for the null voice.
     if backend == "null":
         ap.say("Radio check.")

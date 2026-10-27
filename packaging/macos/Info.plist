@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleName</key><string>Race Engineer</string>
+  <key>CFBundleDisplayName</key><string>Race Engineer</string>
+  <key>CFBundleIdentifier</key><string>com.raceengineer.f125</string>
+  <key>CFBundleVersion</key><string>APP_VERSION</string>
+  <key>CFBundleShortVersionString</key><string>APP_VERSION</string>
+  <key>CFBundleExecutable</key><string>RaceEngineer</string>
+  <key>CFBundlePackageType</key><string>APPL</string>
+  <key>LSMinimumSystemVersion</key><string>12.0</string>
+  <key>NSLocalNetworkUsageDescription</key>
+  <string>Race Engineer receives F1 25 telemetry from your Xbox or PlayStation over your home network.</string>
+  <key>NSMicrophoneUsageDescription</key>
+  <string>Race Engineer can listen to your questions on push-to-talk.</string>
+</dict>
+</plist>

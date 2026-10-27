@@ -1,9 +1,10 @@
-# Builds the Windows installer.
-# - Push a tag like v0.1.0: builds RaceEngineer-Setup-0.1.0.exe and publishes it on the
-#   repository's Releases page (the download link to share).
-# - Actions tab > "Build Windows installer" > Run workflow: builds it as a downloadable artifact
-#   only (for testing), no release.
-name: Build Windows installer
+# Builds the installers: Windows (RaceEngineer-Setup-<version>.exe) and Mac
+# (RaceEngineer-<version>-mac.dmg, Apple Silicon).
+# - Push a tag like v0.1.0: builds both and publishes them on the repository's Releases page
+#   (the download link to share).
+# - Actions tab > "Build installers" > Run workflow: builds them as downloadable artifacts only
+#   (for testing), no release.
+name: Build installers
 
 on:
   push:
@@ -14,7 +15,7 @@ permissions:
   contents: write
 
 jobs:
-  build:
+  windows:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -52,7 +53,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: RaceEngineer-Setup
+          name: RaceEngineer-Setup-windows
           path: dist/RaceEngineer-Setup-*.exe
 
       - name: Publish release
@@ -60,4 +61,42 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: dist/RaceEngineer-Setup-*.exe
+          body_path: docs/release-notes.md
+
+  mac:
+    runs-on: macos-latest          # Apple Silicon (M1 or newer Macs)
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: uv sync --group build
+
+      - name: Run tests
+        run: uv run pytest -q
+
+      - name: Bundle the app (PyInstaller)
+        run: uv run --group build pyinstaller packaging/race_engineer.spec --noconfirm
+
+      - name: Smoke test the bundle
+        run: dist/RaceEngineer/RaceEngineer --check
+
+      - name: Build the .app and .dmg
+        run: |
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then v="${GITHUB_REF_NAME#v}"; else v="0.0.0-dev"; fi
+          packaging/macos/build_dmg.sh "$v"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: RaceEngineer-mac
+          path: dist/RaceEngineer-*-mac.dmg
+
+      - name: Publish release
+        if: github.ref_type == 'tag'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/RaceEngineer-*-mac.dmg
           body_path: docs/release-notes.md

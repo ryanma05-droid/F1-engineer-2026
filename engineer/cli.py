@@ -33,9 +33,9 @@ def start_voice(cfg: Config, engine) -> AudioProcess:
     backend = audio.start()
     print(f"Voice: {backend or 'not ready'}"
           + (f"  ->  playing on: {audio.device_name}" if backend not in (None, "null") else ""))
-    if backend == "pyttsx3":
-        print("  (Using the Windows voice. For the Piper voice run: "
-              "python -m engineer.radio.setup_voice)")
+    if backend in ("pyttsx3", "say"):
+        print(f"  (Using the {'Windows' if backend == 'pyttsx3' else 'Mac'} voice. For the "
+              f"engineer's voice run setup again, or: python -m engineer.radio.setup_voice)")
     engine.pipeline.bus.subscribe(ev.RadioMessage,
                                   lambda e: audio.say(e.text, e.origin_t_ns))
     return audio

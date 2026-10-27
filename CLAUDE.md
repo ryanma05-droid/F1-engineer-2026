@@ -103,6 +103,10 @@ uv run python -m engineer.ingest.share --pending     # push every recording not 
   telemetry guide; `--setup` re-runs it). When frozen, `config.py` reads the bundled
   `config.yaml` and keeps settings/data in `%LOCALAPPDATA%\RaceEngineer` (`APP_HOME`).
 - Console players (Xbox/PlayStation): telemetry over the LAN to the PC; push-to-talk off.
+- Mac build (same workflow, `mac` job, Apple Silicon): PyInstaller folder wrapped by
+  `packaging/macos/build_dmg.sh` into "Race Engineer.app" (a shell launcher that opens Terminal)
+  and a .dmg; ad-hoc signed only. Always console mode (F1 25 isn't on macOS); data in
+  ~/Library/Application Support/RaceEngineer; fallback voice is the `say` command.
 - The installed app adds each run's recordings to `laps`/`stints` when it closes
   (`features_auto_add`), so the tyre/strategy history grows without a manual build.
 

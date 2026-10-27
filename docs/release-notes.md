@@ -1,4 +1,6 @@
-## Race Engineer for EA SPORTS F1 25 (Windows)
+## Race Engineer for EA SPORTS F1 25
+
+### Windows
 
 1. Download **RaceEngineer-Setup-*.exe** below and run it. If Windows says "Windows protected
    your PC", click **More info**, then **Run anyway** (the app isn't code-signed).
@@ -10,5 +12,14 @@
 
 Your settings and recordings are kept in `%LOCALAPPDATA%\RaceEngineer`.
 
-If something goes wrong, the window stays open with the error, and everything it showed is saved
-in `%LOCALAPPDATA%\RaceEngineer\logs\race-engineer.log`: send that file.
+### Mac (Apple Silicon, for F1 25 on Xbox / PlayStation)
+
+Download **RaceEngineer-*-mac.dmg**, open it and drag Race Engineer into Applications. The first
+open needs System Settings > Privacy & Security > **Open Anyway** (the app isn't signed with a
+paid Apple account); "READ ME FIRST" in the download explains it step by step. Settings and
+recordings are kept in `~/Library/Application Support/RaceEngineer`.
+
+### If something goes wrong
+
+The window stays open with the error, and everything it showed is saved
+in `logs/race-engineer.log` inside the settings folder above: send that file.

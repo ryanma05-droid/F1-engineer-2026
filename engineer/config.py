@@ -17,11 +17,21 @@ from pydantic import BaseModel, Field
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 # Installed app (PyInstaller): the read-only files ship inside the bundle, while settings and data
-# live in the user's own folder (%LOCALAPPDATA%\RaceEngineer), never in the install folder.
+# live in the user's own folder (%LOCALAPPDATA%\RaceEngineer on Windows, ~/Library/Application
+# Support/RaceEngineer on a Mac), never in the install folder.
 FROZEN = bool(getattr(sys, "frozen", False))
 BUNDLE_DIR = Path(getattr(sys, "_MEIPASS", PROJECT_ROOT))
-APP_HOME = (Path(os.environ.get("LOCALAPPDATA") or Path.home()) / "RaceEngineer") if FROZEN \
-    else PROJECT_ROOT
+
+
+def _app_home() -> Path:
+    if not FROZEN:
+        return PROJECT_ROOT
+    if sys.platform == "darwin":                 # macOS: ~/Library/Application Support
+        return Path.home() / "Library" / "Application Support" / "RaceEngineer"
+    return Path(os.environ.get("LOCALAPPDATA") or Path.home()) / "RaceEngineer"
+
+
+APP_HOME = _app_home()
 DEFAULT_CONFIG = BUNDLE_DIR / "config.yaml"
 
 

@@ -26,6 +26,14 @@ Ethernet adapter (for example `192.168.1.23`).
 - The engineer's voice plays on the PC: use its speakers, or earbuds/headphones on the PC.
 - Asking questions (push-to-talk) is only for players on the PC.
 
+## Mac (the engineer for an Xbox / PlayStation)
+
+F1 25 isn't on macOS, so on a Mac use the **Xbox / PlayStation** column above with the **Mac's IP
+address**: the setup window shows it, or see System Settings > Wi-Fi > Details (next to your
+network) > IP address. When macOS asks to allow incoming connections or to find devices on your
+local network, click **Allow**. The first time you open the app, see "READ ME FIRST" in the
+download.
+
 ## Windows Firewall
 
 The first time the Race Engineer runs, Windows asks whether to allow it on the network. Tick
@@ -41,6 +49,8 @@ the IP address, the port (20777), the firewall.
 ## If something goes wrong
 
 Everything the Race Engineer window shows is also saved to
-`%LOCALAPPDATA%\RaceEngineer\logs\race-engineer.log` (the run before is kept as
-`race-engineer.previous.log`). Paste `%LOCALAPPDATA%\RaceEngineer\logs` into the File Explorer
-address bar to find them, and send the file to whoever shared the app with you.
+`%LOCALAPPDATA%\RaceEngineer\logs\race-engineer.log` on Windows, or
+`~/Library/Application Support/RaceEngineer/logs/race-engineer.log` on a Mac (the run before is
+kept as `race-engineer.previous.log`). On Windows, paste `%LOCALAPPDATA%\RaceEngineer\logs` into the File
+Explorer address bar to find them; on a Mac, in Finder press Cmd+Shift+G and paste
+`~/Library/Application Support/RaceEngineer/logs`. Send the file to whoever shared the app.
