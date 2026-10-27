@@ -93,6 +93,21 @@ Tyre temperatures are judged on the carcass (inner) temperature: the surface swi
 within a corner on real data, the carcass moves smoothly. "Hot" or "cold" = outside the window
 (`tyres.temp_window_c`, slicks only) for 60%+ of a sector.
 
+## Modules (Phase 4)
+
+| Module | Role |
+| --- | --- |
+| `engineer/state/traces.py` | `TraceRecorder`: every car's lap in 5 m sections (lap time at each section start, interpolated; speed, throttle, brake, steer, gear). Flashback-aware. `LapTrace`. |
+| `engineer/state/track_maps.py` | `detect_corners()` from clean laps (speed dips of 15+ km/h; kinks ignored); `TrackMaps` loads/saves `data/tracks/<track>.json` (editable; Austria shipped with official turn numbers). |
+| `engineer/tools/queries.py` | `corner_stats()`, `corner_deltas()`: corner time, braking point, minimum speed, full-throttle point, exit speed; `CornerDelta.reason()`. |
+| `engineer/analyzers/corners.py` | `CornerAnalyzer`: one call per lap, biggest corner loss vs the car ahead/behind (within 2 s) or your best lap. |
+
+A corner runs from where braking starts (20 m margin) to 100 m after you're back on full
+throttle, capped at the next corner. Loss causes are checked against thresholds (braking 10 m
+earlier, minimum speed 4 km/h down, full throttle 15 m later, exit 4 km/h down) and the biggest
+relative to its threshold is named. Offline, `features build` also writes `traces.parquet` and
+`corners.parquet`.
+
 ## Data conventions
 
 - Wheel arrays are ordered **RL, RR, FL, FR** everywhere (as in the game).
@@ -126,7 +141,7 @@ Packets that arrive with session UID 0 (menus) are not recorded.
 | 1 | Radio director (priority, expiry, quiet zones, cooldowns, verbosity), Piper TTS audio process, lap delta analyzer. |
 | 2 | Lap feature records, stints, offline feature tables (Parquet/DuckDB). (built) |
 | 3 | Tyre coaching: wear status, laps left, warnings, temperatures, drop-off. (built) |
-| 4 | Distance traces (5 m bins), track maps, corner-by-corner coaching vs nearby cars. |
+| 4 | Distance traces (5 m bins), track maps, corner-by-corner coaching vs nearby cars. (built) |
 | 5 | Strategy simulation (pit timing, compound) in worker processes. |
 | 6 | Push-to-talk: faster-whisper, intents, query tools. |
 

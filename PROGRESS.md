@@ -133,3 +133,43 @@
 - Is 60% the right "limit" for laps left on your setup and difficulty? Easy to change.
 - Real carcass temperature window per compound: needs a longer race (and a wet one for inters/wets,
   which get no temperature calls for now).
+
+## Phase 4 — traces and corner coaching
+
+- [x] Distance traces for all 22 cars in 5 m sections (`engineer/state/traces.py`)
+- [x] Corner detection and track maps (`engineer/state/track_maps.py`, `data/tracks/`)
+- [x] Austria map with official turn numbers: T1 T3 T4 T6 T7 T9 T10, found identically on both
+      Austria recordings
+- [x] Corner comparison queries (`corner_stats`, `corner_deltas`)
+- [x] Corner radio calls (`engineer/analyzers/corners.py`), settings in `config.yaml` `corners:`
+- [x] Feature tables: `traces.parquet`, `corners.parquet`; `python -m engineer.features corners`
+- [x] Bench times the whole engine now: 68 us mean per packet on real data (target 1 ms); the
+      slowest packet (~40 ms) is a lap completion that also learns the corner map, once
+- [x] Tests (129 passing), incl. two new golden corner calls on Austria
+- [ ] Hear it in a real race; check the calls feel right and come at a good moment
+- [ ] Corner maps for other tracks: learned automatically the first time you drive them; rename
+      turns in `data/tracks/<track>.json` if the numbers don't match
+
+### Corner calls
+
+| Call | When |
+| --- | --- |
+| "Turn three, losing two tenths to the car ahead, braking ten metres earlier." | car ahead within 2 s, same lap, both laps clean |
+| "Turn one, losing five tenths to the car behind, ..." | no car ahead within 2 s, car behind within 2 s (waits up to 5 s for its lap) |
+| "Turn four, three tenths off your best, minimum speed eight k p h down." | otherwise, vs your best clean lap |
+| "Turn four again, ..." | same corner called within the last 3 laps |
+| "Gaining a tenth on the car ahead through turn nine." | chatty verbosity only, when nothing lost 0.1 s |
+
+### Verified on real data
+
+- Austria 5-lap, lap 3 vs the car ahead: lost 0.20 s in T7, back on full throttle 75 m later,
+  exit 229 vs 248 km/h. Lap 4: lost 0.15 s in T4 with minimum speed 10 km/h down.
+- 18-lap race: T4 is your most frequent loss vs your best lap (6 of 11 calls). Your median
+  corner times beat the AI's median in every corner; closest in T7 (5.51 vs 5.52 s).
+
+### Decisions
+
+- The cause named is the biggest relative to its threshold (10 km/h down beats braking 10 m early).
+- Corner maps are learned per track and saved, rather than shipped for every track: only Austria
+  has real data so far.
+- Speed is said as "k p h" for the voice.

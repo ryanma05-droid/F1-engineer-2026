@@ -85,7 +85,7 @@ def test_offline_tables_and_priors(tmp_path):
     assert priors.get(10, 18)[3] == pytest.approx(4, abs=0.6)    # FakeRace track 10, C3
     assert priors.get(10, 99) is None
     assert len(WearPriors.load(tmp_path / "nothing")) == 0
-    n_sections, = tables.query(tmp_path / "features",
-                               "select count(*) from traces where car_idx = 0 and lap = 3"
-                               ).fetchone()
+    [(n_sections,)] = tables.query(tmp_path / "features",
+                                   "select count(*) from traces where car_idx = 0 and lap = 3"
+                                   ).fetchall()
     assert n_sections == 1001              # 5000 m lap in 5 m sections (+ the line)

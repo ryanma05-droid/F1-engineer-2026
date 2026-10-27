@@ -21,7 +21,8 @@ Read `docs/architecture.md` (full design) and `PROGRESS.md` (what's done / open 
 ## Phase plan
 
 0 foundation (accepted) · 1 radio director + Piper TTS + lap delta (done; voice works on Windows) ·
-2 features/feature tables (built) · 3 tyre coaching (built; awaiting a real longer race) · 4 traces + corner coaching · 5 strategy sim · 6 push-to-talk.
+2 features/feature tables (done) · 3 tyre coaching (done; checked on an 18-lap race) ·
+4 traces + corner coaching (built) · 5 strategy sim · 6 push-to-talk.
 
 ## Commands
 
@@ -34,7 +35,9 @@ uv run python -m engineer.bench <file.zst>
 uv run python -m engineer.radio.setup_voice --test   # download + hear the Piper voice
 uv run python -m engineer.features build             # recordings -> data/features/*.parquet
 uv run python -m engineer.features tyres             # your wear per lap by track/compound
-uv run python -m engineer.features query "select ..."   # SQL over laps / stints
+uv run python -m engineer.features corners           # your time per corner vs the AI
+uv run python -m engineer.features query "select ..."   # SQL over laps/stints/traces/corners
+uv run python -m engineer.ingest.share               # split the newest recording to send it
 ```
 
 ## Radio rules (Phase 1)
@@ -55,6 +58,14 @@ uv run python -m engineer.features query "select ..."   # SQL over laps / stints
   tests pass `priors=WearPriors()` so they don't depend on the local tables.
 - Tyre settings live in `config.yaml` `tyres:` (limit 60%, laps left from 25%, status every 3 laps).
 
+## Corners (Phase 4)
+
+- Traces come from `TraceRecorder` (wired in `build_engine`); compare laps only through
+  `corner_deltas()` so live calls, tables and push-to-talk agree.
+- `data/tracks/<track>.json` is committed and hand-editable (official turn numbers). Without a
+  file the map is learned from the first 2 clean laps and saved. The golden test uses
+  `data/tracks/austria.json`.
+
 ## Real-data facts (confirmed on tests/fixtures/austria_race_5laps.zst)
 
 - Lap Data spec field order is correct; `m_gridPosition` is zero-based (pole = 0).
@@ -64,6 +75,8 @@ uv run python -m engineer.features query "select ..."   # SQL over laps / stints
 - Tyre wear and tyre damage come as whole percents, and tyre damage equals wear in normal running.
 - Surface temps swing ~55-150 C within a lap; carcass (inner) temps move smoothly (78-96 C, Softs).
 - The recording has a real flashback on lap 3 (to 185.0 s at 194.6 s).
+- Telemetry comes at 60 Hz for all 22 cars, AI speed/throttle/brake included.
+- Austria (4323 m) has 7 braking corners: T1 T3 T4 T6 T7 T9 T10 (T2 T5 T8 are flat).
 - The golden test (`tests/test_golden.py`) replays the fixture; keep it passing.
 
 ## Environment
