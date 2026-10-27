@@ -23,6 +23,7 @@ from engineer.radio.director import RadioDirector
 from engineer.state.track_maps import TrackMaps
 from engineer.state.traces import TraceRecorder
 from engineer.strategy.runner import InlineRunner
+from engineer.voice.answers import QuestionAnswerer
 
 
 @dataclass
@@ -36,6 +37,7 @@ class Engine:
     traces: TraceRecorder
     corners: CornerAnalyzer
     strategy: StrategyAnalyzer
+    answers: QuestionAnswerer | None = None
 
 
 def build_engine(cfg: Config, out: TextIO | None = None,
@@ -76,5 +78,10 @@ def build_engine(cfg: Config, out: TextIO | None = None,
     strategy = StrategyAnalyzer(bus, state, features, director, strategy_runner, cfg.strategy,
                                 cfg.tyres, verbosity=cfg.radio.verbosity)
     pipeline.after_packet.append(strategy.after_packet)
-    return Engine(pipeline, history, director, analyzer, features, tyres, traces, corners,
-                  strategy)
+    engine = Engine(pipeline, history, director, analyzer, features, tyres, traces, corners,
+                    strategy)
+    # Push-to-talk answers: questions arrive as QuestionAsked events (live from the speech
+    # process; in tests published directly), so they're answered the same way everywhere.
+    log_path = cfg.ptt_path / "questions.jsonl" if cfg.voice.log else None
+    engine.answers = QuestionAnswerer(bus, engine, log_path, verbosity=cfg.radio.verbosity)
+    return engine

@@ -77,6 +77,21 @@ strategy:               # pit strategy (Phase 5): the plan, box calls, safety ca
   rejoin_traffic_s: 1.5 # "you'll come out behind X" when within this
   max_wait_s: 20
 
+voice:                  # push-to-talk questions (Phase 6)
+  enabled: true
+  button: LB            # Xbox controller button you hold to talk (LB, RB, A, B, X, Y, ...)
+  controller: null      # null = any connected controller
+  model: medium.en      # speech model: small.en (faster), medium.en, large-v3 (slowest)
+  device: auto          # auto = Nvidia GPU if there is one, else the CPU
+  compute_type: auto
+  beam_size: 3          # 1 = fastest, 5 = most careful
+  input_device: null    # null = the Windows default recording device (same as the game)
+                        # (list them: python -m engineer.voice.setup --mics)
+  min_press_s: 0.25     # shorter taps are ignored
+  max_question_s: 10
+  keep_audio: true      # keep each question's audio in data/ptt/clips/
+  log: true             # log every question to data/ptt/questions.jsonl
+
 # Upload recordings to GitHub automatically when you stop `engineer run` (Ctrl+C).
 # Turn it on in config.local.yaml (your PC only, not shared):  upload: {auto: true}
 upload:

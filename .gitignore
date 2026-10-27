@@ -26,6 +26,8 @@ Thumbs.db
 .idea/
 data/voices/*
 !data/voices/README.md
+data/ptt/*
+!data/ptt/README.md
 
 # Settings for this PC only (see config.yaml)
 config.local.yaml

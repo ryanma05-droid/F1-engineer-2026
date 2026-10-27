@@ -5,6 +5,8 @@
     python -m engineer.ingest.replay <file> --speed 4           # 4x
     python -m engineer.ingest.replay <file> --udp               # resend to 127.0.0.1:20777
     python -m engineer.ingest.replay <file> --voice             # real time, with the radio voice
+    python -m engineer.ingest.replay <file> --questions         # ask the logged push-to-talk
+                                                                # questions again, at the same time
 
 In-process (default), packets go straight into `Pipeline.feed`, exactly as the listener would call
 it, and the lap lines are printed. With --udp, packets are sent over UDP instead, so a separately
@@ -14,6 +16,7 @@ running `python -m engineer run` (or SimHub) receives them as if the game were s
 from __future__ import annotations
 
 import argparse
+import json
 import logging
 import socket
 import sys
@@ -22,6 +25,7 @@ from pathlib import Path
 from typing import Iterable
 
 from engineer.app import Engine, build_engine
+from engineer.bus import events as ev
 from engineer.config import Config, load_config
 from engineer.ingest.recorder import read_recording
 
@@ -45,13 +49,43 @@ def paced(records: Iterable[tuple[int, bytes]], speed: float | None
         yield t_ns, raw
 
 
+def load_questions(log_path: Path) -> list[dict]:
+    """Push-to-talk questions from data/ptt/questions.jsonl (follow-up lines skipped)."""
+    if not log_path.exists():
+        return []
+    out = []
+    for line in log_path.read_text(encoding="utf-8").splitlines():
+        try:
+            q = json.loads(line)
+        except ValueError:
+            continue
+        if q.get("heard") and q.get("session_uid") and q.get("session_time") is not None:
+            out.append(q)
+    return out
+
+
 def replay(path: Path | str, speed: float | None = None, out=None,
-           cfg: Config | None = None, engine: Engine | None = None) -> Engine:
-    """Replay in-process through the same engine as live. Returns the engine for inspection."""
+           cfg: Config | None = None, engine: Engine | None = None,
+           questions: list[dict] | None = None) -> Engine:
+    """Replay in-process through the same engine as live. Returns the engine for inspection.
+
+    questions: logged push-to-talk questions; each is asked again when the replay reaches the
+    session time it was asked at (only those from this recording's session)."""
     engine = engine or build_engine(cfg or load_config(), out=out)
     feed = engine.pipeline.feed
+    state, bus = engine.pipeline.state, engine.pipeline.bus
+    todo = sorted(questions or [], key=lambda q: q["session_time"])
     for t_ns, raw in paced(read_recording(path), speed):
         feed(raw, t_ns)
+        while todo and state.session_uid is not None:
+            uid = f"{state.session_uid:016x}"
+            mine = [q for q in todo if q["session_uid"] == uid]
+            if not mine or (state.session_time or 0) < mine[0]["session_time"]:
+                break
+            q = mine[0]
+            todo.remove(q)
+            bus.publish(ev.QuestionAsked(state.session_uid, state.session_time or 0.0,
+                                         text=q["heard"], audio_path=q.get("audio")))
     return engine
 
 
@@ -90,6 +124,8 @@ def main(argv: list[str] | None = None) -> int:
                     help="speak the radio calls (use with --speed 1 to hear them in real time)")
     ap.add_argument("--verbosity", choices=["terse", "normal", "chatty"],
                     help="override radio.verbosity from config.yaml")
+    ap.add_argument("--questions", action="store_true",
+                    help="ask the push-to-talk questions logged for this session again")
     args = ap.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
 
@@ -107,6 +143,10 @@ def main(argv: list[str] | None = None) -> int:
             cfg = load_config()
             if args.verbosity:
                 cfg.radio.verbosity = args.verbosity
+            questions = None
+            if args.questions:
+                questions = load_questions(cfg.ptt_path / "questions.jsonl")
+                cfg.voice.log = False            # don't log the replayed questions twice
             engine = build_engine(cfg)
             audio = None
             if args.voice:
@@ -115,7 +155,7 @@ def main(argv: list[str] | None = None) -> int:
                     log.warning("--voice with --speed max: calls will pile up; use --speed 1")
                 audio = start_voice(cfg, engine)
             try:
-                p = replay(args.file, args.speed, engine=engine).pipeline
+                p = replay(args.file, args.speed, engine=engine, questions=questions).pipeline
             finally:
                 if audio:
                     audio.close(timeout_s=30)

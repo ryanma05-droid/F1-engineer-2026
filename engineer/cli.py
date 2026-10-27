@@ -6,6 +6,7 @@ import argparse
 import asyncio
 import logging
 import sys
+import time
 from datetime import datetime
 from pathlib import Path
 
@@ -40,7 +41,53 @@ def start_voice(cfg: Config, engine) -> AudioProcess:
     return audio
 
 
-async def _run(cfg: Config, record: bool | None, voice: bool) -> None:
+def start_ptt(cfg: Config, engine):
+    """Start push-to-talk: the speech process and the controller button. None if unavailable."""
+    from engineer.voice.controller import PushToTalk, XInputButton
+    from engineer.voice.speech import SpeechProcess, SpeechSettings
+
+    button = XInputButton(cfg.voice.button, cfg.voice.controller)
+    if not button.available:
+        print("Push-to-talk: no XInput (Windows only); questions are off.")
+        return None
+    v = cfg.voice
+    speech = SpeechProcess(SpeechSettings(
+        model=v.model, device=v.device, compute_type=v.compute_type,
+        input_device=v.input_device, models_dir=str(cfg.ptt_path / "models"),
+        clips_dir=str(cfg.ptt_path / "clips") if v.keep_audio else None, beam_size=v.beam_size))
+    print(f"Loading speech recognition ({v.model})... the first time downloads the model.",
+          flush=True)
+    if not speech.start():
+        print(f"Push-to-talk off: {speech.error}")
+        speech.close()
+        return None
+    pads = button.connected()
+    print(f"Push-to-talk: hold {v.button} and ask. {speech.description}. "
+          f"Controllers connected: {len(pads) or 'none yet'}.")
+    ptt = PushToTalk(button, speech.press, speech.release, speech.cancel,
+                     min_press_s=v.min_press_s, max_s=v.max_question_s)
+    return ptt, speech
+
+
+async def _ptt_loop(engine, ptt, speech) -> None:
+    """Poll the button every 20 ms and pass what was heard to the engine as a question."""
+    state, bus = engine.pipeline.state, engine.pipeline.bus
+    while True:
+        ptt.poll(time.monotonic())
+        for msg in speech.poll():
+            if msg[0] == "heard":
+                _, _qid, text, wav, stt_ms = msg
+                print(f"YOU      {text or '(nothing heard)'}  ({stt_ms:.0f} ms)", flush=True)
+                if text:
+                    bus.publish(ev.QuestionAsked(state.session_uid or 0,
+                                                 state.session_time or 0.0, text=text,
+                                                 audio_path=wav, stt_ms=stt_ms))
+            elif msg[0] == "error":
+                log.warning("push-to-talk: %s", msg[1])
+        await asyncio.sleep(0.02)
+
+
+async def _run(cfg: Config, record: bool | None, voice: bool, ptt_on: bool = True) -> None:
     if record is not None:
         cfg.record = record
 
@@ -51,6 +98,8 @@ async def _run(cfg: Config, record: bool | None, voice: bool) -> None:
     audio = start_voice(cfg, engine) if voice else None
     if audio:
         audio.say("Radio check.")
+    ptt = start_ptt(cfg, engine) if ptt_on and cfg.voice.enabled else None
+    ptt_task = asyncio.create_task(_ptt_loop(engine, *ptt)) if ptt else None
     listener = UdpListener(cfg.listen.host, cfg.listen.port,
                            forward=[(t.host, t.port) for t in cfg.forward])
     recorder = Recorder(cfg.sessions_path) if cfg.record else None
@@ -74,6 +123,9 @@ async def _run(cfg: Config, record: bool | None, voice: bool) -> None:
             last = listener.packets_received
     finally:
         listener.close()
+        if ptt_task:
+            ptt_task.cancel()
+            ptt[1].close()
         if recorder:
             recorder.close()
         if audio:
@@ -113,6 +165,7 @@ def main(argv: list[str] | None = None) -> int:
     run.add_argument("--no-record", dest="record", action="store_false", default=None,
                      help="don't record this session")
     run.add_argument("--no-voice", action="store_true", help="print radio calls, don't speak")
+    run.add_argument("--no-ptt", action="store_true", help="no push-to-talk questions")
     run.add_argument("--verbosity", choices=["terse", "normal", "chatty"],
                      help="override radio.verbosity from config.yaml")
     sub.add_parser("sessions", help="list recorded sessions")
@@ -127,7 +180,7 @@ def main(argv: list[str] | None = None) -> int:
             cfg.radio.verbosity = args.verbosity
         voice = cfg.radio.enabled and not args.no_voice
         try:
-            asyncio.run(_run(cfg, args.record, voice))
+            asyncio.run(_run(cfg, args.record, voice, ptt_on=not args.no_ptt))
         except KeyboardInterrupt:
             pass
         except OSError as exc:

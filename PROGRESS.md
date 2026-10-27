@@ -244,3 +244,43 @@
 
 - Real green-flag pit loss per track: measured automatically from the first race with a stop (yours
   or the AI's) that isn't under the safety car.
+
+## Phase 6 — push-to-talk
+
+- [x] LB on the Xbox controller (XInput, read-only, works alongside the game)
+- [x] Speech process: Windows default microphone, faster-whisper `medium.en` (GPU if you have an
+      Nvidia card, else CPU), in its own process; each question's audio kept in `data/ptt/clips/`
+- [x] Questions understood by keyword rules (`engineer/voice/intents.py`); answers from the same
+      numbers the engineer's own calls use
+- [x] Quiet mode ("Quiet" / "Talk to me"): only box calls, safety car calls and answers
+- [x] "What if I box now?" runs the strategy simulator with the stop forced on this lap
+- [x] Question log `data/ptt/questions.jsonl`, uploaded with each recording; unknown questions are
+      the list of phrasings to add
+- [x] `replay --questions` asks the logged questions again at the same moment
+- [x] `python -m engineer.voice.setup`: downloads the model, lists mics, live LB test
+- [x] Tests (194 passing); speech recognition itself is not tested here (the model can't be
+      downloaded in the cloud container): check it with `voice.setup` on Windows
+- [ ] First run on Windows: model download, LB, mic, recognition speed with medium.en
+- [ ] Add phrasings from the question log as they come up
+
+### What you can ask
+
+| You say (examples) | Answer |
+| --- | --- |
+| "Radio check" | "Loud and clear." |
+| "How are the tyres?" | "Tyres: front right worst at thirty two percent, about four percent a lap, about seven laps left on these." |
+| "What's the plan?" / "When do I box?" | "Plan is one stop, box lap fourteen to sixteen for hards. ..." |
+| "What if I box now?" / "Should I pit?" | "Box now costs about three seconds over the plan, hards. You'll come out behind Sainz, ..." |
+| "Gap ahead?" / "Gap behind?" | "Norris ahead, one point two seconds." |
+| "How was that lap?" | lap time and delta |
+| "Where am I losing time?" | "Turn four, three tenths off your best, exit speed eight k p h down." |
+| "Fuel?" | "Fuel is fine, plus zero point four laps." |
+| "Position?" / "How many laps left?" | "P three, eight laps to go." |
+| "Quiet" / "Talk to me" | quiet mode on / off |
+| anything else | "Say again." (and logged) |
+
+### Decisions
+
+- Keyword rules, not a chatbot: instant, offline, predictable; grown from the question log.
+- Answers are said straight away (no waiting for a straight): you chose the moment by pressing.
+- The game also sees LB: unbind LB in the F1 25 controls if it does something there.

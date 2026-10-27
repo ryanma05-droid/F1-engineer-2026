@@ -22,7 +22,7 @@ Read `docs/architecture.md` (full design) and `PROGRESS.md` (what's done / open 
 
 0 foundation (accepted) · 1 radio director + Piper TTS + lap delta (done; voice works on Windows) ·
 2 features/feature tables (done) · 3 tyre coaching (done; checked on an 18-lap race) ·
-4 traces + corner coaching (built) · 5 strategy sim (built) · 6 push-to-talk.
+4 traces + corner coaching (built) · 5 strategy sim (built) · 6 push-to-talk (built).
 
 ## Commands
 
@@ -38,6 +38,8 @@ uv run python -m engineer.features tyres             # your wear per lap by trac
 uv run python -m engineer.features corners           # your time per corner vs the AI
 uv run python -m engineer.features strategy austria     # what the strategy model has learned
 uv run python -m engineer.features query "select ..."   # SQL over laps/stints/traces/corners
+uv run python -m engineer.voice.setup                # download the speech model, test LB + mic
+uv run python -m engineer.ingest.replay <file.zst> --questions   # replay with the logged questions
 uv run python -m engineer.ingest.share --upload      # push the newest recording to its own branch
 uv run python -m engineer.ingest.share --pending     # push every recording not uploaded yet
 ```
@@ -78,6 +80,18 @@ uv run python -m engineer.ingest.share --pending     # push every recording not 
   `build_engine` defaults to `InlineRunner` so replays and tests stay deterministic.
 - AI lap times are not used for deg (they barely slow with wear on real data); AI wear rates are
   used, scaled by your wear ratio vs the AI.
+
+## Push-to-talk (Phase 6)
+
+- Hold LB (XInput, shared with the game) -> speech process (faster-whisper, own process, default
+  Windows mic) -> `QuestionAsked` event -> `QuestionAnswerer` (wired in `build_engine`, so tests
+  and replays answer the same way) -> director topic "answer" (HIGH, said even in quiet mode).
+- Answers come from the same query functions/analyzer state as the proactive calls.
+- Intents are keyword rules in `engineer/voice/intents.py`. Every question is logged to
+  `data/ptt/questions.jsonl`; "unknown" entries are the phrasings to add next. Logs for a session
+  travel with its recording upload (`<recording>.questions.jsonl`).
+- `replay --questions` re-asks logged questions at their session time (record everything, replay
+  anything).
 
 ## Settings and uploads
 

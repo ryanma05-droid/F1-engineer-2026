@@ -149,10 +149,16 @@ class QuietZones:
         return self.busy_now(state) or self.busy_ahead(state, speech_s)
 
 
+# Said even in quiet mode ("Quiet" on push-to-talk): box calls, safety car calls, and answers to
+# your own questions.
+QUIET_TOPICS = {"box", "safety_car", "answer"}
+
+
 class RadioDirector:
     def __init__(self, bus: ev.EventBus, state: RaceState,
                  cooldowns_s: dict[str, float] | None = None):
         self.bus = bus
+        self.quiet = False
         self.state = state
         self.cooldowns_s = cooldowns_s or {}
         self.zones = QuietZones()
@@ -165,6 +171,9 @@ class RadioDirector:
     # -- inputs --------------------------------------------------------------------------------
 
     def submit(self, call: RadioCall) -> None:
+        if self.quiet and call.topic not in QUIET_TOPICS:
+            self._drop(call, "quiet")
+            return
         t = self._now()
         cooldown = self.cooldowns_s.get(call.topic, 0.0)
         last = self.last_said.get(call.topic)

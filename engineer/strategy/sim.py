@@ -71,6 +71,7 @@ class RaceSituation:
     window_s: float = 1.0
     over_limit_s_per_pct: float = 1.0
     min_gain_s: float = 3.0      # an extra stop must save at least this much to be the plan
+    first_stop_lap: int | None = None   # "what if I box now?": force the first stop on this lap
 
 
 @dataclass
@@ -167,7 +168,15 @@ def simulate(sit: RaceSituation, model: StrategyModel) -> SimResult:
             return V[key]
 
         zero = (0,) * len(comps)
-        root_v, root_arg = best_from(cur, G(zero)[0])
+        g0 = G(zero)[0]
+        if sit.first_stop_lap is not None:
+            # Only the forced lap may end the first stint (no stop at all isn't allowed either).
+            keep = np.full(R + 1, math.inf)
+            q = sit.first_stop_lap - sit.lap_done
+            if 1 <= q < R:
+                keep[q] = 0.0
+            g0 = g0 + keep
+        root_v, root_arg = best_from(cur, g0)
         total = root_v[0]
         if not math.isfinite(total):
             return None
@@ -202,6 +211,8 @@ def simulate(sit: RaceSituation, model: StrategyModel) -> SimResult:
         return SimResult(None)
     # Fewer stops wins unless more stops save at least min_gain_s: a stop that gains a second on
     # paper isn't worth the risk (traffic, a slow stop, the model being a bit off).
+    if sit.first_stop_lap is not None:          # a what-if: simply the cheapest way to do it
+        return SimResult(min(by_stops.values(), key=lambda p: p.cost_s), by_stops)
     fastest = min(by_stops.values(), key=lambda p: p.cost_s)
     best = min((p for p in by_stops.values() if p.cost_s <= fastest.cost_s + sit.min_gain_s),
                key=lambda p: (p.n_stops, p.cost_s))

@@ -38,7 +38,8 @@ class StrategyRequest:
     game: GameTyreInfo | None
     situation: RaceSituation
     settings: ModelSettings
-    sc_compare: bool = False             # also solve without the cheap SC stop (for "box now?")
+    sc_compare: bool = False             # also solve without the cheap SC stop
+    what_if_box_lap: int | None = None   # also solve with the first stop forced on this lap
 
 
 @dataclass
@@ -50,6 +51,7 @@ class StrategyResult:
     sim: SimResult
     green: SimResult | None = None       # sc_compare: the same race without the SC discount
     sc_laps: tuple[int, ...] = ()        # laps where a stop was costed as a safety car stop
+    what_if: SimResult | None = None     # what_if_box_lap: the best plan stopping on that lap
     error: str | None = None
 
 
@@ -82,8 +84,10 @@ def solve(req: StrategyRequest, history: list[dict]) -> StrategyResult:
         sim = simulate(sit, model)
         green = simulate(replace(sit, sc_laps=(), sc_pit_loss_s=None), model) \
             if req.sc_compare else None
+        what_if = simulate(replace(sit, first_stop_lap=req.what_if_box_lap), model) \
+            if req.what_if_box_lap is not None else None
         return StrategyResult(req.seq, req.reason, sit.lap_done, model, sim, green,
-                              sc_laps=sit.sc_laps)
+                              sc_laps=sit.sc_laps, what_if=what_if)
     except Exception as exc:
         log.exception("strategy solve failed")
         return StrategyResult(req.seq, req.reason, req.situation.lap_done, None, SimResult(None),

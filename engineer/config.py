@@ -82,6 +82,21 @@ class Strategy(BaseModel):
     max_wait_s: float = Field(default=20.0, gt=0)
 
 
+class Voice(BaseModel):
+    enabled: bool = True             # push-to-talk questions
+    button: str = "LB"               # Xbox controller button (XInput name: LB, RB, A, B, X, Y, ...)
+    controller: int | None = None    # None = any connected controller
+    model: str = "medium.en"         # faster-whisper model: small.en, medium.en, large-v3, ...
+    device: Literal["auto", "cuda", "cpu"] = "auto"
+    compute_type: str = "auto"
+    beam_size: int = Field(default=3, ge=1, le=10)
+    input_device: str | int | None = None   # None = Windows default recording device
+    min_press_s: float = Field(default=0.25, ge=0)   # shorter taps are ignored
+    max_question_s: float = Field(default=10.0, gt=0)
+    keep_audio: bool = True          # save each question to data/ptt/clips/
+    log: bool = True                 # log every question to data/ptt/questions.jsonl
+
+
 class Upload(BaseModel):
     auto: bool = False          # push new recordings to GitHub when `engineer run` stops
     remote: str = "origin"
@@ -97,6 +112,7 @@ class Config(BaseModel):
     tyres: Tyres = Tyres()
     corners: Corners = Corners()
     strategy: Strategy = Strategy()
+    voice: Voice = Voice()
     upload: Upload = Upload()
 
     @property
@@ -115,6 +131,11 @@ class Config(BaseModel):
     @property
     def tracks_path(self) -> Path:
         return self.data_path / "tracks"
+
+    @property
+    def ptt_path(self) -> Path:
+        """Push-to-talk: question log, saved clips, speech model."""
+        return self.data_path / "ptt"
 
     @property
     def voices_path(self) -> Path:

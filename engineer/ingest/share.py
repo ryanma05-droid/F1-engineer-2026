@@ -10,7 +10,8 @@ and push each recording to its own branch.
 How the upload works: the parts go into a commit of their own (just data/share/<parts>, no code)
 which is pushed straight to the branch `recording-<time>`. Nothing in your folder changes: no
 branch switching, no staged files, your own edits are untouched. Uploaded recordings are listed in
-data/share/uploaded.txt so they're never sent twice.
+data/share/uploaded.txt so they're never sent twice. Push-to-talk questions asked during the
+recording go along as <recording>.questions.jsonl (from data/ptt/questions.jsonl).
 
 With `upload: {auto: true}` in config.local.yaml, `engineer run` does `--pending` for the
 recordings of that run when you stop it.
@@ -19,6 +20,7 @@ recordings of that run when you stop it.
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import subprocess
 import sys
@@ -94,12 +96,38 @@ def _commit_env(repo: Path) -> dict:
     return env
 
 
+def session_questions(path: Path, questions_log: Path | None) -> Path | None:
+    """The push-to-talk questions asked during this recording (its session UID is in the file
+    name), written next to the parts as <recording>.questions.jsonl; None if there are none."""
+    if questions_log is None or not questions_log.exists():
+        return None
+    uid = path.stem.split("_")[-1].lower()
+    lines = []
+    for line in questions_log.read_text(encoding="utf-8").splitlines():
+        try:
+            if json.loads(line).get("session_uid", "").lower() == uid:
+                lines.append(line)
+        except ValueError:
+            continue
+    if not lines:
+        return None
+    out = path.parent / f"{path.name}.questions.jsonl"
+    out.write_bytes(("\n".join(lines) + "\n").encode("utf-8"))
+    return out
+
+
 def upload(path: Path, share_dir: Path, remote: str = "origin", repo: Path = PROJECT_ROOT,
-           progress=print) -> str:
-    """Push one recording to its own branch. Returns the branch name."""
+           progress=print, questions_log: Path | None = None) -> str:
+    """Push one recording (plus the push-to-talk questions asked during it) to its own branch.
+    Returns the branch name."""
     branch = branch_name(path)
     progress(f"Uploading {path.name} ({path.stat().st_size / 1e6:.0f} MB) to branch {branch}...")
     parts = split(path, share_dir)
+    q = session_questions(path, questions_log)
+    if q is not None:
+        moved = share_dir / q.name
+        q.replace(moved)
+        parts.append(moved)
     try:
         blobs = [(p.name, _git(["hash-object", "-w", str(p)], repo)) for p in parts]
         share_tree = _git(["mktree"], repo,
@@ -138,7 +166,8 @@ def upload_pending(cfg: Config, paths: list[Path] | None = None, progress=print)
     branches = []
     for p in todo:
         try:
-            branches.append(upload(p, share_dir, cfg.upload.remote, progress=progress))
+            branches.append(upload(p, share_dir, cfg.upload.remote, progress=progress,
+                                   questions_log=cfg.ptt_path / "questions.jsonl"))
         except UploadError as exc:
             progress(f"Upload of {p.name} failed: {exc}")
     return branches
@@ -172,7 +201,8 @@ def main(argv: list[str] | None = None) -> int:
         path = recordings[-1]
     if args.upload:
         try:
-            upload(path, cfg.data_path / "share", cfg.upload.remote)
+            upload(path, cfg.data_path / "share", cfg.upload.remote,
+                   questions_log=cfg.ptt_path / "questions.jsonl")
         except UploadError as exc:
             print(f"Upload failed: {exc}")
             return 1

@@ -313,3 +313,60 @@ def undercut_phrase(name: str | None) -> str:
     """'Norris behind has pitted, watch the undercut.'"""
     who = f"{name} behind" if name else "the car behind"
     return _sentence(f"{who} has pitted, watch the undercut")
+
+
+# -- push-to-talk answers (Phase 6) ------------------------------------------------------------
+
+def say_position(pos: int) -> str:
+    return f"P {number_words(pos)}"
+
+
+def gap_answer_phrase(direction: str, name: str | None, gap_ms: float | None) -> str:
+    """direction 'ahead' or 'behind'. 'Norris ahead, one point two seconds.'
+    'Nobody ahead, you're leading.' / 'Nobody behind.'"""
+    if gap_ms is None:
+        return _sentence("you're leading") if direction == "ahead" else _sentence("nobody behind")
+    who = name or f"the car {direction}"
+    return _sentence(f"{who} {direction}", say_gap(int(gap_ms)))
+
+
+def fuel_phrase(laps_margin: float) -> str:
+    """m_fuelRemainingLaps: laps of fuel beyond the finish (the MFD number).
+    'Fuel is fine, plus zero point four laps.' / 'Fuel is tight, minus zero point three laps,
+    lift and coast.'"""
+    tenths = int(round(abs(laps_margin) * 10))
+    whole, t = divmod(tenths, 10)
+    amount = (f"{number_words(whole)} point {number_words(t)}" if whole < 100 else "lots of")
+    if laps_margin >= 0:
+        return _sentence("fuel is fine", f"plus {amount} laps")
+    return _sentence("fuel is tight", f"minus {amount} laps", "lift and coast")
+
+
+def position_phrase(pos: int, laps_to_go: int | None) -> str:
+    """'P three, eight laps to go.' / 'P one, last lap.'"""
+    if laps_to_go is None:
+        return _sentence(say_position(pos))
+    if laps_to_go <= 1:
+        return _sentence(say_position(pos), "last lap")
+    return _sentence(say_position(pos), f"{number_words(min(laps_to_go, 99))} laps to go")
+
+
+def laps_left_phrase(laps_to_go: int) -> str:
+    if laps_to_go <= 1:
+        return _sentence("last lap")
+    return _sentence(f"{number_words(min(laps_to_go, 99))} laps to go")
+
+
+def box_now_phrase(what_if, plan, rejoin=None) -> str:
+    """what_if / plan: strategy.sim.Plan. 'Box now: costs about three seconds over the plan.
+    You'll come out behind Sainz, about a second back.' / 'Box now is the plan. ...'"""
+    diff_ms = int(round((what_if.cost_s - plan.cost_s) * 1000))
+    if plan.next_stop is not None and what_if.next_stop is not None \
+            and plan.next_stop.lap == what_if.next_stop.lap:
+        head = "box now is the plan"
+    elif diff_ms < 500:
+        head = "box now, it's about the same as the plan"
+    else:
+        head = f"box now costs about {say_gap(diff_ms)} over the plan"
+    tyre = f"{say_compound(what_if.next_stop.compound)}" if what_if.next_stop else ""
+    return " ".join(x for x in (_sentence(head, tyre), rejoin_phrase(rejoin)) if x)

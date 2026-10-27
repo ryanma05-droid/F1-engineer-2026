@@ -120,4 +120,14 @@ class RadioDropped(Event):
     """A call expired before a good moment to say it came up."""
     topic: str
     text: str
-    reason: str                  # "expired" or "cooldown"
+    reason: str                  # "expired", "cooldown" or "quiet"
+
+
+# -- push-to-talk (Phase 6) --------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class QuestionAsked(Event):
+    """The driver asked something on push-to-talk; `text` is what speech recognition heard."""
+    text: str
+    audio_path: str | None = None    # the recorded question (data/ptt/clips/), if kept
+    stt_ms: float | None = None      # how long speech recognition took

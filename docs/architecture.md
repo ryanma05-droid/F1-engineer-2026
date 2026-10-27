@@ -121,6 +121,19 @@ Inputs are lap rows with the columns of `laps.parquet`: the history table plus t
 `LapFeatures.to_row()`, so live and offline share one code path. Base pace and fuel are equal for
 every plan and drop out of the comparison.
 
+## Modules (Phase 6)
+
+| Module | Role |
+| --- | --- |
+| `engineer/voice/controller.py` | `XInputButton` (Xbox controller via ctypes XInput, read-only, shared with the game); `PushToTalk` turns polls into press / release / cancel (taps < 0.25 s ignored, 10 s cap). |
+| `engineer/voice/speech.py` | `SpeechProcess`: worker process with the microphone stream (default Windows input, 0.3 s pre-roll) and faster-whisper (`medium.en`, GPU if available, else CPU int8); saves each clip. |
+| `engineer/voice/intents.py` | `match(text)`: ordered keyword rules -> intent (radio_check, quiet, talk, box_now, plan, tyres, gap_ahead/behind, losing_time, lap, fuel, laps_left, position, unknown). |
+| `engineer/voice/answers.py` | `QuestionAnswerer`: answers each `QuestionAsked` from tyre/strategy/corner/lap-delta state; "box now?" asks the strategy runner for a forced-stop what-if; logs every question. |
+| `engineer/radio/director.py` | Quiet mode: only `box`, `safety_car` and `answer` topics are said. |
+
+Live: the CLI polls the button every 20 ms in an asyncio task and publishes `QuestionAsked` when
+the speech process returns text. Replays can re-ask logged questions (`replay --questions`).
+
 ## Data conventions
 
 - Wheel arrays are ordered **RL, RR, FL, FR** everywhere (as in the game).
@@ -156,6 +169,6 @@ Packets that arrive with session UID 0 (menus) are not recorded.
 | 3 | Tyre coaching: wear status, laps left, warnings, temperatures, drop-off. (built) |
 | 4 | Distance traces (5 m bins), track maps, corner-by-corner coaching vs nearby cars. (built) |
 | 5 | Strategy simulation (pit timing, compound) in worker processes. (built) |
-| 6 | Push-to-talk: faster-whisper, intents, query tools. |
+| 6 | Push-to-talk: faster-whisper, intents, query tools. (built) |
 
 (Phases 2–6 ordering is indicative; the kickoff prompt fixes only Phase 0 and Phase 1.)

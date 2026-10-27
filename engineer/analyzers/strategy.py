@@ -67,6 +67,7 @@ class StrategyAnalyzer:
         self.tyres = tyres or Tyres()
         self.verbosity = verbosity
         self._rows: dict[int, tuple[LapFeatures, dict]] = {}
+        self._callbacks: dict[int, object] = {}     # request seq -> push-to-talk answer
         self._seq = 0
         self._reset()
         bus.subscribe(ev.LapCompleted, self.on_lap)
@@ -145,8 +146,27 @@ class StrategyAnalyzer:
                 sets.setdefault(c, []).append(float(s["m_wear"]))
         return sets, info
 
+    def ask_box_now(self, callback) -> bool:
+        """Push-to-talk "what if I box now?": callback(result) gets the best plan stopping at the
+        end of this lap (result.what_if) next to the current plan (result.sim). False if there's
+        no strategy in this race."""
+        s, c, p = self.state, self.state.cars, self.state.player_index
+        if not self._active() or np.isnan(c.lap[p]) or c.pit_status[p] > 0:
+            return False
+        lap = int(c.lap[p])
+        length = s.session.track_length_m or 0
+        late = length and not np.isnan(c.lap_distance_m[p]) \
+            and c.lap_distance_m[p] > SC_LATE_IN_LAP * length
+        box_lap = lap + 1 if late else lap
+        if box_lap >= (s.session.total_laps or 0):
+            return False
+        sc = (box_lap,) if s.session.safety_car_status in (1, 2) else ()
+        self._submit("box_now", lap - 1, sc_laps=sc, what_if_box_lap=box_lap, callback=callback)
+        return True
+
     def _submit(self, reason: str, lap_done: int, sc_laps: tuple[int, ...] = (),
-                sc_compare: bool = False) -> None:
+                sc_compare: bool = False, what_if_box_lap: int | None = None,
+                callback=None) -> None:
         s, c, p = self.state, self.state.cars, self.state.player_index
         mine = self.features.for_car(p)
         stint = self.features.current_stint(p)
@@ -174,7 +194,9 @@ class StrategyAnalyzer:
                 game_prior_laps=self.cfg.game_prior_laps, game_deg_sd=self.cfg.game_deg_sd,
                 fallback_deg_s_per_pct=self.cfg.fallback_deg_s_per_pct,
                 pit_loss_s=self.cfg.pit_loss_s, sc_pit_loss_factor=self.cfg.sc_pit_loss_factor),
-            sc_compare=sc_compare)
+            sc_compare=sc_compare, what_if_box_lap=what_if_box_lap)
+        if callback is not None:
+            self._callbacks[self._seq] = callback
         self.runner.submit(req)
         self._drain()
 
@@ -218,6 +240,10 @@ class StrategyAnalyzer:
 
     def _drain(self) -> None:
         for res in self.runner.poll():
+            callback = self._callbacks.pop(res.seq, None)
+            if callback is not None:             # a question: answer it, the plan is untouched
+                callback(None if res.error else res)
+                continue
             if res.seq <= self.applied_seq or res.error or res.sim.best is None:
                 continue
             self.applied_seq = res.seq
@@ -361,7 +387,7 @@ class StrategyAnalyzer:
                 verbosity=self.verbosity), Priority.HIGH, wait_for_straight=False)
             return
         if green is not None and green.n_stops > 0 and self.box_lap is None:
-            self._say("strategy_plan", phrases.safety_car_stay_phrase(kind), Priority.NORMAL,
+            self._say("safety_car", phrases.safety_car_stay_phrase(kind), Priority.NORMAL,
                       wait_for_straight=False)
 
     # -- undercut --------------------------------------------------------------------------------
