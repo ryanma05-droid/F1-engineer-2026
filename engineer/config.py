@@ -6,6 +6,8 @@ instead of deep inside the listener.
 
 from __future__ import annotations
 
+import os
+import sys
 from pathlib import Path
 
 import yaml
@@ -14,7 +16,13 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-DEFAULT_CONFIG = PROJECT_ROOT / "config.yaml"
+# Installed app (PyInstaller): the read-only files ship inside the bundle, while settings and data
+# live in the user's own folder (%LOCALAPPDATA%\RaceEngineer), never in the install folder.
+FROZEN = bool(getattr(sys, "frozen", False))
+BUNDLE_DIR = Path(getattr(sys, "_MEIPASS", PROJECT_ROOT))
+APP_HOME = (Path(os.environ.get("LOCALAPPDATA") or Path.home()) / "RaceEngineer") if FROZEN \
+    else PROJECT_ROOT
+DEFAULT_CONFIG = BUNDLE_DIR / "config.yaml"
 
 
 class Endpoint(BaseModel):
@@ -104,10 +112,14 @@ class Upload(BaseModel):
 
 
 class Config(BaseModel):
+    platform: Literal["pc", "console"] = "pc"   # where F1 25 runs (console: telemetry over Wi-Fi)
     listen: Endpoint = Endpoint(host="0.0.0.0", port=20777)
     forward: list[Endpoint] = []
     data_dir: Path = Path("data")
     record: bool = True
+    # Add each run's recordings to data/features/ when `engineer run` stops (the installed app;
+    # in the repo you run `python -m engineer.features build` yourself).
+    features_auto_add: bool = FROZEN
     radio: Radio = Radio()
     tyres: Tyres = Tyres()
     corners: Corners = Corners()
@@ -118,7 +130,7 @@ class Config(BaseModel):
     @property
     def data_path(self) -> Path:
         """data_dir resolved against the project folder when it is relative."""
-        return self.data_dir if self.data_dir.is_absolute() else PROJECT_ROOT / self.data_dir
+        return self.data_dir if self.data_dir.is_absolute() else APP_HOME / self.data_dir
 
     @property
     def sessions_path(self) -> Path:
@@ -153,12 +165,15 @@ def load_config(path: Path | str | None = None) -> Config:
     """config.yaml, then config.local.yaml next to it (if present) on top.
 
     config.local.yaml holds settings for this PC only (e.g. auto-upload, the audio device). git
-    ignores it, so `git pull` never clashes with it."""
+    ignores it, so `git pull` never clashes with it. In the installed app it's
+    %LOCALAPPDATA%\\RaceEngineer\\config.local.yaml."""
     path = Path(path) if path else DEFAULT_CONFIG
     raw = {}
     if path.exists():
         raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-    local = path.with_name("config.local.yaml")
+    # The installed app keeps its local settings in the user's folder (written by first-run setup).
+    local = APP_HOME / "config.local.yaml" if FROZEN and path == DEFAULT_CONFIG \
+        else path.with_name("config.local.yaml")
     if local.exists():
         raw = _merge(raw, yaml.safe_load(local.read_text(encoding="utf-8")) or {})
     return Config.model_validate(raw)

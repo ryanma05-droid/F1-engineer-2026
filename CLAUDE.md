@@ -93,6 +93,19 @@ uv run python -m engineer.ingest.share --pending     # push every recording not 
 - `replay --questions` re-asks logged questions at their session time (record everything, replay
   anything).
 
+## The installed app (for friends)
+
+- `packaging/race_engineer.spec` (PyInstaller, one folder) + `packaging/installer.iss` (Inno
+  Setup, per-user, no admin) -> `RaceEngineer-Setup-<version>.exe`, built by
+  `.github/workflows/release.yml` on Windows: a `v*` tag publishes it on GitHub Releases;
+  "Run workflow" builds a test artifact. The build runs the tests and `RaceEngineer.exe --check`.
+- Entry: `engineer/launcher.py` (first-run setup: PC or console, voice + speech downloads,
+  telemetry guide; `--setup` re-runs it). When frozen, `config.py` reads the bundled
+  `config.yaml` and keeps settings/data in `%LOCALAPPDATA%\RaceEngineer` (`APP_HOME`).
+- Console players (Xbox/PlayStation): telemetry over the LAN to the PC; push-to-talk off.
+- The installed app adds each run's recordings to `laps`/`stints` when it closes
+  (`features_auto_add`), so the tyre/strategy history grows without a manual build.
+
 ## Settings and uploads
 
 - `config.local.yaml` (gitignored) overrides `config.yaml` on one PC. Auto-upload lives there:

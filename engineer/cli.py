@@ -133,6 +133,17 @@ async def _run(cfg: Config, record: bool | None, voice: bool, ptt_on: bool = Tru
         strategy_runner.close()
         print(f"Stopped. {listener.packets_received} packets received, "
               f"{pipeline.bad_packets} rejected, {pipeline.unknown_packets} unknown id.")
+        if recorder and cfg.features_auto_add and recorder.paths_this_run:
+            # Installed app: add this run's races to the tyre/strategy history (no manual build).
+            from engineer.features.tables import add_recordings
+            print("Adding this session to your tyre and strategy history (Ctrl+C to skip)...")
+            try:
+                add_recordings([p for p in recorder.paths_this_run if p.exists()],
+                               cfg.features_path)
+            except KeyboardInterrupt:
+                print("Skipped.")
+            except Exception as exc:
+                log.warning("could not update the history: %s", exc)
         if recorder and cfg.upload.auto:
             # Shutting down anyway, so a blocking upload is fine here.
             from engineer.ingest.share import upload_pending

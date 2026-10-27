@@ -89,3 +89,19 @@ def test_offline_tables_and_priors(tmp_path):
                                    "select count(*) from traces where car_idx = 0 and lap = 3"
                                    ).fetchall()
     assert n_sections == 1001              # 5000 m lap in 5 m sections (+ the line)
+
+
+def test_add_recordings_appends_and_replaces_a_session(tmp_path):
+    import pyarrow.parquet as pq
+    from pathlib import Path
+
+    from engineer.features.tables import add_recordings
+    fixture = Path(__file__).parent / "fixtures" / "austria_race_5laps.zst"
+    if not fixture.exists():
+        import pytest
+        pytest.skip("no fixture")
+    out = tmp_path / "features"
+    assert add_recordings([fixture], out, progress=lambda m: None) == 100
+    add_recordings([fixture], out, progress=lambda m: None)       # same session again: replaced
+    assert pq.read_table(out / "laps.parquet").num_rows == 100
+    assert pq.read_table(out / "stints.parquet").num_rows > 0

@@ -1,0 +1,63 @@
+# Builds the Windows installer.
+# - Push a tag like v0.1.0: builds RaceEngineer-Setup-0.1.0.exe and publishes it on the
+#   repository's Releases page (the download link to share).
+# - Actions tab > "Build Windows installer" > Run workflow: builds it as a downloadable artifact
+#   only (for testing), no release.
+name: Build Windows installer
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: uv sync --group build
+
+      - name: Run tests
+        run: uv run pytest -q
+
+      - name: Bundle the app (PyInstaller)
+        run: uv run --group build pyinstaller packaging/race_engineer.spec --noconfirm
+
+      - name: Smoke test the bundle
+        run: dist\RaceEngineer\RaceEngineer.exe --check
+
+      - name: Version
+        id: version
+        shell: pwsh
+        run: |
+          $v = if ($env:GITHUB_REF_TYPE -eq "tag") { $env:GITHUB_REF_NAME.TrimStart("v") } else { "0.0.0-dev" }
+          "value=$v" >> $env:GITHUB_OUTPUT
+
+      - name: Build installer (Inno Setup)
+        shell: pwsh
+        run: |
+          if (-not (Get-Command iscc -ErrorAction SilentlyContinue)) { choco install innosetup -y --no-progress }
+          $iscc = (Get-Command iscc -ErrorAction SilentlyContinue).Source
+          if (-not $iscc) { $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" }
+          & $iscc "/DAppVersion=${{ steps.version.outputs.value }}" packaging\installer.iss
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: RaceEngineer-Setup
+          path: dist/RaceEngineer-Setup-*.exe
+
+      - name: Publish release
+        if: github.ref_type == 'tag'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/RaceEngineer-Setup-*.exe
+          body_path: docs/release-notes.md

@@ -284,3 +284,20 @@
 - Keyword rules, not a chatbot: instant, offline, predictable; grown from the question log.
 - Answers are said straight away (no waiting for a straight): you chose the moment by pressing.
 - The game also sees LB: unbind LB in the F1 25 controls if it does something there.
+
+## Shareable app (Windows installer)
+
+- [x] One-folder app (PyInstaller) wrapped in an installer (Inno Setup): per-user install, Start
+      menu shortcuts (Race Engineer, Race Engineer setup, Telemetry guide), optional desktop icon
+- [x] GitHub Actions builds it on Windows, runs the tests and a self-check (`--check`); a `v*`
+      tag publishes `RaceEngineer-Setup-<version>.exe` on the Releases page
+- [x] First-run setup: PC or Xbox/PlayStation, voice download, speech model (`small.en`) for PC
+      players who want questions, telemetry settings with this PC's IP for console players
+- [x] Settings and data in `%LOCALAPPDATA%\RaceEngineer`; auto-upload off for friends
+- [x] Console players: telemetry over Wi-Fi to the PC, voice on the PC, push-to-talk off
+- [x] Each run is added to the tyre/strategy history when the app closes (no manual build)
+- [x] Telemetry guide: `docs/telemetry-guide.md` (also in the Start menu)
+- [x] Linux test build: first-run setup in console mode + a real recording over UDP gave the same
+      lap lines and calls as the golden test
+- [ ] First Windows install from the Releases page
+- [ ] Not code-signed: Windows SmartScreen shows "More info > Run anyway" the first time

@@ -116,6 +116,30 @@ def build(sessions_dir: Path | str, features_dir: Path | str, progress=print,
     return len(laps), len(stints)
 
 
+def add_recordings(paths: list[Path], features_dir: Path | str, progress=print) -> int:
+    """Add a few new recordings to laps.parquet and stints.parquet without rebuilding everything
+    (the installed app does this when it closes, so the strategy and tyre history keep growing).
+    Traces and corners are left for a full `build`. Returns the laps added."""
+    features_dir = Path(features_dir)
+    features_dir.mkdir(parents=True, exist_ok=True)
+    new: list[LapFeatures] = []
+    for n, path in enumerate(paths, start=1):
+        got = features_from_recording(path)
+        progress(f"[{n}/{len(paths)}] {Path(path).name}: {len(got)} laps")
+        new.extend(got)
+    if not new:
+        return 0
+    uids = {f"{r.session_uid:016x}" for r in new}
+    for name, rows in (("laps", [r.to_row() for r in new]),
+                       ("stints", [s.to_row() for s in summarize_stints(new)])):
+        path = features_dir / f"{name}.parquet"
+        old = []
+        if path.exists():
+            old = [r for r in pq.read_table(path).to_pylist() if r["session_uid"] not in uids]
+        _write(old + rows, path)
+    return len(new)
+
+
 def query(features_dir: Path | str, sql: str):
     """Run SQL over the tables with DuckDB. Tables: `laps`, `stints`, `traces`, `corners`, plus
     lookups `tracks(track_id, track)` and `compounds(actual_compound, compound)` for names."""

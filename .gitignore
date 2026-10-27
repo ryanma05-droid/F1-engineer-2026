@@ -31,3 +31,7 @@ data/ptt/*
 
 # Settings for this PC only (see config.yaml)
 config.local.yaml
+
+# App builds (PyInstaller / Inno Setup)
+/build/
+/dist/
