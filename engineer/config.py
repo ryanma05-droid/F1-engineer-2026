@@ -28,6 +28,7 @@ class Radio(BaseModel):
     voice: str = "en_GB-northern_english_male-medium"
     radio_effect: bool = True
     volume: float = Field(default=1.0, ge=0.0, le=2.0)
+    output_device: str | int | None = None   # None = Windows default; part of a name, or index
     lap_delta_max_wait_s: float = Field(default=3.0, gt=0)
     cooldowns_s: dict[str, float] = {"lap_delta": 5.0}
 

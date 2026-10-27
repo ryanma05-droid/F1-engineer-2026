@@ -46,3 +46,15 @@ def test_piper_render_uses_chunks_and_applies_effect():
     b.settings.radio_effect = True
     audio_fx, _ = b.render("Box box.")
     assert len(audio_fx) > 4410
+
+
+def test_resolve_output_device(monkeypatch):
+    from engineer.radio import tts
+
+    fake = [(3, "Speakers (Realtek Audio)", True), (7, "Headphones (Arctis Nova 7)", False)]
+    monkeypatch.setattr(tts, "list_output_devices", lambda: fake)
+    assert tts.resolve_output_device(None) == (None, "Speakers (Realtek Audio)")
+    assert tts.resolve_output_device("arctis") == (7, "Headphones (Arctis Nova 7)")
+    assert tts.resolve_output_device(7) == (7, "Headphones (Arctis Nova 7)")
+    assert tts.resolve_output_device("7") == (7, "Headphones (Arctis Nova 7)")
+    assert tts.resolve_output_device("nope") == (None, "Speakers (Realtek Audio)")

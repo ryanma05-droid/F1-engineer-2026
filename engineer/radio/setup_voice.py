@@ -2,6 +2,7 @@
 
     python -m engineer.radio.setup_voice            # download the voice from config.yaml
     python -m engineer.radio.setup_voice --test     # then say "Radio check" through the radio
+    python -m engineer.radio.setup_voice --devices  # list audio outputs (for radio.output_device)
 
 Voices come from the official Piper voice collection on Hugging Face (rhasspy/piper-voices).
 Each voice is two files: the model (.onnx, ~60 MB) and its settings (.onnx.json).
@@ -16,7 +17,8 @@ import urllib.request
 from pathlib import Path
 
 from engineer.config import load_config
-from engineer.radio.tts import AudioProcess, AudioSettings, voice_model_path
+from engineer.radio.tts import (AudioProcess, AudioSettings, list_output_devices,
+                                voice_model_path)
 
 BASE_URL = "https://huggingface.co/rhasspy/piper-voices/resolve/main"
 
@@ -63,7 +65,21 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--force", action="store_true", help="download again even if present")
     ap.add_argument("--test", action="store_true", help="say a test message afterwards")
     ap.add_argument("--no-effect", action="store_true", help="test without the radio effect")
+    ap.add_argument("--devices", action="store_true", help="list audio output devices and exit")
     args = ap.parse_args(argv)
+
+    if args.devices:
+        try:
+            devices = list_output_devices()
+        except Exception as exc:
+            print(f"Could not list audio devices: {exc}", file=sys.stderr)
+            return 1
+        print("Audio output devices (* = Windows default):")
+        for idx, name, default in devices:
+            print(f"  {'*' if default else ' '} {idx:>3}  {name}")
+        print("\nTo use one, set radio.output_device in config.yaml to part of its name "
+              "(e.g. \"Headphones\") or its number.")
+        return 0
 
     print(f"Voice: {args.voice} -> {cfg.voices_path}")
     try:
@@ -74,10 +90,12 @@ def main(argv: list[str] | None = None) -> int:
     print("Voice ready.")
     if args.test:
         audio = AudioProcess(AudioSettings(str(model), radio_effect=not args.no_effect,
-                                           volume=cfg.radio.volume, show_latency=False))
+                                           volume=cfg.radio.volume, show_latency=False,
+                                           output_device=cfg.radio.output_device))
         print("Loading voice...", flush=True)
         backend = audio.start(wait_ready_s=60)
-        print(f"Speaking with: {backend}")
+        print(f"Speaking with: {backend}"
+              + (f", playing on: {audio.device_name}" if backend not in (None, "null") else ""))
         audio.say("Radio check. One oh nine one, two tenths quicker, gained in sector one.")
         audio.status.get(timeout=60)
         time.sleep(0.2)

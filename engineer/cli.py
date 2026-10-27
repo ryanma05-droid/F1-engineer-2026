@@ -26,10 +26,12 @@ def start_voice(cfg: Config, engine) -> AudioProcess:
     """Start the audio process and connect it to the director's radio messages."""
     audio = AudioProcess(AudioSettings(
         voice_model=str(voice_model_path(cfg.voices_path, cfg.radio.voice)),
-        radio_effect=cfg.radio.radio_effect, volume=cfg.radio.volume))
+        radio_effect=cfg.radio.radio_effect, volume=cfg.radio.volume,
+        output_device=cfg.radio.output_device))
     print("Loading the engineer's voice...", flush=True)
     backend = audio.start()
-    print(f"Voice: {backend or 'not ready'}")
+    print(f"Voice: {backend or 'not ready'}"
+          + (f"  ->  playing on: {audio.device_name}" if backend not in (None, "null") else ""))
     if backend == "pyttsx3":
         print("  (Using the Windows voice. For the Piper voice run: "
               "python -m engineer.radio.setup_voice)")

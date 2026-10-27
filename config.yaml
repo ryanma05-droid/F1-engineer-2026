@@ -20,6 +20,8 @@ radio:
   voice: en_GB-northern_english_male-medium   # Piper voice in data/voices/
   radio_effect: true    # squelch beeps + band-limited "team radio" sound
   volume: 1.0
+  output_device: null   # null = Windows default output. Or part of a device name, e.g. "Headphones"
+                        # (list them: python -m engineer.radio.setup_voice --devices)
   lap_delta_max_wait_s: 3.0   # wait up to this long for a straight, then drop the call
   cooldowns_s:                # minimum gap between two calls of the same kind
     lap_delta: 5.0

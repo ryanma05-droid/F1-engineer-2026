@@ -38,6 +38,34 @@ class AudioSettings:
     volume: float = 1.0
     backend: str = "auto"            # "auto", "piper", "pyttsx3" or "null" (tests)
     show_latency: bool = True
+    output_device: str | int | None = None   # None = Windows default; name part or index
+
+
+def list_output_devices() -> list[tuple[int, str, bool]]:
+    """(index, name, is_default) for every audio output device."""
+    import sounddevice as sd
+
+    default_out = sd.default.device[1]
+    return [(i, d["name"], i == default_out)
+            for i, d in enumerate(sd.query_devices()) if d["max_output_channels"] > 0]
+
+
+def resolve_output_device(spec: str | int | None) -> tuple[int | None, str]:
+    """Turn the config value into a sounddevice index (None = default) and a readable name."""
+    devices = list_output_devices()
+    if spec is None or spec == "":
+        default = next((d for d in devices if d[2]), None)
+        return None, (default[1] if default else "system default")
+    if isinstance(spec, int) or str(spec).isdigit():
+        idx = int(spec)
+        match = next((d for d in devices if d[0] == idx), None)
+    else:
+        match = next((d for d in devices if str(spec).lower() in d[1].lower()), None)
+    if match is None:
+        print(f"[radio] output device {spec!r} not found; using the default. "
+              f"List devices with: python -m engineer.radio.setup_voice --devices", flush=True)
+        return resolve_output_device(None)
+    return match[0], match[1]
 
 
 # -- backends (run inside the audio process) ---------------------------------------------------
@@ -54,6 +82,7 @@ class PiperBackend:
                 f"Piper voice model not found: {settings.voice_model}. "
                 f"Run: python -m engineer.radio.setup_voice")
         self.settings = settings
+        self.device, self.device_name = resolve_output_device(settings.output_device)
         self.voice = PiperVoice.load(settings.voice_model)
         self._seed = 0
         self.render("Radio check.")    # warm-up: the first synthesis is much slower
@@ -73,7 +102,7 @@ class PiperBackend:
 
         audio, sr = self.render(text)
         on_start()
-        sd.play(audio, sr)
+        sd.play(audio, sr, device=self.device)
         sd.wait()
 
 
@@ -123,7 +152,7 @@ def audio_main(calls, status, settings: AudioSettings) -> None:
     import signal
     signal.signal(signal.SIGINT, signal.SIG_IGN)
     backend = _make_backend(settings)
-    status.put(("ready", backend.name))
+    status.put(("ready", backend.name, getattr(backend, "device_name", "Windows default")))
     while True:
         item = calls.get()
         if item is None:
@@ -169,13 +198,14 @@ class AudioProcess:
         self._calls = None
         self.status = None
         self.backend: str | None = None
+        self.device_name: str | None = None
 
     def start(self, wait_ready_s: float = 30.0) -> str | None:
         """Start the process and wait (up to wait_ready_s) for the voice to load."""
         self._proc, self._calls, self.status = start_worker(audio_main, self.settings)
         try:
             msg = self.status.get(timeout=wait_ready_s)
-            self.backend = msg[1]
+            self.backend, self.device_name = msg[1], msg[2]
         except queue_mod.Empty:
             log.warning("audio process did not report ready within %.0fs", wait_ready_s)
         return self.backend
