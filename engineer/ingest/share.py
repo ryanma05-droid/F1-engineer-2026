@@ -66,14 +66,18 @@ class UploadError(Exception):
 
 
 def _git(args: list[str], repo: Path, stdin: str | None = None, env=None) -> str:
+    # Bytes in and out, never text mode: on Windows text mode turns "\n" into "\r\n", and
+    # `git mktree` then puts a stray "\r" at the end of every file and folder name.
     try:
-        r = subprocess.run(["git", *args], cwd=repo, input=stdin, capture_output=True,
-                           text=True, env=env)
+        r = subprocess.run(["git", *args], cwd=repo, capture_output=True, env=env,
+                           input=None if stdin is None else stdin.encode("utf-8"))
     except FileNotFoundError:
         raise UploadError("git is not installed (or not on PATH)") from None
+    out = r.stdout.decode("utf-8", "replace").strip()
     if r.returncode != 0:
-        raise UploadError(f"git {args[0]} failed: {r.stderr.strip() or r.stdout.strip()}")
-    return r.stdout.strip()
+        err = r.stderr.decode("utf-8", "replace").strip()
+        raise UploadError(f"git {args[0]} failed: {err or out}")
+    return out
 
 
 def _commit_env(repo: Path) -> dict:

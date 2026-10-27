@@ -35,8 +35,8 @@ def test_upload_pushes_a_branch_without_touching_the_working_tree(tmp_path):
     branch = share.upload(rec, tmp_path / "share", "origin", repo=repo, progress=lambda m: None)
 
     assert branch == "recording-20261027t010920z"
-    files = git("ls-tree", "-r", "--name-only", branch, cwd=remote).split()
-    assert files == ["data/share/20261027T010920Z_cdb2205fbdb7a7db.zst.part01"]
+    files = git("ls-tree", "-r", "--name-only", branch, cwd=remote).split("\n")
+    assert files == ["data/share/20261027T010920Z_cdb2205fbdb7a7db.zst.part01"]   # no stray \r
     blob = subprocess.run(["git", "show", f"{branch}:{files[0]}"], cwd=remote, check=True,
                           capture_output=True).stdout
     assert blob == rec.read_bytes()
