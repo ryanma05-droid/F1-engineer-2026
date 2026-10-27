@@ -55,7 +55,7 @@ def main(argv: list[str] | None = None) -> int:
     if not button.available:
         print("XInput not available (push-to-talk needs Windows and an Xbox controller).")
         return 1
-    print(f"Loading {v.model} (the first time downloads it: ~250 MB for small.en)...",
+    print(f"Loading {v.model} (the first time downloads it: ~150 MB for base.en)...",
           flush=True)
     speech = SpeechProcess(settings)
     if not speech.start():

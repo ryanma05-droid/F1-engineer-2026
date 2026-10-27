@@ -321,3 +321,16 @@
   0.18 s. Fix: speech on the CPU by default (small.en, 4 threads, beam size 1), and an answer
   that would come more than 10 s late isn't said (it's still logged).
 - [ ] Check CPU recognition time with the game running (voice.setup prints it; target < 1.5 s)
+
+### Questions from the 27 Oct Abu Dhabi race (added)
+
+| Asked | Was | Now |
+| --- | --- | --- |
+| "How are the tyres?" on lap 1 | "No tyre numbers yet" | live wear: "Rear left at two percent, too early for a wear rate." |
+| "How was that exit?" (heard "How does that exit?") | "Say again" | new `corner` question: the corner you just left (or "turn four"), vs your best lap |
+| "Where am I gaining on Lando?" / "... speed to Kimi Antonelli?" | position answer | new `compare_driver`: last clean lap vs that driver, biggest gain and loss (corners, or sectors before the corner map exists); first names known |
+| "Where can I improve pace?" | "Nothing to compare yet" (new track) | sector fallback: "Sector two, losing two tenths to the car ahead." |
+
+Also added: gap to a named driver, gap to the leader / who's leading, "where am I gaining",
+damage, best lap, weather, "what lap is it". Speech model now `base.en` (small.en took ~3 s per
+question on the CPU during that race), with drivers' names in its vocabulary.

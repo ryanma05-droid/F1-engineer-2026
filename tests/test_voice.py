@@ -46,6 +46,24 @@ from tests.test_strategy import SETS, model, situation
     ("Stop talking", "quiet"),
     ("Talk to me", "talk"),
     ("What's for dinner", "unknown"),
+    # From the 27 Oct Abu Dhabi race:
+    ("How does that exit?", "corner"),
+    ("Where am I gaining on Lando?", "compare_driver"),
+    ("Where am I gaining speed to Kimi Antonelli?", "compare_driver"),
+    ("Where can I improve pace?", "losing_time"),
+    # Likely next ones:
+    ("How was turn four?", "corner"),
+    ("How was the braking there", "corner"),
+    ("Am I quicker than Max?", "compare_driver"),
+    ("Gap to Norris?", "gap_driver"),
+    ("How far behind the leader am I?", "gap_leader"),
+    ("Who's leading?", "gap_leader"),
+    ("Where am I gaining time?", "gaining_time"),
+    ("Where am I?", "position"),
+    ("Any damage?", "damage"),
+    ("What's my best lap?", "best_lap"),
+    ("Is it going to rain?", "weather"),
+    ("What lap is it?", "laps_left"),
 ])
 def test_intents(said, intent):
     assert match(said).name == intent
@@ -275,3 +293,38 @@ def test_a_late_answer_is_not_said(tmp_path):
     entries = [json.loads(line) for line in
                (tmp_path / "ptt" / "questions.jsonl").read_text().splitlines()]
     assert entries[0]["answer"].startswith("(not said: speech recognition took 41 s)")
+
+
+def test_driver_and_turn_from_text():
+    from engineer.voice.intents import driver_in, turn_in
+    names = ["PLAYER", "NORRIS", "ANTONELLI", None]
+    assert driver_in("Where am I gaining on Lando?", names) == 1
+    assert driver_in("gaining speed to Kimi Antonelli", names) == 2
+    assert driver_in("gap to Verstappen", names) is None
+    assert turn_in("How was turn four?") == 4 and turn_in("turn 12") == 12
+    assert turn_in("how was that exit") is None
+
+
+def test_new_answers_from_the_abu_dhabi_race(tmp_path):
+    race = race12(positions={0: 2, 1: 1}, gap_ahead_ms={0: 1200}, names=["PLAYER", "NORRIS"])
+    eng, _ = run_and_ask(race, {
+        20: "How are the tyres?",              # lap 1: live wear, not "give me a lap"
+        25: "Where am I gaining on Lando?",    # lap 1: no clean lap to compare
+        70: "How does that exit?",             # no corner map on a flat-out test track
+        75: "Gap to Norris?", 80: "Where am I gaining on Lando?",
+        85: "Where can I improve pace?", 86: "Any damage?", 87: "What's my best lap?",
+        88: "Who's leading?", 89: "Is it going to rain?",
+    }, tmp_path, duration_ms=95000)
+    got = eng.answers.answered
+    assert got[0] == ("tyres", "Front right at five percent, too early for a wear rate.")
+    assert got[1] == ("compare_driver", "No clean lap to compare with Norris yet.")
+    assert got[2] == ("corner", "Still learning this track's corners, give me two clean laps.")
+    assert got[3] == ("gap_driver", "Norris ahead, one point two seconds.")
+    assert got[4][0] == "compare_driver" and got[4][1].startswith("Last lap, ")
+    assert "Norris" in got[4][1]
+    # Quicker than Norris (ahead) everywhere in the test race.
+    assert got[5] == ("losing_time", "Not losing anywhere to the car ahead last lap.")
+    assert got[6] == ("damage", "No damage, car looks fine.")
+    assert got[7][0] == "best_lap" and got[7][1].startswith("Your best is thirty")
+    assert got[8][0] == "gap_leader" and got[8][1].startswith("Norris leads")
+    assert got[9] == ("weather", "Clear, track zero degrees, air zero.")

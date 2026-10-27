@@ -56,7 +56,7 @@ def start_log() -> None:
         return
     sys.stdout = _Tee(sys.stdout, log)
     sys.stderr = _Tee(sys.stderr, log)
-FRIEND_SPEECH_MODEL = "small.en"
+FRIEND_SPEECH_MODEL = "base.en"
 
 
 def lan_ip() -> str | None:
@@ -161,7 +161,7 @@ def first_run_setup() -> None:
         print(f"  Could not download the voice ({exc}). The {'Mac' if MAC else 'Windows'} "
               f"voice will be used; run setup again later to retry.")
     if ptt:
-        print(f"\nDownloading speech recognition ({FRIEND_SPEECH_MODEL}, about 250 MB)...")
+        print(f"\nDownloading speech recognition ({FRIEND_SPEECH_MODEL}, about 150 MB)...")
         try:
             from engineer.voice.speech import SpeechSettings, load_model
             _model, desc = load_model(SpeechSettings(

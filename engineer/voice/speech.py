@@ -7,7 +7,7 @@ it heard.
 - Microphone: the Windows default recording device (the one the game uses), unless
   `voice.input_device` names another. The stream stays open and keeps the last 0.3 s, so the
   first word isn't clipped when you start talking as you press.
-- Speech to text: faster-whisper, English model (`voice.model`, default small.en), on the CPU by
+- Speech to text: faster-whisper, English model (`voice.model`, default base.en), on the CPU by
   default (`voice.device`): during a race F1 25 keeps the GPU busy, and on the real 27 Oct race a
   question waited 41 s for it. With `device: auto` it uses the Nvidia GPU if there's one that works (it needs Nvidia's cuBLAS and cuDNN, from the `gpu` dependency
   group), else the CPU (int8). The model is tested with a silent clip when it loads, so a GPU
@@ -37,9 +37,13 @@ log = logging.getLogger(__name__)
 
 SAMPLE_RATE = 16000              # what whisper wants
 PRE_ROLL_S = 0.3
-# Words the model should expect (helps with "box", compound names, "undercut", ...).
+# Words the model should expect (helps with "box", compound names, drivers' names, ...).
 PROMPT = ("Radio check. How are the tyres? What's the plan? When do I box? What if I box now? "
-          "Gap ahead? Gap behind? Fuel? Softs, mediums, hards. Undercut. Laps to go. Quiet.")
+          "Gap ahead? Gap behind? Gap to the leader? How was that exit? How was turn four? "
+          "Where am I losing time? Where am I gaining on Lando? Fuel? Any damage? Best lap? "
+          "Softs, mediums, hards. Undercut. Laps to go. Quiet. Verstappen, Norris, Piastri, "
+          "Leclerc, Hamilton, Russell, Antonelli, Alonso, Stroll, Gasly, Ocon, Albon, Sainz, "
+          "Tsunoda, Lawson, Hadjar, Hulkenberg, Bortoleto, Bearman, Colapinto.")
 
 
 @dataclass

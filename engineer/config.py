@@ -104,7 +104,8 @@ class Voice(BaseModel):
     enabled: bool = True             # push-to-talk questions
     button: str = "LB"               # Xbox controller button (XInput name: LB, RB, A, B, X, Y, ...)
     controller: int | None = None    # None = any connected controller
-    model: str = "small.en"          # faster-whisper model: base.en, small.en, medium.en, ...
+    # base.en: small.en took ~3 s per question on the CPU in a race (27 Oct); base.en is ~3x faster.
+    model: str = "base.en"           # faster-whisper model: base.en, small.en, medium.en, ...
     # CPU, not the GPU: in a race F1 25 keeps the GPU busy and a question waited 41 s for it
     # (real race, 27 Oct). "auto" = the Nvidia GPU if it works, for when the game isn't running.
     device: Literal["auto", "cuda", "cpu"] = "cpu"

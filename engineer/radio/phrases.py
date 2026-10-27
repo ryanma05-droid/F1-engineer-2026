@@ -370,3 +370,85 @@ def box_now_phrase(what_if, plan, rejoin=None) -> str:
         head = f"box now costs about {say_gap(diff_ms)} over the plan"
     tyre = f"{say_compound(what_if.next_stop.compound)}" if what_if.next_stop else ""
     return " ".join(x for x in (_sentence(head, tyre), rejoin_phrase(rejoin)) if x)
+
+
+_SECTORS = {1: "sector one", 2: "sector two", 3: "sector three"}
+
+
+def against_words(against: str) -> str:
+    """'ahead' / 'behind' / 'best' / a driver name -> 'the car ahead' / 'your best' / 'Norris'."""
+    if against in ("ahead", "behind"):
+        return f"the car {against}"
+    if against == "best":
+        return "your best"
+    return against
+
+
+def sector_phrase(sector: int, delta_ms: int, against: str) -> str:
+    """'Sector two, losing four tenths to the car ahead.' / 'Sector one, gaining a tenth on
+    your best.'"""
+    who = against_words(against)
+    if delta_ms >= 0:
+        return _sentence(_SECTORS[sector], f"losing {say_gap(delta_ms)} to {who}")
+    return _sentence(_SECTORS[sector], f"gaining {say_gap(delta_ms)} on {who}")
+
+
+def compare_phrase(name: str, lap_delta_ms: int | None, gain=None, loss=None) -> str:
+    """gain / loss: (where, seconds) or None.
+    'Last lap, three tenths quicker than Norris. Gaining most in turn three, a tenth. Losing
+    most in turn four, two tenths.'"""
+    parts = []
+    if lap_delta_ms is not None:
+        if abs(lap_delta_ms) < 50:
+            parts.append(_sentence(f"last lap, same pace as {name}"))
+        else:
+            word = "quicker" if lap_delta_ms < 0 else "slower"
+            parts.append(_sentence(f"last lap, {say_gap(lap_delta_ms)} {word} than {name}"))
+    if gain is not None:
+        parts.append(_sentence(f"gaining most in {gain[0]}", say_gap(int(abs(gain[1]) * 1000))))
+    if loss is not None:
+        parts.append(_sentence(f"losing most in {loss[0]}", say_gap(int(abs(loss[1]) * 1000))))
+    return " ".join(parts)
+
+
+def damage_phrase(items: list[tuple[str, float]]) -> str:
+    """'No damage.' / 'Front left wing twenty percent, floor ten percent.'"""
+    if not items:
+        return _sentence("no damage, car looks fine")
+    return _sentence(*[f"{name} {say_percent(pct)}" for name, pct in items])
+
+
+def best_lap_phrase(lap_time_ms: int, lap: int) -> str:
+    """'Your best is one thirty five, lap two.'"""
+    return _sentence(f"your best is {say_lap_time(lap_time_ms)}", f"lap {number_words(lap)}")
+
+
+def gap_leader_phrase(leader: str | None, gap_ms: float | None, second: str | None = None) -> str:
+    """You lead: "You're leading, Norris one point two seconds behind."
+    Else: 'Verstappen leads, eight point two seconds ahead of you.'"""
+    if leader is None:
+        if second is None or gap_ms is None:
+            return _sentence("you're leading")
+        return _sentence("you're leading", f"{second} {say_gap(int(gap_ms))} behind")
+    if gap_ms is None:
+        return _sentence(f"{leader} leads")
+    return _sentence(f"{leader} leads", f"{say_gap(int(gap_ms))} ahead of you")
+
+
+_WEATHER = {0: "clear", 1: "light cloud", 2: "overcast", 3: "light rain", 4: "heavy rain",
+            5: "storm"}
+
+
+def weather_phrase(weather: int | None, track_c: int | None, air_c: int | None) -> str:
+    """'Overcast, track thirty one degrees, air twenty four.' (current conditions)"""
+    parts = [_WEATHER.get(weather, "no weather reading")]
+    if track_c is not None:
+        parts.append(f"track {number_words(max(0, min(track_c, 99)))} degrees")
+    if air_c is not None:
+        parts.append(f"air {number_words(max(0, min(air_c, 99)))}")
+    return _sentence(*parts)
+
+
+def live_tyres_phrase(wheel: int, pct: float) -> str:
+    """Before a lap is done: 'Front right at five percent, too early for a wear rate.'"""
+    return _sentence(f"{WHEEL_NAMES[wheel]} at {say_percent(pct)}", "too early for a wear rate")
