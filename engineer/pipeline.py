@@ -10,6 +10,7 @@ like the live session it came from.
 from __future__ import annotations
 
 import logging
+from typing import Callable
 
 from engineer.bus.events import EventBus
 from engineer.ingest import formats
@@ -30,6 +31,9 @@ class Pipeline:
         self.bad_packets = 0
         self.last_arrival_ns: int | None = None
         self._warned_formats: set[int] = set()
+        # Readers that need a look after every packet (e.g. the radio director deciding whether
+        # now is a good moment to speak). Called with the packet id, after state and events.
+        self.after_packet: list[Callable[[int], None]] = []
 
     def feed(self, raw: bytes, t_ns: int) -> None:
         self.packets += 1
@@ -55,3 +59,5 @@ class Pipeline:
         if self.state.apply(header, packet_id, rec):
             self.detector.on_new_session(self.state, old_uid, self.state.session_time or 0.0)
         self.detector.process(self.state, packet_id, rec)
+        for fn in self.after_packet:
+            fn(packet_id)

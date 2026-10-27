@@ -22,3 +22,5 @@ tests/fixtures/*.zst
 Thumbs.db
 .vscode/
 .idea/
+data/voices/*
+!data/voices/README.md

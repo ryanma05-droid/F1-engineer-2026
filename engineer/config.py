@@ -9,6 +9,8 @@ from __future__ import annotations
 from pathlib import Path
 
 import yaml
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -20,11 +22,22 @@ class Endpoint(BaseModel):
     port: int = Field(ge=1, le=65535)
 
 
+class Radio(BaseModel):
+    enabled: bool = True
+    verbosity: Literal["terse", "normal", "chatty"] = "normal"
+    voice: str = "en_GB-northern_english_male-medium"
+    radio_effect: bool = True
+    volume: float = Field(default=1.0, ge=0.0, le=2.0)
+    lap_delta_max_wait_s: float = Field(default=3.0, gt=0)
+    cooldowns_s: dict[str, float] = {"lap_delta": 5.0}
+
+
 class Config(BaseModel):
     listen: Endpoint = Endpoint(host="0.0.0.0", port=20777)
     forward: list[Endpoint] = []
     data_dir: Path = Path("data")
     record: bool = True
+    radio: Radio = Radio()
 
     @property
     def data_path(self) -> Path:
@@ -34,6 +47,10 @@ class Config(BaseModel):
     @property
     def sessions_path(self) -> Path:
         return self.data_path / "sessions"
+
+    @property
+    def voices_path(self) -> Path:
+        return self.data_path / "voices"
 
 
 def load_config(path: Path | str | None = None) -> Config:

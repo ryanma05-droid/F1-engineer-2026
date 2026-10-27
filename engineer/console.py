@@ -93,3 +93,22 @@ class LapPrinter:
         if e.car_idx != self.state.player_index:
             return
         self._print(lap_line(e, self.state))
+
+
+class RadioPrinter:
+    """Prints each radio call as it is released (and dropped calls, so nothing is silent)."""
+
+    def __init__(self, bus: ev.EventBus, out: TextIO | None = None):
+        self.out = out or sys.stdout
+        bus.subscribe(ev.RadioMessage, self.on_message)
+        bus.subscribe(ev.RadioDropped, self.on_dropped)
+
+    def on_message(self, e: ev.RadioMessage) -> None:
+        waited = e.session_time - e.queued_at
+        print(f"RADIO {e.session_time:7.1f}s  {e.text}"
+              + (f"  (held {waited:.1f}s)" if waited >= 0.05 else ""),
+              file=self.out, flush=True)
+
+    def on_dropped(self, e: ev.RadioDropped) -> None:
+        print(f"RADIO {e.session_time:7.1f}s  (dropped, {e.reason}: {e.text})",
+              file=self.out, flush=True)

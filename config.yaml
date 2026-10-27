@@ -13,3 +13,13 @@ forward: []
 data_dir: data      # sessions/, tracks/, features/, models/ live under here
 
 record: true        # save every raw packet to data/sessions/
+
+radio:
+  enabled: true         # speak calls (python -m engineer run --no-voice turns it off for one run)
+  verbosity: normal     # terse | normal | chatty
+  voice: en_GB-northern_english_male-medium   # Piper voice in data/voices/
+  radio_effect: true    # squelch beeps + band-limited "team radio" sound
+  volume: 1.0
+  lap_delta_max_wait_s: 3.0   # wait up to this long for a straight, then drop the call
+  cooldowns_s:                # minimum gap between two calls of the same kind
+    lap_delta: 5.0

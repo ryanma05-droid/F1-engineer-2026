@@ -79,7 +79,8 @@ def lap_delta_phrase(d: LapDelta, verbosity: str = "normal") -> str:
         return _sentence(label, lap_time)
 
     delta = d.delta_ms
-    if abs(delta) < SAME_LAP_THRESHOLD_MS:
+    same = abs(delta) < SAME_LAP_THRESHOLD_MS
+    if same:
         change = "same again"
     else:
         change = f"{say_gap(delta)} {'quicker' if delta < 0 else 'slower'}"
@@ -91,7 +92,10 @@ def lap_delta_phrase(d: LapDelta, verbosity: str = "normal") -> str:
         sd = d.sector_delta_ms[d.biggest_sector - 1]
         if sd is not None and abs(sd) >= SAME_LAP_THRESHOLD_MS:
             verb = "gained" if sd < 0 else "lost"
-            sector = f"{verb} in sector {_ONES[d.biggest_sector]}"
+            # "but" when the sector goes against the overall result: "same again, but gained in
+            # sector two" / "a tenth quicker, but lost in sector three".
+            against = same or (sd < 0) != (delta < 0)
+            sector = f"{'but ' if against else ''}{verb} in sector {_ONES[d.biggest_sector]}"
     reference = "" if d.reference_is_previous_lap else "on your last clean lap"
     if verbosity == "chatty" and d.reference is not None and d.reference_is_previous_lap:
         reference = f"on lap {number_words(d.reference.lap)}"

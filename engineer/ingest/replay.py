@@ -18,11 +18,11 @@ import socket
 import sys
 import time
 from pathlib import Path
-from typing import Callable, Iterable
+from typing import Iterable
 
-from engineer.console import LapPrinter
+from engineer.app import Engine, build_engine
+from engineer.config import Config, load_config
 from engineer.ingest.recorder import read_recording
-from engineer.pipeline import Pipeline
 
 log = logging.getLogger(__name__)
 
@@ -44,15 +44,14 @@ def paced(records: Iterable[tuple[int, bytes]], speed: float | None
         yield t_ns, raw
 
 
-def replay(path: Path | str, speed: float | None = None,
-           sink: Callable[[bytes, int], None] | None = None, out=None) -> Pipeline:
-    """Replay in-process. Returns the pipeline so callers (tests, benchmark) can inspect state."""
-    pipeline = Pipeline()
-    LapPrinter(pipeline.bus, pipeline.state, out=out)
-    feed = sink or pipeline.feed
+def replay(path: Path | str, speed: float | None = None, out=None,
+           cfg: Config | None = None, engine: Engine | None = None) -> Engine:
+    """Replay in-process through the same engine as live. Returns the engine for inspection."""
+    engine = engine or build_engine(cfg or load_config(), out=out)
+    feed = engine.pipeline.feed
     for t_ns, raw in paced(read_recording(path), speed):
         feed(raw, t_ns)
-    return pipeline
+    return engine
 
 
 def replay_udp(path: Path | str, host: str, port: int, speed: float | None) -> int:
@@ -100,7 +99,7 @@ def main(argv: list[str] | None = None) -> int:
             n = replay_udp(args.file, args.host, args.port, args.speed)
             print(f"Sent {n} packets to {args.host}:{args.port}")
         else:
-            p = replay(args.file, args.speed)
+            p = replay(args.file, args.speed).pipeline
             print(f"Replayed {p.packets} packets "
                   f"({p.unknown_packets} unknown id, {p.bad_packets} rejected)")
     except KeyboardInterrupt:

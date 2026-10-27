@@ -63,3 +63,11 @@ def test_not_compared(reason, normal, terse):
     d = LapDelta(lap(3, 69400), None, reason, None)
     assert lap_delta_phrase(d, "normal") == normal
     assert lap_delta_phrase(d, "terse") == terse
+
+
+def test_but_when_sector_goes_against_result():
+    same = LapDelta(lap(3, 69599), lap(2, 69622), None, -23, (108, -557, 426), 2)
+    assert lap_delta_phrase(same) == "One oh nine five, same again, but gained in sector two."
+    quicker_but = LapDelta(lap(3, 69400), lap(2, 69600), None, -200, (-150, 0, 350), 3)
+    assert lap_delta_phrase(quicker_but) == \
+        "One oh nine four, two tenths quicker, but lost in sector three."

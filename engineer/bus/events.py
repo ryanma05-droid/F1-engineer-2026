@@ -100,3 +100,23 @@ class EventBus:
                 self.handler_errors += 1
                 if self.handler_errors <= 10:
                     log.exception("event handler %r failed on %r", handler, event)
+
+
+# -- radio (Phase 1) ---------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class RadioMessage(Event):
+    """The director decided to say this now. The audio process speaks it; the console prints it."""
+    topic: str
+    text: str
+    priority: int
+    queued_at: float             # session time the call was first requested
+    origin_t_ns: int | None      # arrival time of the packet that triggered it (latency checks)
+
+
+@dataclass(frozen=True)
+class RadioDropped(Event):
+    """A call expired before a good moment to say it came up."""
+    topic: str
+    text: str
+    reason: str                  # "expired" or "cooldown"

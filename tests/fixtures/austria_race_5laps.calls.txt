@@ -1,0 +1,5 @@
+RADIO    77.7s  Lap one, one seventeen six.
+RADIO   147.3s  One oh nine six.
+RADIO   216.9s  One oh nine five, same again, but gained in sector two.
+RADIO   286.1s  One oh nine one, four tenths quicker, gained in sector one.
+RADIO   355.2s  One oh nine one, same again, but gained in sector three.

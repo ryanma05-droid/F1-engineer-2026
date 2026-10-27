@@ -4,6 +4,10 @@ Put a real F1 25 recording in tests/fixtures/<name>.zst and the lap lines you ha
 the game's own lap times in tests/fixtures/<name>.expected.txt (one "Lap ..." line per lap). This
 test replays each recording and checks the printed lap lines match exactly.
 
+Optionally, tests/fixtures/<name>.calls.txt holds the expected radio calls ("RADIO ..." lines,
+checked by hand against the lap and sector times): replay must produce exactly those calls, at
+exactly those game times.
+
 Recordings are large and ignored by git by default; add a chosen fixture with `git add -f`.
 """
 
@@ -22,9 +26,14 @@ CASES = sorted(p for p in FIXTURES.glob("*.zst") if p.with_suffix(".expected.txt
 @pytest.mark.parametrize("recording", CASES, ids=lambda p: p.stem)
 def test_golden_lap_lines(recording):
     out = io.StringIO()
-    pipeline = replay(recording, speed=None, out=out)
+    pipeline = replay(recording, speed=None, out=out).pipeline
     got = [line for line in out.getvalue().splitlines() if line.startswith("Lap")]
     expected = [line for line in recording.with_suffix(".expected.txt").read_text().splitlines()
                 if line.startswith("Lap")]
     assert got == expected
     assert pipeline.bad_packets == 0
+
+    calls = recording.with_suffix(".calls.txt")
+    if calls.exists():
+        got_calls = [line for line in out.getvalue().splitlines() if line.startswith("RADIO")]
+        assert got_calls == calls.read_text().splitlines()
