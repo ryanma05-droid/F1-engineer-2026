@@ -221,3 +221,95 @@ def corner_phrase(delta_s: float, corner_name: str, against: str,
     loss = f"{gap} off your best" if against == "best" else f"losing {gap} to the car {against}"
     why = "" if reason is None or verbosity == "terse" else _REASONS[reason[0]](reason[1])
     return _sentence(f"{corner_name} again" if again else corner_name, loss, why)
+
+
+# -- strategy (Phase 5) ------------------------------------------------------------------------
+
+COMPOUND_WORDS = {16: "softs", 17: "mediums", 18: "hards", 7: "inters", 8: "wets"}
+_STOP_WORDS = {0: "no stop", 1: "one stop", 2: "two stops", 3: "three stops", 4: "four stops",
+               5: "five stops"}
+
+
+def say_compound(c: int) -> str:
+    return COMPOUND_WORDS.get(c, "new tyres")
+
+
+def _laps_range(window: tuple[int, int] | None, lap: int) -> str:
+    lo, hi = window or (lap, lap)
+    if lo == hi:
+        return f"lap {number_words(lo)}"
+    return f"lap {number_words(lo)} to {number_words(hi)}"
+
+
+def plan_phrase(plan, alternative=None, verbosity: str = "normal", change: bool = False) -> str:
+    """plan / alternative: strategy.sim.Plan.
+    'Plan is one stop, box lap eleven to thirteen for hards. Two stops is four seconds slower.'
+    'Plan is two stops: lap eight for mediums, then lap nineteen for hards.'
+    'Plan is no stop, tyres will make the end.'
+    change=True: 'Plan change: one stop, box lap nine to ten for mediums.'"""
+    stops = plan.stops
+    if not stops:
+        body = "no stop, tyres will make the end"
+    elif len(stops) == 1:
+        body = (f"one stop, box {_laps_range(plan.window, stops[0].lap)} "
+                f"for {say_compound(stops[0].compound)}")
+    else:
+        first = f"{_laps_range(plan.window, stops[0].lap)} for {say_compound(stops[0].compound)}"
+        rest = [f"lap {number_words(s.lap)} for {say_compound(s.compound)}" for s in stops[1:]]
+        body = f"{_STOP_WORDS[len(stops)]}: {first}, then " + ", then ".join(rest)
+    head = f"plan change: {body}" if change else f"plan is {body}"
+    alt = ""
+    if alternative is not None and verbosity != "terse":
+        diff_ms = int(round((alternative.cost_s - plan.cost_s) * 1000))
+        name = _STOP_WORDS[alternative.n_stops]
+        name = name[0].upper() + name[1:]
+        alt = (f"{name} is about the same" if diff_ms < 500
+               else f"{name} is {say_gap(diff_ms)} slower")
+    return _sentence(head) + (f" {_sentence(alt)}" if alt else "")
+
+
+def rejoin_phrase(rejoin) -> str:
+    """rejoin: analyzers.strategy.Rejoin.
+    "You'll come out behind Sainz, about two seconds back." / "You'll come out in clear air." """
+    if rejoin is None:
+        return ""
+    if rejoin.behind_name is not None:
+        return _sentence(f"you'll come out behind {rejoin.behind_name}, "
+                         f"about {say_gap(rejoin.behind_ms)} back")
+    if rejoin.ahead_of_name is not None:
+        return _sentence(f"you'll come out just ahead of {rejoin.ahead_of_name}")
+    return _sentence("you'll come out in clear air")
+
+
+def box_phrase(compound: int, rejoin=None, verbosity: str = "normal") -> str:
+    """One lap before the pit entry: 'Box this lap, box this lap. Hards. You'll come out ...'"""
+    text = f"Box this lap, box this lap. {_sentence(say_compound(compound))}"
+    extra = "" if verbosity == "terse" else rejoin_phrase(rejoin)
+    return f"{text} {extra}".strip()
+
+
+def box_half_phrase(compound: int) -> str:
+    """Half a lap before the pit entry: 'Box box, end of this lap. Hards.'"""
+    return f"Box box, end of this lap. {_sentence(say_compound(compound))}"
+
+
+def safety_car_box_phrase(kind: str, compound: int, next_lap: bool = False,
+                          saving_s: float | None = None, verbosity: str = "normal") -> str:
+    """kind: 'safety car' or 'virtual safety car'.
+    'Safety car, box this lap, box this lap. Mediums, it's a cheap stop.'"""
+    when = "box next lap" if next_lap else "box this lap, box this lap"
+    why = "it's a cheap stop"
+    if verbosity == "chatty" and saving_s is not None and saving_s >= 1:
+        why = f"it's a cheap stop, saves about {say_gap(int(saving_s * 1000))}"
+    return f"{_sentence(kind + ', ' + when)} {_sentence(say_compound(compound), why)}"
+
+
+def safety_car_stay_phrase(kind: str) -> str:
+    """'Safety car, stay out. Stopping now doesn't pay.'"""
+    return _sentence(f"{kind}, stay out") + " " + _sentence("stopping now doesn't pay")
+
+
+def undercut_phrase(name: str | None) -> str:
+    """'Norris behind has pitted, watch the undercut.'"""
+    who = f"{name} behind" if name else "the car behind"
+    return _sentence(f"{who} has pitted, watch the undercut")

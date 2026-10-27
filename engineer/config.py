@@ -32,7 +32,8 @@ class Radio(BaseModel):
     lap_delta_max_wait_s: float = Field(default=3.0, gt=0)
     cooldowns_s: dict[str, float] = {"lap_delta": 5.0, "tyre_status": 30.0, "tyre_warning": 10.0,
                                      "tyre_temp": 10.0, "tyre_dropoff": 60.0,
-                                     "corner": 30.0}
+                                     "corner": 30.0, "strategy_plan": 20.0, "box": 0.0,
+                                     "undercut": 30.0}
 
 
 class Tyres(BaseModel):
@@ -56,6 +57,31 @@ class Corners(BaseModel):
     max_wait_s: float = Field(default=25.0, gt=0)
 
 
+class Strategy(BaseModel):
+    enabled: bool = True
+    min_race_laps: int = Field(default=8, ge=1)       # no strategy calls in shorter races
+    announce_after_lap: int = Field(default=2, ge=1)  # first plan once a wear rate is measured
+    max_stops: int = Field(default=3, ge=1, le=5)
+    window_s: float = Field(default=1.0, ge=0)        # pit window: stop laps within this of best
+    replan_laps: int = Field(default=2, ge=1)         # "plan change" if the stop moves this much
+    over_limit_s_per_pct: float = Field(default=1.0, ge=0)   # cost of each lap past tyres.limit_pct
+    min_gain_s: float = Field(default=3.0, ge=0)   # an extra stop must save this much to be the plan
+    # Pit stop time loss, used until a stop at this track has been measured from real laps.
+    pit_loss_s: float = Field(default=22.0, gt=0)
+    sc_pit_loss_factor: float = Field(default=0.5, gt=0, le=1)   # under SC/VSC, until measured
+    two_compound_rule: Literal["auto", "on", "off"] = "auto"
+    two_compound_min_laps: int = Field(default=10, ge=1)          # "auto": races this long
+    ai_weight: float = Field(default=0.5, ge=0, le=1)   # the AI field counts as this much of a driver
+    game_prior_laps: float = Field(default=5.0, ge=0)        # the game's estimate counts as N laps
+    game_deg_sd: float = Field(default=0.02, gt=0)   # how far off the game's deg figure may be
+    fallback_deg_s_per_pct: float = Field(default=0.05, ge=0)   # only when there's no data at all
+    assume_sets_per_compound: int = Field(default=2, ge=1)   # if the game sends no tyre sets
+    undercut_reminder: bool = True
+    undercut_gap_s: float = Field(default=3.0, ge=0)
+    rejoin_traffic_s: float = Field(default=1.5, ge=0)   # "you'll come out behind X" within this
+    max_wait_s: float = Field(default=20.0, gt=0)
+
+
 class Upload(BaseModel):
     auto: bool = False          # push new recordings to GitHub when `engineer run` stops
     remote: str = "origin"
@@ -70,6 +96,7 @@ class Config(BaseModel):
     radio: Radio = Radio()
     tyres: Tyres = Tyres()
     corners: Corners = Corners()
+    strategy: Strategy = Strategy()
     upload: Upload = Upload()
 
     @property

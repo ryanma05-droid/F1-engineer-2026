@@ -139,7 +139,10 @@ class FakeRace:
                  session_uid: int = SESSION_UID, telemetry_public: list[int] | None = None,
                  chequered_flag: bool = False, wear_per_lap: list[float] | None = None,
                  inner_temp=None, compound_after_pit: int = 16, fuel_per_lap: float = 0.0,
-                 corners: list[float] | None = None, positions: dict[int, int] | None = None):
+                 corners: list[float] | None = None, positions: dict[int, int] | None = None,
+                 tyre_sets: list[tuple] | None = None,
+                 safety_car_ms: tuple[float, float] | None = None,
+                 gap_ahead_ms: dict[int, int] | None = None, names: list[str] | None = None):
         self.pf = PacketFactory(session_uid=session_uid)
         self.lap_times = lap_times_ms
         self.session_type = session_type
@@ -162,6 +165,12 @@ class FakeRace:
         # before each apex. None = flat out all lap (250 km/h).
         self.corners = corners
         self.positions = positions or {}
+        # Player's Tyre Sets packet: (visual compound, wear %, usable life laps, lap delta ms);
+        # the first set of the compound on the car is the fitted one.
+        self.tyre_sets = tyre_sets
+        self.safety_car_ms = safety_car_ms           # (from, to) game ms: full safety car
+        self.gap_ahead_ms = gap_ahead_ms or {}        # car -> m_deltaToCarInFront
+        self.names = names
         self.t0_ns = 1_700_000_000_000_000_000
 
     def _laps_on_set(self, car: int, lap: int, frac: float) -> float:
@@ -188,6 +197,24 @@ class FakeRace:
     def _compound(self, car: int, lap: int) -> int:
         pit = self.pit_laps.get(car)
         return self.compound_after_pit if pit is not None and lap > pit else 16
+
+    def _tyre_sets_packet(self, game_ms: float) -> bytes:
+        player = self.pf.player
+        lap = self._car_at(player, game_ms)["lap"]
+        on = self._compound(player, lap)
+        a = self.pf.blank(f.PacketId.TYRE_SETS)
+        a[0]["m_carIdx"] = player
+        data = a[0]["m_tyreSetData"]
+        fitted = next(i for i, ts in enumerate(self.tyre_sets) if ts[0] == on)
+        for i, (visual, wear, life, delta) in enumerate(self.tyre_sets):
+            data[i]["m_visualTyreCompound"] = data[i]["m_actualTyreCompound"] = visual
+            data[i]["m_wear"] = wear
+            data[i]["m_available"] = 1
+            data[i]["m_usableLife"] = data[i]["m_lifeSpan"] = life
+            data[i]["m_lapDeltaTime"] = delta
+            data[i]["m_fitted"] = int(i == fitted)
+        a[0]["m_fittedIdx"] = fitted
+        return a.tobytes()
 
     def _car_at(self, car: int, t_ms: float) -> dict:
         laps = self.lap_times[car]
@@ -239,12 +266,18 @@ class FakeRace:
                 game_ms = target
                 pf.session_time = game_ms / 1000
             if frame % 30 == 0:
+                sc = self.safety_car_ms
                 yield t_ns, pf.session(track_id=self.track_id, session_type=self.session_type,
                                        total_laps=max(len(v) for v in self.lap_times.values()),
-                                       track_length=int(self.LAP_LEN))
+                                       track_length=int(self.LAP_LEN),
+                                       m_safetyCarStatus=1 if sc and sc[0] <= game_ms < sc[1]
+                                       else 0)
             if frame % 300 == 0:
                 yield t_ns, pf.participants(num_active=len(cars),
-                                            telemetry_public=self.telemetry_public)
+                                            telemetry_public=self.telemetry_public,
+                                            names=self.names)
+            if self.tyre_sets and frame % 60 == 0:
+                yield t_ns, self._tyre_sets_packet(game_ms)
             lap = {}
             for car in cars:
                 st = self._car_at(car, game_ms)
@@ -264,7 +297,7 @@ class FakeRace:
                     "sector2TimeMinutesPart": split_ms(st["s2"])[1],
                     "pitStatus": st["pit"], "currentLapInvalid": st["invalid"],
                     "carPosition": self.positions.get(car, car + 1), "gridPosition": car,
-                    "driverStatus": 4,
+                    "driverStatus": 4, "deltaToCarInFrontMSPart": self.gap_ahead_ms.get(car, 0),
                 }
                 if st.get("finished") and self.chequered_flag:
                     lap[car]["resultStatus"] = 3

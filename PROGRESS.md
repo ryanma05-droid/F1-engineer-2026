@@ -180,3 +180,67 @@
       (no branch switching; your folder is untouched); `--pending` sends everything not sent yet
 - [x] Auto-upload when `engineer run` stops, switched on per PC in `config.local.yaml`
       (`upload: {auto: true}`); off by default so other people's copies don't try to push
+
+## Phase 5 — strategy
+
+- [x] Strategy model (`engineer/strategy/model.py`): wear rate, deg and compound offset per
+      compound, pit loss green and under safety car, all learned from lap rows and blended by
+      evidence with the game's own Tyre Sets figures; nothing about the tyres is fixed in code
+- [x] Simulator (`engineer/strategy/sim.py`): every plan up to 3 stops, two-compound rule, only
+      the sets you have, soft wear limit, pit window; ~5 ms for a 71-lap race
+- [x] Runs in a worker process live, in-process for replays/tests (same calls every replay)
+- [x] Radio: plan, plan change, box calls (one lap and half a lap before the pit entry, with the
+      rejoin), safety car box / stay out, undercut reminder (information only)
+- [x] `python -m engineer.features strategy [track]` shows what the model has learned
+- [x] Tests (158 passing), incl. a brute-force check of the simulator and a worker-process run
+- [x] Checked on the real 18-lap Austria race (replay and live over UDP)
+- [ ] Hear it in a real race of 15+ laps with a stop
+- [ ] Wet races (inters/wets) and weather changes: not covered yet
+
+### Strategy calls
+
+| Call | When |
+| --- | --- |
+| "Plan is one stop, box lap eleven to thirteen for hards. Two stops is four seconds slower." | after lap 2, and after each of your stops |
+| "Plan change: one stop, box lap nine to ten for mediums." | stops/compounds change, or the stop moves 2+ laps; seen on 2 laps running |
+| "Box this lap, box this lap. Hards. You'll come out behind Sainz, about two seconds back." | one lap before the pit entry (start of the pit lap) |
+| "Box box, end of this lap. Hards." | half a lap before the pit entry |
+| "Safety car, box this lap, box this lap. Mediums, it's a cheap stop." | SC/VSC out and stopping under it beats the plan |
+| "Safety car, stay out. Stopping now doesn't pay." | SC/VSC out, you have a stop to make, but not now |
+| "Norris behind has pitted, watch the undercut." | car right behind (within 3 s) pits while you still have a stop to make |
+
+### How the tyre model learns (and keeps learning)
+
+- Wear rate per compound: this stint + your past stints at the track + the AI field scaled by
+  your wear ratio vs the AI (learned over every track; 1.5x on your recordings so far) + the game's
+  tyre life figures for compounds with no data.
+- Deg (time per % of wear): your clean laps (fuel corrected, each stint its own baseline) and the
+  game's figure, each weighed by its precision (standard error); a curve is added once your laps
+  reach 40%+ wear. Austria mediums: your laps say 0.053 s per %, the game 0.050.
+- Compound offsets: the same car on two compounds in one race + the game's figure.
+- Pit loss: in-lap + out-lap vs the car's laps around them (any car, history + this race); under
+  SC vs the cars that stayed out.
+
+### Checked on the real 18-lap Austria race
+
+- Lap 2 safety car: "Safety car, box this lap, box this lap. Mediums" (what you and the field did).
+- After the stop: "Plan is no stop, tyres will make the end. One stop is eight point five seconds
+  slower." Right call: your mediums finished at 56%.
+- Your laps 9-11 were ~2 s slower (no traffic: you led). Before the fixes below that briefly made
+  the plan box for softs.
+
+### Decisions
+
+- The wear limit (60%) is soft for strategy: each lap past it costs 1 s per % over. Finishing 2%
+  over shouldn't cost a 22 s stop.
+- An extra stop must save 3 s to become the plan; a change in stop count needs 2 laps to confirm;
+  deg estimates are weighed by precision so a few odd laps barely move them.
+- AI lap times aren't used for deg: on real data they barely slow with wear.
+- No plan is made from an in-lap (it ends in the pit lane on the old tyres).
+- Pit loss is 22 s (SC: half) until a stop at the track is measured. Your Austria recording only
+  has stops under the safety car, which measured 17.4 s.
+
+### Open questions
+
+- Real green-flag pit loss per track: measured automatically from the first race with a stop (yours
+  or the AI's) that isn't under the safety car.

@@ -1,4 +1,4 @@
-"""python -m engineer.features build | query "<sql>" | tyres | corners"""
+"""python -m engineer.features build | query "<sql>" | tyres | corners | strategy [track]"""
 
 from __future__ import annotations
 
@@ -38,6 +38,40 @@ GROUP BY ALL ORDER BY track, corner
 """
 
 
+def strategy_report(cfg, track: str | None) -> int:
+    """What the strategy model has learned so far, per track (before any live race data)."""
+    from engineer.ingest.formats import f1_2025 as f
+    from engineer.strategy.model import COMPOUND_NAMES, ModelSettings, build_model
+    from engineer.strategy.runner import load_history
+
+    rows = load_history(cfg.features_path)
+    ids = sorted({r["track_id"] for r in rows if r.get("track_id") is not None})
+    if track:
+        ids = [t for t in ids if track.lower() in f.TRACKS.get(t, "").lower()]
+    if not ids:
+        print("No laps for that track yet.")
+        return 1
+    st = cfg.strategy
+    settings = ModelSettings(fuel_s_per_kg=cfg.tyres.fuel_s_per_kg, ai_weight=st.ai_weight,
+                             game_prior_laps=st.game_prior_laps, game_deg_sd=st.game_deg_sd,
+                             fallback_deg_s_per_pct=st.fallback_deg_s_per_pct,
+                             pit_loss_s=st.pit_loss_s, sc_pit_loss_factor=st.sc_pit_loss_factor)
+    for t in ids:
+        m = build_model([r for r in rows if r["track_id"] == t], rows, [], None, settings)
+        print(f"\n{f.TRACKS.get(t, t)}  (in a race the game's own tyre figures are added)")
+        for c, cm in m.compounds.items():
+            print(f"  {COMPOUND_NAMES[c]:<8} wear {cm.wear_rate.value:4.1f} %/lap "
+                  f"[{cm.wear_rate.describe()}]")
+            print(f"  {'':<8} deg  {cm.deg.value:.3f} s per % "
+                  f"{'+ curve ' if cm.deg2 else ''}[{cm.deg.describe()}]   "
+                  f"offset {cm.offset.value:+.2f} s [{cm.offset.describe()}]")
+        print(f"  pit loss {m.pit_loss.value:.1f} s [{m.pit_loss.describe()}], "
+              f"safety car {m.pit_loss_sc.value:.1f} s [{m.pit_loss_sc.describe()}]")
+        if m.wear_ratio:
+            print(f"  you wear tyres {m.wear_ratio.value:.1f}x as fast as the AI")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="python -m engineer.features")
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -46,6 +80,8 @@ def main(argv: list[str] | None = None) -> int:
     q.add_argument("sql")
     sub.add_parser("tyres", help="your wear rate per lap by track and compound")
     sub.add_parser("corners", help="your average time and minimum speed per corner")
+    sp = sub.add_parser("strategy", help="what the strategy model has learned, per track")
+    sp.add_argument("track", nargs="?", help="part of a track name, e.g. austria")
     args = ap.parse_args(argv)
     cfg = load_config()
     out_dir = cfg.data_path / "features"
@@ -54,6 +90,8 @@ def main(argv: list[str] | None = None) -> int:
         laps, stints = tables.build(cfg.sessions_path, out_dir, tracks_dir=cfg.tracks_path)
         print(f"Wrote {laps} laps and {stints} stints to {out_dir}")
         return 0
+    if args.cmd == "strategy":
+        return strategy_report(cfg, args.track)
     if not (out_dir / "stints.parquet").exists():
         print("No feature tables yet. Run: uv run python -m engineer.features build")
         return 1

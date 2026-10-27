@@ -30,6 +30,8 @@ radio:
     tyre_temp: 10.0
     tyre_dropoff: 60.0
     corner: 30.0
+    strategy_plan: 20.0
+    undercut: 30.0
 
 tyres:                  # tyre coaching (Phase 3)
   enabled: true
@@ -49,6 +51,31 @@ corners:                # corner coaching (Phase 4)
   min_loss_s: 0.1       # only call a corner where you lost at least this much
   nearby_gap_s: 2.0     # compare with the car ahead/behind if within this gap, else your best lap
   max_wait_s: 25        # wait up to this long for a straight
+
+strategy:               # pit strategy (Phase 5): the plan, box calls, safety car stops
+  enabled: true
+  min_race_laps: 8      # no strategy calls in shorter races
+  announce_after_lap: 2 # first plan after this lap (once your wear rate is measured)
+  max_stops: 3
+  window_s: 1.0         # pit window: stop laps within this many seconds of the best plan
+  replan_laps: 2        # "plan change" when the stop moves this many laps (confirmed on 2 laps)
+  min_gain_s: 3.0       # an extra stop must save at least this much to become the plan
+  over_limit_s_per_pct: 1.0   # each lap past tyres.limit_pct costs this per % over
+  # Everything about the tyres is learned from your laps and the game's own figures. These are
+  # only used until there's data:
+  pit_loss_s: 22        # until a pit stop at the track has been measured
+  sc_pit_loss_factor: 0.5     # safety car stop = this share of the green one, until measured
+  fallback_deg_s_per_pct: 0.05   # time per % of wear when there's no data and no game figure
+  ai_weight: 0.5        # the AI field counts as half a driver's worth of laps for wear rates
+  game_prior_laps: 5    # the game's tyre life figures count as 5 laps of yours
+  game_deg_sd: 0.02     # how far off the game's time-per-% figure may be (s per %)
+  two_compound_rule: auto     # auto: races of two_compound_min_laps or more; or on / off
+  two_compound_min_laps: 10
+  assume_sets_per_compound: 2 # if the game sends no tyre sets
+  undercut_reminder: true     # "Norris behind has pitted, watch the undercut."
+  undercut_gap_s: 3.0
+  rejoin_traffic_s: 1.5 # "you'll come out behind X" when within this
+  max_wait_s: 20
 
 # Upload recordings to GitHub automatically when you stop `engineer run` (Ctrl+C).
 # Turn it on in config.local.yaml (your PC only, not shared):  upload: {auto: true}

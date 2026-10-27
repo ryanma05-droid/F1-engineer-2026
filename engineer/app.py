@@ -10,6 +10,7 @@ from typing import TextIO
 
 from engineer.analyzers.corners import CornerAnalyzer
 from engineer.analyzers.lap_delta import LapDeltaAnalyzer
+from engineer.analyzers.strategy import StrategyAnalyzer
 from engineer.analyzers.tyres import TyreAnalyzer
 from engineer.config import Config
 from engineer.console import LapPrinter, RadioPrinter
@@ -21,6 +22,7 @@ from engineer.bus import events as ev
 from engineer.radio.director import RadioDirector
 from engineer.state.track_maps import TrackMaps
 from engineer.state.traces import TraceRecorder
+from engineer.strategy.runner import InlineRunner
 
 
 @dataclass
@@ -33,11 +35,14 @@ class Engine:
     tyres: TyreAnalyzer
     traces: TraceRecorder
     corners: CornerAnalyzer
+    strategy: StrategyAnalyzer
 
 
 def build_engine(cfg: Config, out: TextIO | None = None,
-                 priors: WearPriors | None = None) -> Engine:
-    """priors: tyre wear history; by default read from data/features/stints.parquet."""
+                 priors: WearPriors | None = None, strategy_runner=None) -> Engine:
+    """priors: tyre wear history; by default read from data/features/stints.parquet.
+    strategy_runner: where strategy sims run. Default: in-process (replays and tests, so the same
+    packets always give the same calls); live play passes a WorkerRunner (a separate process)."""
     pipeline = Pipeline()
     bus, state = pipeline.bus, pipeline.state
     # Order matters: the bus calls handlers in subscription order, so the lap history must store
@@ -66,4 +71,10 @@ def build_engine(cfg: Config, out: TextIO | None = None,
     corners = CornerAnalyzer(bus, state, history, traces, TrackMaps(cfg.tracks_path), director,
                              cfg.corners, verbosity=cfg.radio.verbosity)
     pipeline.after_packet.append(corners.after_packet)
-    return Engine(pipeline, history, director, analyzer, features, tyres, traces, corners)
+    if strategy_runner is None:
+        strategy_runner = InlineRunner(cfg.features_path)
+    strategy = StrategyAnalyzer(bus, state, features, director, strategy_runner, cfg.strategy,
+                                cfg.tyres, verbosity=cfg.radio.verbosity)
+    pipeline.after_packet.append(strategy.after_packet)
+    return Engine(pipeline, history, director, analyzer, features, tyres, traces, corners,
+                  strategy)

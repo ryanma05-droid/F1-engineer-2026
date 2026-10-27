@@ -108,6 +108,19 @@ earlier, minimum speed 4 km/h down, full throttle 15 m later, exit 4 km/h down) 
 relative to its threshold is named. Offline, `features build` also writes `traces.parquet` and
 `corners.parquet`.
 
+## Modules (Phase 5)
+
+| Module | Role |
+| --- | --- |
+| `engineer/strategy/model.py` | `build_model()`: per compound, wear rate (% per lap, worst wheel), deg (s per % of wear, + a curve when the data shows one), offset vs mediums; pit loss green and under SC, measured from in/out laps. Each number blends sources by evidence: your laps, the AI (scaled by how much harder you are on tyres than the AI, learned across all tracks), the game's Tyre Sets figures (`game_tyre_info()`). |
+| `engineer/strategy/sim.py` | `simulate()`: every plan (0..max_stops stops, every lap, every set you have) by dynamic programming over (lap, sets used); two-compound rule; soft wear limit; pit window; best plan per stop count. ~5 ms for a 71-lap race. |
+| `engineer/strategy/runner.py` | `solve()` = history + session rows -> model -> sims. `InlineRunner` (replays, tests: deterministic) and `WorkerRunner` (live: a spawn worker process, results polled after each packet). |
+| `engineer/analyzers/strategy.py` | `StrategyAnalyzer`: re-plans after each of your laps; plan / plan change, box calls (one lap and half a lap before the pit entry, with the rejoin), safety car box/stay-out, undercut reminder. `status()` is the latest plan (for push-to-talk). |
+
+Inputs are lap rows with the columns of `laps.parquet`: the history table plus this session's
+`LapFeatures.to_row()`, so live and offline share one code path. Base pace and fuel are equal for
+every plan and drop out of the comparison.
+
 ## Data conventions
 
 - Wheel arrays are ordered **RL, RR, FL, FR** everywhere (as in the game).
@@ -142,7 +155,7 @@ Packets that arrive with session UID 0 (menus) are not recorded.
 | 2 | Lap feature records, stints, offline feature tables (Parquet/DuckDB). (built) |
 | 3 | Tyre coaching: wear status, laps left, warnings, temperatures, drop-off. (built) |
 | 4 | Distance traces (5 m bins), track maps, corner-by-corner coaching vs nearby cars. (built) |
-| 5 | Strategy simulation (pit timing, compound) in worker processes. |
+| 5 | Strategy simulation (pit timing, compound) in worker processes. (built) |
 | 6 | Push-to-talk: faster-whisper, intents, query tools. |
 
 (Phases 2–6 ordering is indicative; the kickoff prompt fixes only Phase 0 and Phase 1.)

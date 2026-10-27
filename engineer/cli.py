@@ -44,7 +44,9 @@ async def _run(cfg: Config, record: bool | None, voice: bool) -> None:
     if record is not None:
         cfg.record = record
 
-    engine = build_engine(cfg)
+    from engineer.strategy.runner import WorkerRunner
+    strategy_runner = WorkerRunner(cfg.features_path)     # strategy sims in their own process
+    engine = build_engine(cfg, strategy_runner=strategy_runner)
     pipeline = engine.pipeline
     audio = start_voice(cfg, engine) if voice else None
     if audio:
@@ -76,6 +78,7 @@ async def _run(cfg: Config, record: bool | None, voice: bool) -> None:
             recorder.close()
         if audio:
             audio.close()
+        strategy_runner.close()
         print(f"Stopped. {listener.packets_received} packets received, "
               f"{pipeline.bad_packets} rejected, {pipeline.unknown_packets} unknown id.")
         if recorder and cfg.upload.auto:

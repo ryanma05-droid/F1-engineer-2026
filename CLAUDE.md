@@ -22,7 +22,7 @@ Read `docs/architecture.md` (full design) and `PROGRESS.md` (what's done / open 
 
 0 foundation (accepted) · 1 radio director + Piper TTS + lap delta (done; voice works on Windows) ·
 2 features/feature tables (done) · 3 tyre coaching (done; checked on an 18-lap race) ·
-4 traces + corner coaching (built) · 5 strategy sim · 6 push-to-talk.
+4 traces + corner coaching (built) · 5 strategy sim (built) · 6 push-to-talk.
 
 ## Commands
 
@@ -36,6 +36,7 @@ uv run python -m engineer.radio.setup_voice --test   # download + hear the Piper
 uv run python -m engineer.features build             # recordings -> data/features/*.parquet
 uv run python -m engineer.features tyres             # your wear per lap by track/compound
 uv run python -m engineer.features corners           # your time per corner vs the AI
+uv run python -m engineer.features strategy austria     # what the strategy model has learned
 uv run python -m engineer.features query "select ..."   # SQL over laps/stints/traces/corners
 uv run python -m engineer.ingest.share --upload      # push the newest recording to its own branch
 uv run python -m engineer.ingest.share --pending     # push every recording not uploaded yet
@@ -66,6 +67,17 @@ uv run python -m engineer.ingest.share --pending     # push every recording not 
 - `data/tracks/<track>.json` is committed and hand-editable (official turn numbers). Without a
   file the map is learned from the first 2 clean laps and saved. The golden test uses
   `data/tracks/austria.json`.
+
+## Strategy (Phase 5)
+
+- Nothing about tyre behaviour is hard-coded: wear rate, deg and compound offsets are learned
+  from lap rows (history + this session) and the game's Tyre Sets figures, blended by evidence,
+  so your own laps take over as recordings pile up. `config.yaml` `strategy:` values are only
+  fallbacks until data exists. Keep it that way.
+- Strategy sims never run on the asyncio loop live: `cli.py` passes a `WorkerRunner`;
+  `build_engine` defaults to `InlineRunner` so replays and tests stay deterministic.
+- AI lap times are not used for deg (they barely slow with wear on real data); AI wear rates are
+  used, scaled by your wear ratio vs the AI.
 
 ## Settings and uploads
 

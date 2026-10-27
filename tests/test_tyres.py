@@ -23,7 +23,7 @@ def run(race, tyres: Tyres | None = None, priors=None, **frames_kw):
 
 
 def tyre_calls(radio):
-    return [r for r in radio if not r.startswith(("Lap ", "Thirty", "Lap invalid"))]
+    return [r for r in radio if not r.startswith(("Lap ", "Thirty", "Lap invalid", "Plan "))]
 
 
 def _status(**kw):
