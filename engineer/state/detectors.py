@@ -155,12 +155,12 @@ class EventDetector:
                 sector1_ms=b.sector1_ms[i],
                 sector2_ms=b.sector2_ms[i],
                 invalid=bool(b.invalid_latch[i]),  # this packet's flag belongs to the new lap
-                pit_in_lap=bool(b.pit_during_lap[i] or pit_now[i]),
+                pit_in_lap=bool(b.pit_during_lap[i] or (pit_now[i] and not pit_before[i])),
                 pit_out_lap=bool(b.pit_at_lap_start[i]),
                 since=t,
             )
             b.invalid_latch[i] = False
-            b.pit_during_lap[i] = pit_now[i]
+            b.pit_during_lap[i] = False
             b.pit_at_lap_start[i] = pit_now[i]
 
         # Finish line at the chequered flag: lap number stays, last-lap time changes.
@@ -176,7 +176,7 @@ class EventDetector:
                 sector1_ms=b.sector1_ms[i],
                 sector2_ms=b.sector2_ms[i],
                 invalid=bool(b.invalid_latch[i]),
-                pit_in_lap=bool(b.pit_during_lap[i] or pit_now[i]),
+                pit_in_lap=bool(b.pit_during_lap[i] or (pit_now[i] and not pit_before[i])),
                 pit_out_lap=bool(b.pit_at_lap_start[i]),
                 since=t,
             )
@@ -193,12 +193,14 @@ class EventDetector:
             self.pending_laps.pop(int(i), None)
             self.pending_sectors.pop(int(i), None)
             b.invalid_latch[i] = False
-            b.pit_during_lap[i] = pit_now[i]
+            b.pit_during_lap[i] = False
             b.pit_at_lap_start[i] = pit_now[i]
 
         # Latches for the lap in progress (after rollover handling, so they apply to the new lap).
         b.invalid_latch |= c.active & (c.current_lap_invalid == 1)
-        b.pit_during_lap |= c.active & pit_now
+        # In-lap = the car ENTERED the pit lane during the lap. An out-lap that starts in the
+        # pit lane (box after the line) is not also an in-lap.
+        b.pit_during_lap |= c.active & pit_now & ~pit_before
         new = c.active & np.isnan(b.lap)
         b.pit_at_lap_start[new] = pit_now[new]
 
