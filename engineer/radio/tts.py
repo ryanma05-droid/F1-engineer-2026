@@ -118,6 +118,10 @@ def _make_backend(settings: AudioSettings):
 def audio_main(calls, status, settings: AudioSettings) -> None:
     """Entry point of the audio process. `calls` receives (text, origin_t_ns) or None to stop.
     `status` receives ("ready", backend) and ("spoke", text, latency_s) messages."""
+    # Ctrl+C reaches every process in the console on Windows. Ignore it here: the main process
+    # shuts us down cleanly by sending None.
+    import signal
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
     backend = _make_backend(settings)
     status.put(("ready", backend.name))
     while True:
