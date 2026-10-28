@@ -1,8 +1,20 @@
+RADIO    30.9s  Warning for a collision.
 RADIO    77.7s  Lap one, one seventeen six.
+RADIO    80.0s  Great start, up nine places.  (held 2.3s)
+RADIO   101.1s  Lost P nine to Verstappen. Stay with Verstappen.  (held 4.3s)
+RADIO   104.8s  Great move on Verstappen, P eight.
+RADIO   115.5s  Nice pass on Sainz, P seven.  (held 2.7s)
+RADIO   123.9s  Two cars in one go, P six.  (held 3.1s)
 RADIO   147.3s  One oh nine six.
+RADIO   170.3s  Good job, that's one more, P six.  (held 0.4s)
+RADIO   193.3s  Great move on Hamilton, P five.  (held 5.0s)
 RADIO   216.9s  One oh nine five, same again, but gained in sector two.
 RADIO   224.3s  Tyres: front right worst at eleven percent, about four percent a lap.  (held 7.3s)
 RADIO   229.1s  Turn seven, losing two tenths to the car ahead, full throttle seventy five metres later.  (held 12.1s)
+RADIO   253.5s  Nice pass on Norris, P four.  (held 5.6s)
+RADIO   262.5s  Lovely move on Antonelli, P three.  (held 4.9s)
 RADIO   286.1s  One oh nine one, four tenths quicker, gained in sector one.
-RADIO   293.4s  Turn four, losing two tenths to the car ahead, minimum speed ten k p h down.  (held 7.3s)
+RADIO   293.4s  Last lap, P three. Bring it home.  (held 7.3s)
+RADIO   296.4s  Turn four, losing two tenths to the car ahead, minimum speed ten k p h down.  (held 10.3s)
 RADIO   355.2s  One oh nine one, same again, but gained in sector three.
+RADIO   355.3s  Chequered flag, P three. Up fifteen places from the grid, great drive.

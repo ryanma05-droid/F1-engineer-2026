@@ -70,6 +70,15 @@ class PitExit(Event):
 
 
 @dataclass(frozen=True)
+class GameEvent(Event):
+    """One of the game's own event messages, passed through for analyzers: OVTK overtake, PENA
+    penalty, FTLP fastest lap, SCAR safety car, CHQF chequered flag, COLL collision, ...
+    `details` are the spec's fields for that code (see f1_2025.EVENT_DETAIL_DTYPES)."""
+    code: str
+    details: dict
+
+
+@dataclass(frozen=True)
 class Flashback(Event):
     """The player used a flashback: state built from frames after this point is stale."""
     to_frame: int

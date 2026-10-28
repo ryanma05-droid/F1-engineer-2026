@@ -51,7 +51,7 @@ class Radio(BaseModel):
     cooldowns_s: dict[str, float] = {"lap_delta": 5.0, "tyre_status": 30.0, "tyre_warning": 10.0,
                                      "tyre_temp": 10.0, "tyre_dropoff": 60.0,
                                      "corner": 30.0, "strategy_plan": 20.0, "box": 0.0,
-                                     "undercut": 30.0}
+                                     "undercut": 30.0, "racecraft_defend": 30.0, "racecraft_attack": 60.0}
 
 
 class Tyres(BaseModel):
@@ -77,6 +77,24 @@ class Corners(BaseModel):
     back_off_after: int = Field(default=3, ge=1)     # same corner called this often: every other lap
     battle_gap_s: float = Field(default=1.0, ge=0)   # car this close ahead/behind: no coaching
     max_wait_s: float = Field(default=25.0, gt=0)
+
+
+class RaceCraft(BaseModel):
+    enabled: bool = True             # battles, passes, start/finish, penalties (races only)
+    start: bool = True
+    passes: bool = True
+    battles: bool = True
+    countdown: bool = True
+    finish: bool = True
+    fastest_lap: bool = True
+    penalties: bool = True
+    safety_car: bool = True          # "safety car in this lap"
+    damage: bool = True              # damage after contact
+    pass_hold_s: float = Field(default=4.0, ge=0)      # a pass must stick this long
+    defend_gap_s: float = Field(default=1.0, gt=0)     # car behind inside this and closing
+    clear_gap_s: float = Field(default=2.0, gt=0)      # ... until it drops back past this
+    attack_gap_s: float = Field(default=4.0, gt=0)     # car ahead within this ...
+    min_closing_s: float = Field(default=0.15, gt=0)   # ... and you close this much a lap
 
 
 class Strategy(BaseModel):
@@ -143,6 +161,7 @@ class Config(BaseModel):
     tyres: Tyres = Tyres()
     corners: Corners = Corners()
     strategy: Strategy = Strategy()
+    racecraft: RaceCraft = RaceCraft()
     voice: Voice = Voice()
     upload: Upload = Upload()
 

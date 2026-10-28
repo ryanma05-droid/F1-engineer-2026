@@ -78,6 +78,17 @@ uv run python -m engineer.ingest.share --pending     # push every recording not 
   file the map is learned from the first 2 clean laps and saved. The golden test uses
   `data/tracks/austria.json`.
 
+## Race craft
+
+- `engineer/analyzers/racecraft.py` (settings `racecraft:`): start summary, passes (from the
+  game's OVTK event, only once they've stuck 4 s, grouped when close together, wording rotates
+  in a fixed order), defending / attacking (only if you'd realistically catch them), countdown,
+  finish, fastest lap (when taken from someone else), your penalties (IDs from the PDF spec),
+  safety car in, damage after contact.
+- Game events reach analyzers as `ev.GameEvent` (`detectors.PASSED_THROUGH`).
+- The director says waiting HIGH calls on SessionEnded: the game stops sending 0.1 s after your
+  last lap, so the finish call would otherwise never be released.
+
 ## Strategy (Phase 5)
 
 - Nothing about tyre behaviour is hard-coded: wear rate, deg and compound offsets are learned

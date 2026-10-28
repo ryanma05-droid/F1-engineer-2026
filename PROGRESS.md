@@ -355,3 +355,18 @@ question on the CPU during that race), with drivers' names in its vocabulary.
 - [x] After 3 calls on a corner in a streak: every other lap, unless it gets worse
 - [x] Within 1 s of a car: only calls vs the car ahead (where to pass); none vs your own pace
 - [x] Golden calls unchanged (5-lap Austria)
+
+## Race craft calls (28 Oct)
+
+- [x] Start: "Great start, up nine places." / "Lost two places at the start, long way to go."
+- [x] Passes: "Great move on Norris, P four." only once a pass has stuck 4 s (the game reports
+      every swap: 472 in the 18-lap race), grouped ("Two cars in one go, P six"), varied wording;
+      "Lost P three to Leclerc. Stay with Leclerc."
+- [x] Defending: "Leclerc behind, eight tenths and closing, DRS range. Defend." then "Good
+      defending" when it drops back past 2 s
+- [x] Attacking, only when realistic: "Norris ahead, two point one. Catching three tenths a lap,
+      on Norris in about four laps. Keep pushing." / "DRS range on Norris. Go get Norris."
+- [x] Countdown (five laps to go, last lap), finish ("P one! You've won it!"), fastest lap
+      (when taken), penalties and warnings, "Safety car in this lap", damage after contact
+- [x] Golden calls updated (checked by hand against lap-end positions and the game's events)
+- [ ] Hear it in a race: is the amount right?

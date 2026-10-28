@@ -166,6 +166,7 @@ class RadioDirector:
         self.speaking_until = -math.inf
         self.last_said: dict[str, float] = {}
         bus.subscribe(ev.SessionStarted, self._on_session_started)
+        bus.subscribe(ev.SessionEnded, self._on_session_ended)
         bus.subscribe(ev.Flashback, self._on_flashback)
 
     # -- inputs --------------------------------------------------------------------------------
@@ -222,6 +223,21 @@ class RadioDirector:
         self.zones.reset()
         self.speaking_until = -math.inf
         self.last_said.clear()
+
+    def _on_session_ended(self, _e) -> None:
+        """The game stops sending packets right after the flag (0.1 s after your last lap on
+        real data), so nothing would release the queue again: say the important calls still
+        waiting (the finish call) now, in priority order. The audio process plays them one
+        after the other."""
+        t = self._now()
+        for call in sorted(self.queue, key=lambda c: (-c.priority, c.queued_at)):
+            if call.priority >= Priority.HIGH:
+                self.last_said[call.topic] = t
+                self.bus.publish(ev.RadioMessage(
+                    self.state.session_uid or 0, t, topic=call.topic, text=call.text,
+                    priority=call.priority, queued_at=call.queued_at,
+                    origin_t_ns=call.origin_t_ns))
+        self.queue.clear()
 
     def _on_flashback(self, _e) -> None:
         # Time jumped backwards: anything queued belongs to the rewound future.

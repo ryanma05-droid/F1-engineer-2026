@@ -23,7 +23,9 @@ def run(race, tyres: Tyres | None = None, priors=None, **frames_kw):
 
 
 def tyre_calls(radio):
-    return [r for r in radio if not r.startswith(("Lap ", "Thirty", "Lap invalid", "Plan "))]
+    return [r for r in radio if not r.startswith((
+        "Lap ", "Thirty", "Lap invalid", "Plan ", "Five laps to go", "Last lap", "P one",
+        "Chequered", "Great start", "Lost ", "DRS range"))]
 
 
 def _status(**kw):

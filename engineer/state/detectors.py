@@ -42,6 +42,10 @@ def _int_or_none(x: float) -> int | None:
     return None if x is None or np.isnan(x) else int(x)
 
 
+# Game events handed on to analyzers as ev.GameEvent (race craft calls).
+PASSED_THROUGH = {"OVTK", "PENA", "FTLP", "SCAR", "CHQF", "COLL", "RCWN", "DRSE", "DRSD"}
+
+
 @dataclass
 class _PendingLap:
     lap: int
@@ -119,6 +123,8 @@ class EventDetector:
     def _on_event(self, state: RaceState, rec: np.void) -> None:
         code, details = f.decode_event(rec)
         t = state.session_time or 0.0
+        if code in PASSED_THROUGH:
+            self.bus.publish(ev.GameEvent(state.session_uid, t, code=code, details=details))
         if code == "SEND":
             if self._ended_uid != state.session_uid:
                 self._ended_uid = state.session_uid

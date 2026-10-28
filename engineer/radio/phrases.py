@@ -469,3 +469,144 @@ def weather_phrase(weather: int | None, track_c: int | None, air_c: int | None) 
 def live_tyres_phrase(wheel: int, pct: float) -> str:
     """Before a lap is done: 'Front right at five percent, too early for a wear rate.'"""
     return _sentence(f"{WHEEL_NAMES[wheel]} at {say_percent(pct)}", "too early for a wear rate")
+
+
+# -- race craft (battles, passes, milestones) --------------------------------------------------
+
+def _places(n: int) -> str:
+    return "a place" if n == 1 else f"{number_words(min(n, 99))} places"
+
+
+def start_phrase(gained: int) -> str:
+    """After race lap 1. 'Great start, up eight places.' / 'Lost two places at the start, long
+    way to go.'"""
+    if gained > 0:
+        return _sentence(f"great start, up {_places(gained)}")
+    return _sentence(f"lost {_places(-gained)} at the start", "long way to go")
+
+
+_PASS_WORDS = ("great move", "nice pass", "lovely move", "good job, that's one more")
+
+
+def pass_phrase(names: list[str | None], position: int, n: int = 0) -> str:
+    """'Great move on Norris, P three.' / 'Two cars in one go, P five.'
+    n: how many pass calls so far; the wording rotates (in order, so replays stay the same)."""
+    if len(names) == 1:
+        words = _PASS_WORDS[n % len(_PASS_WORDS)]
+        if words.startswith("good job"):
+            return _sentence(words, say_position(position))
+        who = f" on {names[0]}" if names[0] else ""
+        return _sentence(f"{words}{who}", say_position(position))
+    return _sentence(f"{number_words(len(names))} cars in one go", say_position(position))
+
+
+def lost_place_phrase(name: str | None, position: int) -> str:
+    """'Lost P three to Leclerc. Stay with Leclerc.'"""
+    if not name:
+        return _sentence(f"lost {say_position(position - 1)}", "stay with them")
+    return f"{_sentence(f'lost {say_position(position - 1)} to {name}')} " \
+           f"{_sentence(f'stay with {name}')}"
+
+
+def defend_phrase(name: str | None, gap_ms: float) -> str:
+    """'Leclerc behind, eight tenths and closing, DRS range. Defend.'"""
+    who = name or "car"
+    drs = ", DRS range" if gap_ms <= 1000 else ""
+    return f"{_sentence(f'{who} behind, {say_gap(int(gap_ms))} and closing{drs}')} Defend."
+
+
+def breathing_room_phrase(name: str | None, gap_ms: float) -> str:
+    """'Leclerc dropping back, two seconds now. Good defending.'"""
+    who = name or "car behind"
+    return f"{_sentence(f'{who} dropping back, {say_gap(int(gap_ms))} now')} Good defending."
+
+
+def attack_phrase(name: str | None, gap_ms: float, closing_ms: float, laps_to_catch: int) -> str:
+    """'Norris ahead, two point one. Catching three tenths a lap, on Norris in about seven
+    laps. Keep pushing.'"""
+    who = name or "car ahead"
+    on = f"on {name}" if name else "on them"
+    laps = "next lap" if laps_to_catch <= 1 else f"in about {number_words(min(laps_to_catch, 99))} laps"
+    return (f"{_sentence(f'{who} ahead, {say_gap(int(gap_ms))}')} "
+            f"{_sentence(f'catching {say_gap(int(closing_ms))} a lap', f'{on} {laps}')} "
+            f"Keep pushing.")
+
+
+def drs_range_phrase(name: str | None) -> str:
+    """'DRS range on Norris. Go get Norris.' (names, not pronouns)"""
+    if not name:
+        return f"{_sentence('DRS range on the car ahead')} Go get it."
+    return f"{_sentence(f'DRS range on {name}')} {_sentence(f'go get {name}')}"
+
+
+def laps_to_go_phrase(laps: int, position: int, ahead: str | None, gap_ms: float | None) -> str:
+    """'Five laps to go, P four. Norris ahead, one point two.' / 'Last lap, P four. Bring it
+    home.'"""
+    head = "last lap" if laps <= 1 else f"{number_words(laps)} laps to go"
+    first = _sentence(head, say_position(position))
+    if laps <= 1:
+        return f"{first} Bring it home."
+    if ahead and gap_ms is not None and gap_ms < 5000:
+        return f"{first} {_sentence(f'{ahead} ahead, {say_gap(int(gap_ms))}')}"
+    return first
+
+
+def finish_phrase(position: int, gained_from_grid: int | None) -> str:
+    """'P one! You've won it! Brilliant drive.' / 'Chequered flag, P three. Up six from the grid,
+    great drive.' / 'Chequered flag, P twelve. Tough one, we'll learn from it.'"""
+    if position == 1:
+        return "P one! You've won it! Brilliant drive."
+    first = _sentence("chequered flag", say_position(position))
+    if gained_from_grid is not None and gained_from_grid > 0:
+        return f"{first} {_sentence(f'up {_places(gained_from_grid)} from the grid', 'great drive')}"
+    if position <= 3:
+        return f"{first} Podium. Great drive."
+    if gained_from_grid is not None and gained_from_grid < 0:
+        return f"{first} Tough one, we'll learn from it."
+    return f"{first} Good job."
+
+
+def fastest_lap_phrase(lap_time_s: float) -> str:
+    """'Fastest lap of the race, one oh nine one.'"""
+    return _sentence("fastest lap of the race", say_lap_time(int(lap_time_s * 1000)))
+
+
+# Penalty and infringement IDs from the F1 25 data spec (Data_Output_from_F1_25_v3.pdf).
+PENALTY_TYPES = {0: "drive through penalty", 1: "stop go penalty", 2: "grid penalty",
+                 4: "time penalty", 5: "warning", 6: "disqualified", 17: "black flag timer"}
+INFRINGEMENTS = {
+    3: "a collision", 4: "a collision", 5: "not giving the place back",
+    6: "not giving the places back", 7: "cutting a corner", 8: "an illegal overtake",
+    9: "an illegal overtake", 11: "ignoring blue flags", 12: "ignoring yellow flags",
+    17: "pit lane speeding", 21: "multiple warnings", 22: "approaching disqualification",
+    27: "track limits", 28: "track limits", 29: "track limits", 34: "a jump start",
+    36: "overtaking under the safety car", 37: "safety car pace", 38: "VSC pace",
+    52: "gaining time illegally",
+}
+
+
+def penalty_phrase(penalty_type: int, infringement: int, seconds: int | None) -> str | None:
+    """'Warning for track limits.' / 'Five second time penalty, for a collision.' None for the
+    lap-invalidated notices (the lap call already says it) and other admin."""
+    kind = PENALTY_TYPES.get(penalty_type)
+    if kind is None:
+        return None
+    why = INFRINGEMENTS.get(infringement)
+    if penalty_type == 4 and seconds and seconds < 255:
+        kind = f"{number_words(seconds)} second time penalty"
+    if why is None:
+        return _sentence(kind)
+    return _sentence(f"{kind}, for {why}" if penalty_type != 5 else f"warning for {why}")
+
+
+def safety_car_in_phrase(kind: str) -> str:
+    """SCAR 'returning': 'Safety car in this lap, get the tyres ready.' / 'VSC ending, get
+    ready.'"""
+    if kind == "virtual safety car":
+        return "VSC ending, get ready."
+    return _sentence("safety car in this lap", "get the tyres ready")
+
+
+def contact_damage_phrase(parts: list[tuple[str, float]]) -> str:
+    """After contact: 'Front left wing damage, twenty percent.'"""
+    return _sentence(*[f"{name} damage, {say_percent(pct)}" for name, pct in parts])

@@ -32,6 +32,8 @@ radio:
     corner: 30.0
     strategy_plan: 20.0
     undercut: 30.0
+    racecraft_defend: 30.0
+    racecraft_attack: 60.0
 
 tyres:                  # tyre coaching (Phase 3)
   enabled: true
@@ -55,6 +57,23 @@ corners:                # corner coaching (Phase 4)
   back_off_after: 3     # after this many calls in a row on a corner: every other lap, unless worse
   battle_gap_s: 1.0     # a car this close ahead or behind: no corner coaching (you're busy)
   max_wait_s: 25        # wait up to this long for a straight
+
+racecraft:              # the human side: battles, passes, start/finish, penalties (races only)
+  enabled: true
+  start: true           # "Great start, up eight places."
+  passes: true          # "Great move on Norris, P three." / "Lost P three to Leclerc."
+  battles: true         # defending / "catching three tenths a lap" / "DRS range on Norris"
+  countdown: true       # five laps to go, last lap
+  finish: true          # "Chequered flag, P three. Up six from the grid, great drive."
+  fastest_lap: true     # when you take fastest lap from someone else
+  penalties: true       # "Warning for track limits." / "Five second time penalty, ..."
+  safety_car: true      # "Safety car in this lap, get the tyres ready."
+  damage: true          # wing/floor damage after contact
+  pass_hold_s: 4        # a pass is only called once it has stuck this long
+  defend_gap_s: 1.0     # car behind inside this and closing: "Defend."
+  clear_gap_s: 2.0      # ... until it drops back past this: "Good defending."
+  attack_gap_s: 4.0     # car ahead within this, and
+  min_closing_s: 0.15   # you're closing this much a lap, and you'd catch it before the flag
 
 strategy:               # pit strategy (Phase 5): the plan, box calls, safety car stops
   enabled: true
