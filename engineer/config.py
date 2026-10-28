@@ -72,6 +72,7 @@ class Corners(BaseModel):
     enabled: bool = True
     min_loss_s: float = Field(default=0.1, gt=0)      # only call a corner losing at least this
     nearby_gap_s: float = Field(default=2.0, ge=0)    # compare with the car ahead/behind within
+    focus_after_laps: int = Field(default=2, ge=2)   # same corner losing this many laps: priority
     max_wait_s: float = Field(default=25.0, gt=0)
 
 

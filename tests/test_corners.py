@@ -139,3 +139,40 @@ def test_corner_calls_can_be_switched_off(tmp_path):
     race = FakeRace({0: [30000, 30000, 30000, 33000]}, corners=CORNERS, extra_packets=False)
     _eng, radio = run(race, tmp_path, Corners(enabled=False))
     assert not [c for c in radio if c.startswith("Turn")]
+
+
+def test_a_corner_lost_on_consecutive_laps_gets_priority_and_says_so(tmp_path):
+    from engineer.radio.director import Priority
+
+    eng, _ = run(FakeRace({0: [30000]}, corners=CORNERS, extra_packets=False), tmp_path,
+                 duration_ms=1000)
+    ca = eng.corners
+    speed, brake, throttle = profile()
+    ref = trace(speed, brake, throttle)
+    ca.track_map = TrackMap(10, 2000.0, detect_corners([ref], 2000.0))
+    said = []
+    ca.director.submit = lambda call: said.append((call.text, call.priority))
+
+    def lap(n, speed_drop_second=0.0):
+        sp = speed.copy()
+        sp[80:120] -= 20                            # turn one slower every lap (the habit)
+        sp[280:320] -= speed_drop_second            # a one-off bigger loss in turn two
+        ca._compare(trace(sp, brake, throttle, lap=n), ref, "best")
+
+    lap(2)
+    assert said[-1][1] == Priority.LOW and "running" not in said[-1][0]
+    lap(3)
+    text, prio = said[-1]
+    assert prio == Priority.NORMAL and "second lap running" in text
+    # Lap 4: a one-off bigger loss in the second corner doesn't steal the call from the habit.
+    lap(4, speed_drop_second=60.0)
+    text, prio = said[-1]
+    assert prio == Priority.NORMAL and text.startswith("Turn one, third lap running")
+    assert ca.streak(1) == 3 and ca.streak(2) == 1
+
+
+def test_streak_phrase():
+    assert phrases.corner_phrase(0.2, "turn four", "best", ("brake_early", 10.0), streak=3) == \
+        "Turn four, third lap running, two tenths off your best, braking ten metres earlier."
+    assert phrases.corner_phrase(0.2, "turn four", "ahead", streak=7) == \
+        "Turn four, lap after lap, losing two tenths to the car ahead."

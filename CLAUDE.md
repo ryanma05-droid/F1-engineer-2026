@@ -66,6 +66,9 @@ uv run python -m engineer.ingest.share --pending     # push every recording not 
 
 - Traces come from `TraceRecorder` (wired in `build_engine`); compare laps only through
   `corner_deltas()` so live calls, tables and push-to-talk agree.
+- Habits first: a corner losing time on `corners.focus_after_laps` (2) coached laps in a row is
+  called ahead of bigger one-off losses, at NORMAL priority, as "third lap running", naming the
+  cause that recurs over the streak (`_habit_reason`), not the biggest one this lap.
 - `data/tracks/<track>.json` is committed and hand-editable (official turn numbers). Without a
   file the map is learned from the first 2 clean laps and saved. The golden test uses
   `data/tracks/austria.json`.

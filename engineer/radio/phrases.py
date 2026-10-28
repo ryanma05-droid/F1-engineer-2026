@@ -205,14 +205,19 @@ _REASONS = {
 }
 
 
+_STREAK = {2: "second lap running", 3: "third lap running", 4: "fourth lap running",
+           5: "fifth lap running"}
+
+
 def corner_phrase(delta_s: float, corner_name: str, against: str,
                   reason: tuple[str, float] | None = None, verbosity: str = "normal",
-                  again: bool = False) -> str:
+                  again: bool = False, streak: int = 0) -> str:
     """against: "ahead", "behind" or "best".
     'Turn three, losing two tenths to the car ahead, braking ten metres earlier.'
     'Turn four, three tenths off your best, minimum speed eight k p h down.'
     'Gaining a tenth on the car ahead through turn nine.' (delta_s < 0)
-    again=True (same corner as the last call): 'Turn four again, ...'"""
+    again=True (same corner as the last call): 'Turn four again, ...'
+    streak=3 (lost time there 3 laps in a row): 'Turn four, third lap running, ...'"""
     gap = say_gap(int(round(delta_s * 1000)))
     if delta_s < 0:
         if against == "best":
@@ -220,7 +225,11 @@ def corner_phrase(delta_s: float, corner_name: str, against: str,
         return _sentence(f"gaining {gap} on the car {against} through {corner_name}")
     loss = f"{gap} off your best" if against == "best" else f"losing {gap} to the car {against}"
     why = "" if reason is None or verbosity == "terse" else _REASONS[reason[0]](reason[1])
-    return _sentence(f"{corner_name} again" if again else corner_name, loss, why)
+    if streak >= 2:
+        head = f"{corner_name}, {_STREAK.get(streak, 'lap after lap')}"
+    else:
+        head = f"{corner_name} again" if again else corner_name
+    return _sentence(head, loss, why)
 
 
 # -- strategy (Phase 5) ------------------------------------------------------------------------

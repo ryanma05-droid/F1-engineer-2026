@@ -334,3 +334,13 @@
 Also added: gap to a named driver, gap to the leader / who's leading, "where am I gaining",
 damage, best lap, weather, "what lap is it". Speech model now `base.en` (small.en took ~3 s per
 question on the CPU during that race), with drivers' names in its vocabulary.
+
+### Corner coaching: habits first (28 Oct)
+
+- [x] A corner that loses time 2+ coached laps running is called before a bigger one-off loss,
+      at NORMAL priority (was LOW), as "Turn four, third lap running, ..."
+- [x] During a streak the cause named is the one that keeps recurring, not the biggest this lap.
+      18-lap Austria replay: turn four lost time 11 laps running; the cause named was exit speed
+      on 9 of 11 laps (it used to change almost every lap)
+- [ ] Turn four is now called every lap of a long streak: see the open proposals (tyre-matched
+      reference, back off after 3 calls, confirm when fixed)

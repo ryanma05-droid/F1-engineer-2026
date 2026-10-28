@@ -212,10 +212,9 @@ class CornerDelta:
         """Positive = slower than the reference through this corner."""
         return self.mine.time_s - self.ref.time_s
 
-    def reason(self) -> tuple[str, float] | None:
-        """The most likely cause of a loss: ("brake_early", metres), ("min_speed", kph),
-        ("throttle_late", metres) or ("exit_speed", kph). Each must pass its threshold; if several
-        do, the biggest relative to its threshold wins (10 kph down beats braking 10 m early)."""
+    def reasons(self) -> dict[str, float]:
+        """Every cause of a loss that passes its threshold: kind -> amount. Kinds:
+        "brake_early" (metres), "min_speed" (kph), "throttle_late" (metres), "exit_speed" (kph)."""
         m, r = self.mine, self.ref
         found = []
         if m.brake_m is not None and r.brake_m is not None:
@@ -224,11 +223,16 @@ class CornerDelta:
         if m.full_throttle_m is not None and r.full_throttle_m is not None:
             found.append(("throttle_late", m.full_throttle_m - r.full_throttle_m))
         found.append(("exit_speed", r.exit_speed_kph - m.exit_speed_kph))
-        scored = [(v / REASON_THRESHOLDS[k], k, v) for k, v in found if v >= REASON_THRESHOLDS[k]]
-        if not scored:
+        return {k: v for k, v in found if v >= REASON_THRESHOLDS[k]}
+
+    def reason(self) -> tuple[str, float] | None:
+        """The most likely cause of a loss. If several pass their thresholds, the biggest
+        relative to its threshold wins (10 kph down beats braking 10 m early)."""
+        found = self.reasons()
+        if not found:
             return None
-        _score, kind, value = max(scored)
-        return kind, value
+        kind = max(found, key=lambda k: found[k] / REASON_THRESHOLDS[k])
+        return kind, found[kind]
 
 
 def corner_deltas(trace: LapTrace, ref: LapTrace, track_map: TrackMap) -> list[CornerDelta]:

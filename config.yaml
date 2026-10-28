@@ -50,6 +50,7 @@ corners:                # corner coaching (Phase 4)
   enabled: true
   min_loss_s: 0.1       # only call a corner where you lost at least this much
   nearby_gap_s: 2.0     # compare with the car ahead/behind if within this gap, else your best lap
+  focus_after_laps: 2   # a corner losing time this many laps in a row is called first, with priority
   max_wait_s: 25        # wait up to this long for a straight
 
 strategy:               # pit strategy (Phase 5): the plan, box calls, safety car stops
