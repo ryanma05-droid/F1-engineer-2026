@@ -328,3 +328,30 @@ def test_new_answers_from_the_abu_dhabi_race(tmp_path):
     assert got[7][0] == "best_lap" and got[7][1].startswith("Your best is thirty")
     assert got[8][0] == "gap_leader" and got[8][1].startswith("Norris leads")
     assert got[9] == ("weather", "Clear, track zero degrees, air zero.")
+
+
+def test_welcome_is_said_once_ever(tmp_path):
+    from engineer.cli import welcome
+    from engineer.intro import welcome_text
+
+    class FakeAudio:
+        backend = "piper"
+
+        def __init__(self):
+            self.said = []
+
+        def say(self, text, origin_t_ns=None):
+            self.said.append(text)
+
+    cfg = Config(data_dir=str(tmp_path))
+    silent = FakeAudio()
+    silent.backend = "null"
+    welcome(cfg, silent, push_to_talk=True)
+    assert silent.said == []                              # no voice: kept for later
+    a = FakeAudio()
+    welcome(cfg, a, push_to_talk=True)
+    assert a.said == [welcome_text("LB")] and "Hold L B any time" in a.said[0]
+    b = FakeAudio()
+    welcome(cfg, b, push_to_talk=True)                    # second start: never again
+    assert b.said == []
+    assert "Hold" not in welcome_text(None)               # console players: no push-to-talk

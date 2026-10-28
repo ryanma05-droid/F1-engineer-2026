@@ -70,6 +70,16 @@ def start_ptt(cfg: Config, engine):
     return ptt, speech
 
 
+def welcome(cfg: Config, audio, push_to_talk: bool) -> None:
+    """The first time the engineer is started, it introduces itself; never again."""
+    from engineer.intro import WELCOME, OnceStore, welcome_text
+    store = OnceStore(cfg.data_path / "once.json")
+    if store.done(WELCOME) or getattr(audio, "backend", None) in (None, "null"):
+        return                     # said before, or no voice yet: keep it for when it works
+    audio.say(welcome_text(cfg.voice.button if push_to_talk else None))
+    store.mark(WELCOME)
+
+
 async def _ptt_loop(engine, ptt, speech) -> None:
     """Poll the button every 20 ms and pass what was heard to the engine as a question."""
     state, bus = engine.pipeline.state, engine.pipeline.bus
@@ -100,6 +110,8 @@ async def _run(cfg: Config, record: bool | None, voice: bool, ptt_on: bool = Tru
     if audio:
         audio.say("Radio check.")
     ptt = start_ptt(cfg, engine) if ptt_on and cfg.voice.enabled else None
+    if audio:
+        welcome(cfg, audio, ptt is not None)
     ptt_task = asyncio.create_task(_ptt_loop(engine, *ptt)) if ptt else None
     listener = UdpListener(cfg.listen.host, cfg.listen.port,
                            forward=[(t.host, t.port) for t in cfg.forward])

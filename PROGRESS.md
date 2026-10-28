@@ -370,3 +370,12 @@ question on the CPU during that race), with drivers' names in its vocabulary.
       (when taken), penalties and warnings, "Safety car in this lap", damage after contact
 - [x] Golden calls updated (checked by hand against lap-end positions and the game's events)
 - [ ] Hear it in a race: is the amount right?
+
+## One-time welcome (28 Oct)
+
+- [x] The first time the engineer starts (with a working voice), after "Radio check": "This is
+      your race engineer. I'll call lap times, tyres, strategy and corners, and keep you posted
+      in battles. Hold L B any time to ask me something, like how are the tyres. Good luck out
+      there." Never again (data/once.json). No L B line without push-to-talk (console players)
+- Not on the grid: real races start only ~6 s before lights out (SSTA, then the five lights
+  straight away; the game's clock stays at 0 until lights out), so it would talk over the start

@@ -89,6 +89,10 @@ uv run python -m engineer.ingest.share --pending     # push every recording not 
 - The director says waiting HIGH calls on SessionEnded: the game stops sending 0.1 s after your
   last lap, so the finish call would otherwise never be released.
 
+- One-time welcome at start-up (`engineer/intro.py`, `cli.welcome`, remembered in
+  data/once.json), not on the grid: a race session starts only ~6 s before lights out, and the
+  game's session time stays 0.0 until lights out (real recordings).
+
 ## Strategy (Phase 5)
 
 - Nothing about tyre behaviour is hard-coded: wear rate, deg and compound offsets are learned
