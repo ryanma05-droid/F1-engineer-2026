@@ -131,8 +131,16 @@ class QuestionAnswerer:
         return phrases._sentence("copy, quiet. Box calls only")
 
     def _a_talk(self) -> str:
-        self.director.quiet = False
+        self.engine.set_tempo(self.engine.default_tempo)
         return phrases._sentence("copy, back to normal")
+
+    def _a_tempo_chatty(self) -> str:
+        self.engine.set_tempo("chatty")
+        return phrases._sentence("copy, I'll keep you posted on everything")
+
+    def _a_tempo_terse(self) -> str:
+        self.engine.set_tempo("terse")
+        return phrases._sentence("copy, essentials only")
 
     def _a_tyres(self) -> str:
         st = self.engine.tyres.status()

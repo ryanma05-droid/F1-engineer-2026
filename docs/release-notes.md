@@ -5,7 +5,10 @@
 1. Download **RaceEngineer-Setup-*.exe** below and run it. If Windows says "Windows protected
    your PC", click **More info**, then **Run anyway** (the app isn't code-signed).
 2. The first start asks where you play (PC, or Xbox/PlayStation) and downloads the engineer's
-   voice. On PC you can also turn on questions (hold LB on an Xbox controller).
+   voice. Then the app window opens and asks which controller you use (PlayStation: hold
+   **L1** to ask the engineer something; Xbox: hold **LB**) and how much the engineer should
+   talk (Quiet, Normal or Chatty; change it mid-race by saying "talk more" or "keep it short").
+   The window shows your race live, the team radio, and your driver report.
 3. Turn on telemetry in F1 25 (Game Options > Settings > Telemetry Settings). The settings are
    shown at the end of setup, and in Start menu > Race Engineer > Telemetry guide.
 4. When Windows asks about the firewall, allow it on **Private networks**.

@@ -40,6 +40,26 @@ class Engine:
     strategy: StrategyAnalyzer
     answers: QuestionAnswerer | None = None
     racecraft: RaceCraftAnalyzer | None = None
+    default_tempo: str = "normal"        # what "back to normal" returns to (radio.verbosity)
+
+    @property
+    def tempo(self) -> str:
+        """How much the engineer says: "terse" (shown as Quiet), "normal" or "chatty"."""
+        return self.lap_delta.verbosity
+
+    def set_tempo(self, tempo: str) -> None:
+        """Change how much the engineer says, live (the app window or "talk more" on the radio).
+        Also ends radio silence ("be quiet")."""
+        if tempo not in TEMPOS:
+            raise ValueError(f"unknown tempo {tempo!r}; one of {', '.join(TEMPOS)}")
+        for part in (self.lap_delta, self.tyres, self.corners, self.strategy, self.answers):
+            if part is not None:
+                part.verbosity = tempo
+        self.director.tempo = tempo
+        self.director.quiet = False
+
+
+TEMPOS = ("terse", "normal", "chatty")
 
 
 def build_engine(cfg: Config, out: TextIO | None = None,
@@ -88,6 +108,8 @@ def build_engine(cfg: Config, out: TextIO | None = None,
     # process; in tests published directly), so they're answered the same way everywhere.
     log_path = cfg.ptt_path / "questions.jsonl" if cfg.voice.log else None
     engine.racecraft = racecraft
+    engine.default_tempo = cfg.radio.verbosity
+    director.tempo = cfg.radio.verbosity
     engine.answers = QuestionAnswerer(bus, engine, log_path, verbosity=cfg.radio.verbosity,
                                       max_answer_delay_s=cfg.voice.max_answer_delay_s)
     return engine

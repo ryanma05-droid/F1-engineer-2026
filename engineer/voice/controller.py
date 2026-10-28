@@ -1,4 +1,5 @@
-"""The push-to-talk button: a button on an Xbox controller, read through XInput.
+"""The push-to-talk button: LB on an Xbox controller (XInput) or L1 on a PlayStation controller
+(the winmm joystick API).
 
 XInput is how Windows talks to Xbox controllers, and any number of programs can read the same
 controller at once, so F1 25 keeps working with it. We only read the buttons (no rumble, no
@@ -79,6 +80,106 @@ class XInputButton:
                     and self._state.Gamepad.wButtons & self.mask:
                 return True
         return False
+
+
+# winmm joystick API (Windows multimedia): how Windows sees DirectInput game controllers such as
+# the PlayStation DualShock 4 and DualSense. Their buttons arrive in this order (1-based):
+# Square, Cross, Circle, Triangle, L1, R1, L2, R2, Share/Create, Options, L3, R3, PS, Touchpad.
+PS_BUTTONS = {"SQUARE": 1, "CROSS": 2, "CIRCLE": 3, "TRIANGLE": 4, "L1": 5, "R1": 6, "L2": 7,
+              "R2": 8, "SHARE": 9, "CREATE": 9, "OPTIONS": 10, "L3": 11, "R3": 12}
+# PlayStation button -> the Xbox button in the same place, for when Steam Input (or DS4Windows)
+# presents the PlayStation controller as an Xbox one.
+PS_TO_XBOX = {"L1": "LB", "R1": "RB", "CROSS": "A", "CIRCLE": "B", "SQUARE": "X",
+              "TRIANGLE": "Y", "OPTIONS": "START", "SHARE": "BACK", "CREATE": "BACK",
+              "L3": "LS", "R3": "RS"}
+JOY_RETURNBUTTONS = 0x80
+MAX_JOYSTICKS = 16
+RESCAN_S = 2.0
+
+
+class _JoyInfoEx(ctypes.Structure):
+    _fields_ = [("dwSize", ctypes.c_uint), ("dwFlags", ctypes.c_uint),
+                ("dwXpos", ctypes.c_uint), ("dwYpos", ctypes.c_uint), ("dwZpos", ctypes.c_uint),
+                ("dwRpos", ctypes.c_uint), ("dwUpos", ctypes.c_uint), ("dwVpos", ctypes.c_uint),
+                ("dwButtons", ctypes.c_uint), ("dwButtonNumber", ctypes.c_uint),
+                ("dwPOV", ctypes.c_uint), ("dwReserved1", ctypes.c_uint),
+                ("dwReserved2", ctypes.c_uint)]
+
+
+class PlayStationButton:
+    """A button on a PlayStation controller (DualShock 4 / DualSense, USB or Bluetooth), read
+    through the winmm joystick API; also accepts the matching Xbox button, in case Steam Input
+    shows the controller as an Xbox one. Reading is shared, like XInput: the game keeps working.
+
+    Not yet tried on a real DualSense: if L1 isn't picked up, `voice.ps_button_number` sets the
+    button number (python -m engineer.voice.setup shows which number lights up)."""
+
+    def __init__(self, button: str = "L1", number: int | None = None):
+        name = button.upper()
+        if number is None and name not in PS_BUTTONS:
+            raise ValueError(f"unknown button {button!r}; one of {', '.join(PS_BUTTONS)}")
+        self.mask = 1 << ((number or PS_BUTTONS[name]) - 1)
+        self.xbox = XInputButton(PS_TO_XBOX[name]) if name in PS_TO_XBOX else None
+        self._winmm = None
+        if sys.platform == "win32":
+            try:
+                self._winmm = ctypes.windll.winmm
+            except OSError:
+                self._winmm = None
+        self._info = _JoyInfoEx()
+        self._info.dwSize = ctypes.sizeof(_JoyInfoEx)
+        self._info.dwFlags = JOY_RETURNBUTTONS
+        self._ids: list[int] = []
+        self._scanned = -RESCAN_S
+
+    @property
+    def available(self) -> bool:
+        return self._winmm is not None
+
+    def _read(self, i: int) -> int | None:
+        if self._winmm.joyGetPosEx(i, ctypes.byref(self._info)) != 0:
+            return None
+        return self._info.dwButtons
+
+    def connected(self) -> list[int]:
+        if self._winmm is None:
+            return []
+        return [i for i in range(MAX_JOYSTICKS) if self._read(i) is not None]
+
+    def pressed(self, now: float | None = None) -> bool:
+        if self.xbox is not None and self.xbox.pressed():
+            return True
+        if self._winmm is None:
+            return False
+        import time
+        now = time.monotonic() if now is None else now
+        # Asking about an empty joystick slot is slow, so the connected ones are looked up again
+        # only every RESCAN_S; in between just those are read.
+        if now - self._scanned >= RESCAN_S:
+            self._ids, self._scanned = self.connected(), now
+        return any((b := self._read(i)) is not None and b & self.mask for i in self._ids)
+
+
+def _button_name(controller_type: str, button: str | None) -> str:
+    """The configured button if it exists on this kind of controller, else LB / L1 (an "LB" left
+    in a settings file doesn't apply to a PlayStation controller)."""
+    names = PS_BUTTONS if controller_type == "playstation" else BUTTONS
+    if button and button.upper() in names:
+        return button.upper()
+    return "L1" if controller_type == "playstation" else "LB"
+
+
+def make_button(controller_type: str, button: str | None = None,
+                controller: int | None = None, ps_number: int | None = None):
+    """The push-to-talk button for an Xbox or PlayStation controller (LB / L1 by default)."""
+    name = _button_name(controller_type, button)
+    if controller_type == "playstation":
+        return PlayStationButton(name, ps_number)
+    return XInputButton(name, controller)
+
+
+def button_label(controller_type: str, button: str | None = None) -> str:
+    return _button_name(controller_type, button)
 
 
 class PushToTalk:

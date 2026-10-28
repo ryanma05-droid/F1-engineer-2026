@@ -400,3 +400,22 @@ today, it builds one in a background process (`report.daily`, `report.open_when_
 - PDF: printed by Edge (comes with Windows) or Chrome headless; no browser: the HTML is kept.
 - First report from the 3 real races: quickest in slow corners onto straights (Austria T3), the
   biggest habit is winning the entry and losing the exit in medium corners (~0.18 s/lap).
+
+## App window (28 Oct, for 0.1.2)
+
+`engineer run` (and the installed app) now opens an app window (Edge/Chrome app mode, a page
+served on this PC only) while it listens and records:
+- First time: which controller (PlayStation: hold L1 / Xbox: hold LB / no push to talk), then the
+  engineer tempo (Quiet / Normal / Chatty) with the tip that it can be changed by voice.
+- Live: session (track, lap, position, last/best lap, tyres), connection and recording status,
+  team radio feed, push-to-talk status (lights up while the button is held) and recent questions,
+  tempo switch.
+- Driver report: headline numbers, the major themes as cards (cost per lap, trend, what to try,
+  where it shows), strengths, tracks, corner types, and the full PDF; "Build new report".
+- Settings: controller, default tempo, telemetry steps. Changes apply live and are saved to
+  config.local.yaml.
+- Tempo by voice: "talk more" (chatty), "keep it short" (quiet), "back to normal". The Quiet
+  tempo now also leaves out low-priority extras (routine tyre status, one-off corner tips,
+  race-craft chatter) but keeps strategy plans and tyre warnings.
+- Open question: the PlayStation L1 reading (winmm, button 5) is untested on a real
+  DualSense/DualShock; Steam Input users are covered by also reading LB.

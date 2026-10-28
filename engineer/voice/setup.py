@@ -50,10 +50,11 @@ def main(argv: list[str] | None = None) -> int:
               f"-> {match(text).name}")
         return 0
 
-    from engineer.voice.controller import PushToTalk, XInputButton
-    button = XInputButton(v.button, v.controller)
+    from engineer.voice.controller import PushToTalk, button_label, make_button
+    button = make_button(v.controller_type, v.button, v.controller, v.ps_button_number)
+    label = button_label(v.controller_type, v.button)
     if not button.available:
-        print("XInput not available (push-to-talk needs Windows and an Xbox controller).")
+        print("No controller support here (push-to-talk needs Windows).")
         return 1
     print(f"Loading {v.model} (the first time downloads it: ~150 MB for base.en)...",
           flush=True)
@@ -63,7 +64,7 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     print(f"Ready: {speech.description}")
     print(f"Controllers connected: {button.connected() or 'none'}")
-    print(f"Hold {v.button}, ask a question, let go. Ctrl+C to stop.")
+    print(f"Hold {label}, ask a question, let go. Ctrl+C to stop.")
     print("Tip: test with F1 25 running (in a session): that's when speed matters.")
     ptt = PushToTalk(button, lambda: (speech.press(), print("  listening...", flush=True)),
                      lambda: (speech.release(), print("  working it out...", flush=True)),

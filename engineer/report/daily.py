@@ -91,17 +91,18 @@ def generate(cfg: Config, progress=print) -> Path | None:
     return result
 
 
-def _command(config_path: Path | None) -> list[str]:
+def _command(config_path: Path | None, now: bool = False) -> list[str]:
+    """now=False: the daily check (opens when ready); now=True: build now, from the app window,
+    which shows it (so it isn't opened)."""
     if FROZEN:                                   # the installed app: RaceEngineer.exe
-        return [sys.executable, "--daily-report"]
-    cmd = [sys.executable, "-m", "engineer.report", "--daily"]
+        return [sys.executable, "--report" if now else "--daily-report"]
+    cmd = [sys.executable, "-m", "engineer.report"] + (["--no-open"] if now else ["--daily"])
     return cmd + ["--config", str(Path(config_path).resolve())] if config_path else cmd
 
 
-def start_in_background(cfg: Config, config_path: Path | None = None) -> bool:
-    """Called when `engineer run` stops: if a report is due, build it in its own process."""
-    if not cfg.report.daily or not due(cfg):
-        return False
+def spawn(cfg: Config, config_path: Path | None = None, now: bool = False):
+    """Start a report build in its own process (closing the window doesn't stop it).
+    Returns the process, or None if it couldn't start."""
     out = reports_dir(cfg)
     out.mkdir(parents=True, exist_ok=True)
     kwargs = {}
@@ -112,13 +113,22 @@ def start_in_background(cfg: Config, config_path: Path | None = None) -> bool:
         kwargs["start_new_session"] = True
     try:
         with open(out / "daily.log", "a", encoding="utf-8") as logf:
-            subprocess.Popen(_command(config_path), stdout=logf, stderr=subprocess.STDOUT,
-                             stdin=subprocess.DEVNULL, close_fds=True, **kwargs)
+            return subprocess.Popen(_command(config_path, now), stdout=logf,
+                                    stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
+                                    close_fds=True, **kwargs)
     except OSError as exc:
-        log.warning("could not start the daily report (%s)", exc)
+        log.warning("could not start the driver report (%s)", exc)
+        return None
+
+
+def start_in_background(cfg: Config, config_path: Path | None = None) -> bool:
+    """Called when `engineer run` stops: if a report is due, build it in its own process."""
+    if not cfg.report.daily or not due(cfg):
+        return False
+    if spawn(cfg, config_path) is None:
         return False
     print(f"Building today's driver report in the background: it opens when ready "
-          f"({out}).")
+          f"({reports_dir(cfg)}).")
     return True
 
 

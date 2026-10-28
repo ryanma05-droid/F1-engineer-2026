@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import logging
+import math
 import sys
 import time
 from datetime import datetime
@@ -43,14 +44,14 @@ def start_voice(cfg: Config, engine) -> AudioProcess:
 
 def start_ptt(cfg: Config, engine):
     """Start push-to-talk: the speech process and the controller button. None if unavailable."""
-    from engineer.voice.controller import PushToTalk, XInputButton
+    from engineer.voice.controller import PushToTalk, button_label, make_button
     from engineer.voice.speech import SpeechProcess, SpeechSettings
 
-    button = XInputButton(cfg.voice.button, cfg.voice.controller)
-    if not button.available:
-        print("Push-to-talk: no XInput (Windows only); questions are off.")
-        return None
     v = cfg.voice
+    button = make_button(v.controller_type, v.button, v.controller, v.ps_button_number)
+    if not button.available:
+        print("Push-to-talk: no controller support here (Windows only); questions are off.")
+        return None
     speech = SpeechProcess(SpeechSettings(
         model=v.model, device=v.device, compute_type=v.compute_type,
         input_device=v.input_device, models_dir=str(cfg.ptt_path / "models"),
@@ -63,7 +64,7 @@ def start_ptt(cfg: Config, engine):
         speech.close()
         return None
     pads = button.connected()
-    print(f"Push-to-talk: hold {v.button} and ask. {speech.description}. "
+    print(f"Push-to-talk: hold {button_label(v.controller_type, v.button)} and ask. {speech.description}. "
           f"Controllers connected: {len(pads) or 'none yet'}.")
     ptt = PushToTalk(button, speech.press, speech.release, speech.cancel,
                      min_press_s=v.min_press_s, max_s=v.max_question_s)
@@ -76,8 +77,66 @@ def welcome(cfg: Config, audio, push_to_talk: bool) -> None:
     store = OnceStore(cfg.data_path / "once.json")
     if store.done(WELCOME) or getattr(audio, "backend", None) in (None, "null"):
         return                     # said before, or no voice yet: keep it for when it works
-    audio.say(welcome_text(cfg.voice.button if push_to_talk else None))
+    from engineer.voice.controller import button_label
+    label = button_label(cfg.voice.controller_type, cfg.voice.button)
+    audio.say(welcome_text(label if push_to_talk else None))
     store.mark(WELCOME)
+
+
+class PushToTalkControl:
+    """Push-to-talk that the app window can switch live: on/off and Xbox/PlayStation.
+    Starting it loads speech recognition (seconds), so that runs in a thread, off the loop."""
+
+    CONNECTED_EVERY_S = 3.0
+
+    def __init__(self, cfg: Config, engine, allowed: bool = True):
+        self.cfg, self.engine, self.allowed = cfg, engine, allowed
+        self.ptt = self.speech = self.task = None
+        self.state, self.error = "off", None
+        self._connected, self._checked = 0, -math.inf
+
+    def wanted(self, cfg: Config) -> bool:
+        return self.allowed and cfg.voice.enabled and cfg.platform == "pc"
+
+    async def apply(self, cfg: Config) -> None:
+        """Bring push-to-talk in line with cfg (after a settings change, or at start-up)."""
+        self.cfg = cfg
+        if not self.wanted(cfg):
+            self.stop()
+            return
+        if self.ptt is not None:               # running: just switch the button
+            from engineer.voice.controller import make_button
+            v = cfg.voice
+            self.ptt.button = make_button(v.controller_type, v.button, v.controller,
+                                          v.ps_button_number)
+            self._checked = -math.inf
+            return
+        if self.state == "starting":
+            return
+        self.state, self.error = "starting", None
+        got = await asyncio.to_thread(start_ptt, cfg, self.engine)
+        if got is None:
+            self.state = "error"
+            self.error = "Push to talk couldn't start (the console window says why)."
+            return
+        self.ptt, self.speech = got
+        self.task = asyncio.create_task(_ptt_loop(self.engine, self.ptt, self.speech))
+        self.state = "ready"
+
+    def stop(self) -> None:
+        if self.task:
+            self.task.cancel()
+        if self.speech:
+            self.speech.close()
+        self.ptt = self.speech = self.task = None
+        self.state = "off"
+
+    def status(self) -> dict:
+        held = self.ptt is not None and self.ptt.down_at is not None
+        if self.ptt is not None and time.monotonic() - self._checked >= self.CONNECTED_EVERY_S:
+            self._connected, self._checked = len(self.ptt.button.connected()), time.monotonic()
+        return {"state": self.state, "held": held, "connected": self._connected,
+                "error": self.error}
 
 
 async def _ptt_loop(engine, ptt, speech) -> None:
@@ -99,7 +158,7 @@ async def _ptt_loop(engine, ptt, speech) -> None:
 
 
 async def _run(cfg: Config, record: bool | None, voice: bool, ptt_on: bool = True,
-               config_path: Path | None = None) -> None:
+               config_path: Path | None = None, ui: bool = True) -> None:
     if record is not None:
         cfg.record = record
 
@@ -110,10 +169,13 @@ async def _run(cfg: Config, record: bool | None, voice: bool, ptt_on: bool = Tru
     audio = start_voice(cfg, engine) if voice else None
     if audio:
         audio.say("Radio check.")
-    ptt = start_ptt(cfg, engine) if ptt_on and cfg.voice.enabled else None
-    if audio:
-        welcome(cfg, audio, ptt is not None)
-    ptt_task = asyncio.create_task(_ptt_loop(engine, *ptt)) if ptt else None
+    ptt = PushToTalkControl(cfg, engine, allowed=ptt_on)
+    await ptt.apply(cfg)
+    # First time with the app window: the welcome waits for the setup questions (it names the
+    # push-to-talk button the driver picks there).
+    wait_for_setup = ui and cfg.ui.enabled and not cfg.ui.setup_done
+    if audio and not wait_for_setup:
+        welcome(cfg, audio, ptt.ptt is not None)
     listener = UdpListener(cfg.listen.host, cfg.listen.port,
                            forward=[(t.host, t.port) for t in cfg.forward])
     recorder = Recorder(cfg.sessions_path) if cfg.record else None
@@ -122,6 +184,20 @@ async def _run(cfg: Config, record: bool | None, voice: bool, ptt_on: bool = Tru
     listener.subscribe(pipeline.feed)
 
     await listener.start()
+    window = None
+    if ui and cfg.ui.enabled:
+        from engineer.ui.app import AppWindow, open_window
+        window = AppWindow(cfg, engine, listener, recorder, ptt, config_path)
+        if audio and wait_for_setup:
+            window.on_setup_done = lambda: welcome(cfg, audio, ptt.wanted(cfg))
+        try:
+            url = await window.start()
+            print(f"App window: {url}  (open it in a browser if it didn't appear)")
+            if cfg.ui.open:
+                open_window(url)
+        except OSError as exc:
+            print(f"App window off: {exc}")
+            window = None
     print(f"Listening on {cfg.listen.host}:{cfg.listen.port}. "
           f"In F1 25: Settings > Telemetry Settings > UDP Telemetry On, port {cfg.listen.port}, "
           f"format 2025, send rate 60Hz. Ctrl+C to stop.")
@@ -137,9 +213,9 @@ async def _run(cfg: Config, record: bool | None, voice: bool, ptt_on: bool = Tru
             last = listener.packets_received
     finally:
         listener.close()
-        if ptt_task:
-            ptt_task.cancel()
-            ptt[1].close()
+        if window:
+            window.close()
+        ptt.stop()
         if recorder:
             recorder.close()
         if audio:
@@ -195,6 +271,7 @@ def main(argv: list[str] | None = None) -> int:
                      help="don't record this session")
     run.add_argument("--no-voice", action="store_true", help="print radio calls, don't speak")
     run.add_argument("--no-ptt", action="store_true", help="no push-to-talk questions")
+    run.add_argument("--no-ui", action="store_true", help="no app window (console only)")
     run.add_argument("--verbosity", choices=["terse", "normal", "chatty"],
                      help="override radio.verbosity from config.yaml")
     sub.add_parser("sessions", help="list recorded sessions")
@@ -210,7 +287,7 @@ def main(argv: list[str] | None = None) -> int:
         voice = cfg.radio.enabled and not args.no_voice
         try:
             asyncio.run(_run(cfg, args.record, voice, ptt_on=not args.no_ptt,
-                             config_path=args.config))
+                             config_path=args.config, ui=not args.no_ui))
         except KeyboardInterrupt:
             pass
         except OSError as exc:

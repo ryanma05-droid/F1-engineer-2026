@@ -105,6 +105,22 @@ uv run python -m engineer.report                     # driver report PDF (data/r
 - Corner runs use `corner_stats()` for the shared numbers, so the report agrees with live
   coaching.
 
+## App window
+
+- `engineer/ui/`: server.py (tiny HTTP server on 127.0.0.1, on the engineer's asyncio loop;
+  POSTs need the `X-Engineer: 1` header so other web pages can't change settings), app.py
+  (`AppWindow`: live state from RaceState/listener/recorder, radio calls and questions from the
+  bus; settings applied live and saved with `config.save_local`), page.py (the page as a string,
+  so the installed app needs no data files). Opened as an Edge/Chrome `--app` window by
+  `cli._run`; `--no-ui` turns it off. It only reads the race, never writes state.
+- First open asks the controller (Xbox LB / PlayStation L1 / none) and the tempo
+  (`ui.setup_done`); the one-time welcome waits for it so it names the right button.
+- Tempo = `radio.verbosity` (terse shown as "Quiet", normal, chatty). `Engine.set_tempo` changes
+  it live (also by voice: "talk more", "keep it short", "back to normal"); terse also drops
+  LOW-priority calls except `TERSE_KEEPS`. "Be quiet" is separate: radio silence.
+- PlayStation push-to-talk: winmm joystick API (`PlayStationButton`, L1 = button 5), plus the
+  Xbox LB through XInput for Steam Input. Not yet tried on a real DualSense.
+
 ## Strategy (Phase 5)
 
 - Nothing about tyre behaviour is hard-coded: wear rate, deg and compound offsets are learned
@@ -118,7 +134,7 @@ uv run python -m engineer.report                     # driver report PDF (data/r
 
 ## Push-to-talk (Phase 6)
 
-- Hold LB (XInput, shared with the game) -> speech process (faster-whisper, own process, default
+- Hold LB (XInput) or L1 (PlayStation, winmm), shared with the game -> speech process (faster-whisper, own process, default
   Windows mic) -> `QuestionAsked` event -> `QuestionAnswerer` (wired in `build_engine`, so tests
   and replays answer the same way) -> director topic "answer" (HIGH, said even in quiet mode).
 - Answers come from the same query functions/analyzer state as the proactive calls.

@@ -142,10 +142,9 @@ def first_run_setup() -> None:
         platform = _ask("\nWhere do you play F1 25?\n  [1] On this PC\n  [2] On an Xbox or "
                         "PlayStation\nType 1 or 2 and press Enter: ",
                         {"1": "pc", "2": "console"}, "1")
-    ptt = False
-    if platform == "pc":
-        ptt = _ask("\nAsk the engineer questions by holding LB on an Xbox controller? "
-                   "[Y/n]: ", {"y": True, "yes": True, "n": False, "no": False}, "y")
+    # PC players get push-to-talk ready; the app window then asks which controller
+    # (PlayStation L1 / Xbox LB / none) and how much the engineer should talk.
+    ptt = platform == "pc"
     local = {"platform": platform, "upload": {"auto": False},
              "voice": {"enabled": ptt, "model": FRIEND_SPEECH_MODEL}}
     APP_HOME.mkdir(parents=True, exist_ok=True)
@@ -243,7 +242,7 @@ def main(argv: list[str] | None = None) -> int:
         return self_check()
     if "--daily-report" in args or "--report" in args:     # started by the app when it closes
         from engineer.report.daily import main as report_main
-        return report_main(["--daily"] if "--daily-report" in args else [])
+        return report_main(["--daily"] if "--daily-report" in args else ["--no-open"])
     start_log()
     code = 0
     try:

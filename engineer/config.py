@@ -124,7 +124,9 @@ class Strategy(BaseModel):
 
 class Voice(BaseModel):
     enabled: bool = True             # push-to-talk questions
-    button: str = "LB"               # Xbox controller button (XInput name: LB, RB, A, B, X, Y, ...)
+    controller_type: Literal["xbox", "playstation"] = "xbox"
+    button: str | None = None        # None: LB (Xbox) / L1 (PlayStation). Or RB, A, R1, CROSS, ...
+    ps_button_number: int | None = None   # PlayStation: the raw button number, if L1 isn't found
     controller: int | None = None    # None = any connected controller
     # base.en: small.en took ~3 s per question on the CPU in a race (27 Oct); base.en is ~3x faster.
     model: str = "base.en"           # faster-whisper model: base.en, small.en, medium.en, ...
@@ -140,6 +142,13 @@ class Voice(BaseModel):
     max_question_s: float = Field(default=10.0, gt=0)
     keep_audio: bool = True          # save each question to data/ptt/clips/
     log: bool = True                 # log every question to data/ptt/questions.jsonl
+
+
+class Ui(BaseModel):
+    enabled: bool = True             # the app window (a page served on this PC only)
+    port: int = Field(default=20780, ge=1024, le=65535)
+    open: bool = True                # open the window when the engineer starts
+    setup_done: bool = False         # the first-time questions (controller, tempo) were answered
 
 
 class Report(BaseModel):
@@ -170,6 +179,7 @@ class Config(BaseModel):
     voice: Voice = Voice()
     upload: Upload = Upload()
     report: Report = Report()
+    ui: Ui = Ui()
 
     @property
     def data_path(self) -> Path:
@@ -205,6 +215,24 @@ def _merge(base: dict, override: dict) -> dict:
     return out
 
 
+def local_config_path(path: Path | str | None = None) -> Path:
+    """Where this PC's own settings live (config.local.yaml); see load_config."""
+    path = Path(path) if path else DEFAULT_CONFIG
+    return APP_HOME / "config.local.yaml" if FROZEN and path == DEFAULT_CONFIG \
+        else path.with_name("config.local.yaml")
+
+
+def save_local(updates: dict, path: Path | str | None = None) -> Path:
+    """Merge updates into config.local.yaml (other settings in it are kept)."""
+    local = local_config_path(path)
+    raw = {}
+    if local.exists():
+        raw = yaml.safe_load(local.read_text(encoding="utf-8")) or {}
+    local.parent.mkdir(parents=True, exist_ok=True)
+    local.write_text(yaml.safe_dump(_merge(raw, updates), sort_keys=False), encoding="utf-8")
+    return local
+
+
 def load_config(path: Path | str | None = None) -> Config:
     """config.yaml, then config.local.yaml next to it (if present) on top.
 
@@ -216,8 +244,7 @@ def load_config(path: Path | str | None = None) -> Config:
     if path.exists():
         raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     # The installed app keeps its local settings in the user's folder (written by first-run setup).
-    local = APP_HOME / "config.local.yaml" if FROZEN and path == DEFAULT_CONFIG \
-        else path.with_name("config.local.yaml")
+    local = local_config_path(path)
     if local.exists():
         raw = _merge(raw, yaml.safe_load(local.read_text(encoding="utf-8")) or {})
     return Config.model_validate(raw)

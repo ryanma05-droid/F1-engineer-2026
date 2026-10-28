@@ -152,6 +152,9 @@ class QuietZones:
 # Said even in quiet mode ("Quiet" on push-to-talk): box calls, safety car calls, and answers to
 # your own questions.
 QUIET_TOPICS = {"box", "safety_car", "answer"}
+# The "Quiet" tempo (verbosity terse) also leaves out the low-priority extras (routine tyre status,
+# one-off corner tips, race-craft chatter), but still says these low-priority calls:
+TERSE_KEEPS = {"strategy_plan", "tyre_warning"}
 
 
 class RadioDirector:
@@ -159,6 +162,7 @@ class RadioDirector:
                  cooldowns_s: dict[str, float] | None = None):
         self.bus = bus
         self.quiet = False
+        self.tempo = "normal"           # "terse": low-priority extras are left out
         self.state = state
         self.cooldowns_s = cooldowns_s or {}
         self.zones = QuietZones()
@@ -174,6 +178,10 @@ class RadioDirector:
     def submit(self, call: RadioCall) -> None:
         if self.quiet and call.topic not in QUIET_TOPICS:
             self._drop(call, "quiet")
+            return
+        if self.tempo == "terse" and call.priority <= Priority.LOW \
+                and call.topic not in TERSE_KEEPS:
+            self._drop(call, "tempo")
             return
         t = self._now()
         cooldown = self.cooldowns_s.get(call.topic, 0.0)

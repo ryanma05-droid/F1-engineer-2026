@@ -102,7 +102,8 @@ strategy:               # pit strategy (Phase 5): the plan, box calls, safety ca
 
 voice:                  # push-to-talk questions (Phase 6)
   enabled: true
-  button: LB            # Xbox controller button you hold to talk (LB, RB, A, B, X, Y, ...)
+  controller_type: xbox # xbox (hold LB) or playstation (hold L1); the app window asks the first time
+  button: null          # null = LB (Xbox) / L1 (PlayStation). Or RB, A, ... / R1, CROSS, ...
   controller: null      # null = any connected controller
   model: base.en        # speech model: base.en (fastest), small.en (~3 s in a race), medium.en
   device: cpu           # cpu: the game keeps the GPU busy in a race (a question once waited

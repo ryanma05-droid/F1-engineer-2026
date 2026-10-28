@@ -44,6 +44,10 @@ from tests.test_strategy import SETS, model, situation
     ("How many laps left?", "laps_left"),
     ("Quiet please", "quiet"),
     ("Stop talking", "quiet"),
+    ("Talk more", "tempo_chatty"),
+    ("Can you be more chatty", "tempo_chatty"),
+    ("Keep it short", "tempo_terse"),
+    ("Talk less please", "tempo_terse"),
     ("Talk to me", "talk"),
     ("What's for dinner", "unknown"),
     # From the 27 Oct Abu Dhabi race:
