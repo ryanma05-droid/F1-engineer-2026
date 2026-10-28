@@ -39,3 +39,4 @@ config.local.yaml
 
 # One-time things the engineer remembers (e.g. the first-race intro)
 data/once.json
+data/reports/

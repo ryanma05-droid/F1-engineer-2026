@@ -98,7 +98,8 @@ async def _ptt_loop(engine, ptt, speech) -> None:
         await asyncio.sleep(0.02)
 
 
-async def _run(cfg: Config, record: bool | None, voice: bool, ptt_on: bool = True) -> None:
+async def _run(cfg: Config, record: bool | None, voice: bool, ptt_on: bool = True,
+               config_path: Path | None = None) -> None:
     if record is not None:
         cfg.record = record
 
@@ -165,6 +166,10 @@ async def _run(cfg: Config, record: bool | None, voice: bool, ptt_on: bool = Tru
                 upload_pending(cfg, recorder.paths_this_run)
             except KeyboardInterrupt:
                 print("Upload skipped. Later: uv run python -m engineer.ingest.share --pending")
+        if recorder and recorder.paths_this_run:
+            # Once a day, in its own process (closing the window doesn't stop it).
+            from engineer.report.daily import start_in_background
+            start_in_background(cfg, config_path)
 
 
 def _sessions(config_path: Path | None) -> None:
@@ -204,7 +209,8 @@ def main(argv: list[str] | None = None) -> int:
             cfg.radio.verbosity = args.verbosity
         voice = cfg.radio.enabled and not args.no_voice
         try:
-            asyncio.run(_run(cfg, args.record, voice, ptt_on=not args.no_ptt))
+            asyncio.run(_run(cfg, args.record, voice, ptt_on=not args.no_ptt,
+                             config_path=args.config))
         except KeyboardInterrupt:
             pass
         except OSError as exc:

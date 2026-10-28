@@ -42,6 +42,7 @@ uv run python -m engineer.voice.setup                # download the speech model
 uv run python -m engineer.ingest.replay <file.zst> --questions   # replay with the logged questions
 uv run python -m engineer.ingest.share --upload      # push the newest recording to its own branch
 uv run python -m engineer.ingest.share --pending     # push every recording not uploaded yet
+uv run python -m engineer.report                     # driver report PDF (data/reports/), opens it
 ```
 
 ## Radio rules (Phase 1)
@@ -92,6 +93,17 @@ uv run python -m engineer.ingest.share --pending     # push every recording not 
 - One-time welcome at start-up (`engineer/intro.py`, `cli.welcome`, remembered in
   data/once.json), not on the grid: a race session starts only ~6 s before lights out, and the
   game's session time stays 0.0 until lights out (real recordings).
+
+## Driver report
+
+- `engineer/report/` (`python -m engineer.report`): analysis.py (per-recording corner runs vs
+  the five quickest AI, cached in data/reports/cache/, bump ANALYSIS_VERSION when a measurement
+  changes), insights.py (combining sessions with recency weights; habits are rules over the
+  numbers, nothing per track), render.py (one self-contained HTML page, Letter-size print),
+  pdf.py (Edge/Chrome headless), daily.py (the command, and the once-a-day background build when
+  `engineer run` stops; the installed app runs `RaceEngineer.exe --daily-report`).
+- Corner runs use `corner_stats()` for the shared numbers, so the report agrees with live
+  coaching.
 
 ## Strategy (Phase 5)
 

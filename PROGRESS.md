@@ -379,3 +379,24 @@ question on the CPU during that race), with drivers' names in its vocabulary.
       there." Never again (data/once.json). No L B line without push-to-talk (console players)
 - Not on the grid: real races start only ~6 s before lights out (SSTA, then the five lights
   straight away; the game's clock stays at 0 until lights out), so it would talk over the start
+
+## Driver report (28 Oct)
+
+`uv run python -m engineer.report` builds a PDF of your strengths and weaknesses from every
+recording (data/reports/driver-report-<date>.pdf, plus driver-report-latest.pdf) and opens it.
+When `engineer run` stops and there are sessions the last report hasn't seen, and no report
+today, it builds one in a background process (`report.daily`, `report.open_when_ready`).
+
+- Each recording is analysed once (corner runs from the distance traces, you vs the median of
+  the five quickest AI cars in that session) and cached in data/reports/cache/; the cache is
+  redone if the recording, the analysis version or the track map changes.
+- Sessions are combined with recency weights (half every 30 days), so the picture follows you.
+- Sections: tracks ranked, corner types (slow/medium/fast, onto a straight or into a corner),
+  habits that cost time ranked by s/lap with a per-session trend, strengths, session history,
+  every corner. "Since last report" compares with the last report from an earlier day.
+- Habits are rules over the measured numbers (winning the entry / losing the exit, slow squeeze
+  to full throttle, braking too early, over-slowing the apex, coasting, exit speed onto
+  straights); a habit only shows when it costs 0.03 s a lap or more.
+- PDF: printed by Edge (comes with Windows) or Chrome headless; no browser: the HTML is kept.
+- First report from the 3 real races: quickest in slow corners onto straights (Austria T3), the
+  biggest habit is winning the entry and losing the exit in medium corners (~0.18 s/lap).

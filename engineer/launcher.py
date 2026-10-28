@@ -241,6 +241,9 @@ def main(argv: list[str] | None = None) -> int:
     args = sys.argv[1:] if argv is None else argv
     if "--check" in args:
         return self_check()
+    if "--daily-report" in args or "--report" in args:     # started by the app when it closes
+        from engineer.report.daily import main as report_main
+        return report_main(["--daily"] if "--daily-report" in args else [])
     start_log()
     code = 0
     try:

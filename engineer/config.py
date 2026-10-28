@@ -142,6 +142,11 @@ class Voice(BaseModel):
     log: bool = True                 # log every question to data/ptt/questions.jsonl
 
 
+class Report(BaseModel):
+    daily: bool = True              # build the driver report when `engineer run` stops, once a day
+    open_when_ready: bool = True    # open the PDF when the daily report is done
+
+
 class Upload(BaseModel):
     auto: bool = False          # push new recordings to GitHub when `engineer run` stops
     remote: str = "origin"
@@ -164,6 +169,7 @@ class Config(BaseModel):
     racecraft: RaceCraft = RaceCraft()
     voice: Voice = Voice()
     upload: Upload = Upload()
+    report: Report = Report()
 
     @property
     def data_path(self) -> Path:

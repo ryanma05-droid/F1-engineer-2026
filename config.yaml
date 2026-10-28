@@ -124,3 +124,9 @@ upload:
   auto: false
   remote: origin
   min_mb: 2             # skip tiny recordings (menus, a few seconds)
+
+# Driver report: your strengths and weaknesses from every recorded session, as a PDF in
+# data/reports/. Build one any time: python -m engineer.report
+report:
+  daily: true           # when `engineer run` stops, build a new one if there are new sessions (once a day)
+  open_when_ready: true # open the PDF when the daily report is done
