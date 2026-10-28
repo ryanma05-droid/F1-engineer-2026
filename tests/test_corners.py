@@ -113,7 +113,7 @@ def test_learns_and_saves_corner_map_then_coaches_vs_best(tmp_path):
     assert [c["name"] for c in saved["corners"]] == ["turn one", "turn two"]
     # FakeRace slows a lap evenly everywhere, so which corner loses most depends on its length.
     [call] = [c for c in radio if c.startswith("Turn")]
-    assert re.fullmatch(r"Turn (one|two), \w+ tenths off your best\.", call)
+    assert re.fullmatch(r"Turn (one|two), \w+ tenths off your pace\.", call)
 
 
 def test_coaches_vs_car_ahead_within_gap(tmp_path):
@@ -132,7 +132,7 @@ def test_existing_map_file_is_used(tmp_path):
     race = FakeRace({0: [30000, 30000, 33000]}, corners=CORNERS, extra_packets=False)
     _eng, radio = run(race, tmp_path)
     assert [c for c in radio if c.startswith("Turn")] == \
-        ["Turn five, two tenths off your best."]
+        ["Turn five, two tenths off your pace."]
 
 
 def test_corner_calls_can_be_switched_off(tmp_path):
@@ -176,3 +176,64 @@ def test_streak_phrase():
         "Turn four, third lap running, two tenths off your best, braking ten metres earlier."
     assert phrases.corner_phrase(0.2, "turn four", "ahead", streak=7) == \
         "Turn four, lap after lap, losing two tenths to the car ahead."
+
+
+def _habit_rig(tmp_path):
+    """A corner analyzer with a two-corner map, a reference lap, and a list of what it says."""
+    eng, _ = run(FakeRace({0: [30000]}, corners=CORNERS, extra_packets=False), tmp_path,
+                 duration_ms=1000)
+    ca = eng.corners
+    speed, brake, throttle = profile()
+    ref = trace(speed, brake, throttle)
+    ca.track_map = TrackMap(10, 2000.0, detect_corners([ref], 2000.0))
+    said = []
+    ca.director.submit = lambda call: said.append(call.text)
+
+    def lap(n, drop_one=0.0, drop_two=0.0, against="pace"):
+        sp = speed.copy()
+        sp[80:120] -= drop_one
+        sp[280:320] -= drop_two
+        before = len(said)
+        ca._compare(trace(sp, brake, throttle, lap=n), ref, against)
+        return said[-1] if len(said) > before else None
+    return ca, lap
+
+
+def test_long_habit_backs_off_to_every_other_lap_unless_worse(tmp_path):
+    ca, lap = _habit_rig(tmp_path)
+    calls = [lap(n, drop_one=20) for n in range(2, 9)]
+    # Called laps 2, 3, 4 (third lap running), then every other lap: 6, 8.
+    assert [c is not None for c in calls] == [True, True, True, False, True, False, True]
+    assert calls[2].startswith("Turn one, third lap running")
+    # Getting worse is always said.
+    assert lap(9, drop_one=60) is not None
+
+
+def test_better_only_after_a_habit_and_with_your_own_times(tmp_path):
+    ca, lap = _habit_rig(tmp_path)
+    lap(2, drop_two=20)                       # a one-off loss in turn two...
+    assert lap(3) is None                     # ...then fine: no "better" (it's just noise)
+    lap(4, drop_one=20)
+    assert "second lap running" in lap(5, drop_one=20)
+    text = lap(6)                             # the habit is fixed: said once
+    assert text.startswith("Turn one better, ") and text.endswith(" found.")
+    assert lap(7) is None
+
+
+def test_no_coaching_vs_your_pace_in_a_fight_but_vs_the_car_ahead_yes(tmp_path):
+    ca, lap = _habit_rig(tmp_path)
+    ca._in_a_fight = lambda: True
+    assert lap(2, drop_one=20) is None
+    assert lap(3, drop_one=20, against="ahead").startswith("Turn one, second lap running")
+
+
+def test_your_pace_is_a_lap_on_similar_tyre_wear(tmp_path):
+    # Front right wears 3 % a lap; lap 2 (fresh tyres) is the fastest lap of all.
+    race = FakeRace({0: [31000, 29000, 30000, 30000, 30200, 30400]}, corners=CORNERS,
+                    wear_per_lap=[1, 1, 2, 3], extra_packets=False)
+    eng, _ = run(race, tmp_path)
+    ca = eng.corners
+    # Lap 6 is at ~18 % wear: lap 2 (~6 %) is outside the 8 % window, so laps 4-5 set the pace.
+    assert ca.reference_trace(6).lap == 4
+    # Lap 3 (~9 %) is close enough to lap 2 (~6 %): the fast lap is the reference.
+    assert ca.reference_trace(3).lap == 2

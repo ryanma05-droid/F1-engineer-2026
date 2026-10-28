@@ -69,6 +69,11 @@ uv run python -m engineer.ingest.share --pending     # push every recording not 
 - Habits first: a corner losing time on `corners.focus_after_laps` (2) coached laps in a row is
   called ahead of bigger one-off losses, at NORMAL priority, as "third lap running", naming the
   cause that recurs over the streak (`_habit_reason`), not the biggest one this lap.
+- "Your pace" (the reference when no car is near): your fastest clean lap on the same compound
+  with tyre wear within `ref_wear_window_pct` (8 %), so tyre wear isn't blamed on a corner.
+- Closing the loop: a habit corner that stops losing (your own corner time 0.1 s+ quicker than
+  when called) gets "Turn four better" once. After 3 calls in a streak, every other lap unless
+  worse. Within `battle_gap_s` (1 s) of a car, only calls vs the car ahead are said.
 - `data/tracks/<track>.json` is committed and hand-editable (official turn numbers). Without a
   file the map is learned from the first 2 clean laps and saved. The golden test uses
   `data/tracks/austria.json`.

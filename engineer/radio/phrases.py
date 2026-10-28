@@ -209,10 +209,17 @@ _STREAK = {2: "second lap running", 3: "third lap running", 4: "fourth lap runni
            5: "fifth lap running"}
 
 
+def corner_better_phrase(corner_name: str, gained_s: float | None = None) -> str:
+    """'Turn four better, two tenths found.' / without the amount: 'Turn four better.'"""
+    if gained_s is None:
+        return _sentence(f"{corner_name} better")
+    return _sentence(f"{corner_name} better", f"{say_gap(int(round(gained_s * 1000)))} found")
+
+
 def corner_phrase(delta_s: float, corner_name: str, against: str,
                   reason: tuple[str, float] | None = None, verbosity: str = "normal",
                   again: bool = False, streak: int = 0) -> str:
-    """against: "ahead", "behind" or "best".
+    """against: "ahead", "behind", "best" or "pace" (your best lap on similar tyre wear).
     'Turn three, losing two tenths to the car ahead, braking ten metres earlier.'
     'Turn four, three tenths off your best, minimum speed eight k p h down.'
     'Gaining a tenth on the car ahead through turn nine.' (delta_s < 0)
@@ -220,10 +227,11 @@ def corner_phrase(delta_s: float, corner_name: str, against: str,
     streak=3 (lost time there 3 laps in a row): 'Turn four, third lap running, ...'"""
     gap = say_gap(int(round(delta_s * 1000)))
     if delta_s < 0:
-        if against == "best":
-            return _sentence(f"{corner_name}, {gap} up on your best")
+        if against in ("best", "pace"):
+            return _sentence(f"{corner_name}, {gap} up on your {against}")
         return _sentence(f"gaining {gap} on the car {against} through {corner_name}")
-    loss = f"{gap} off your best" if against == "best" else f"losing {gap} to the car {against}"
+    loss = f"{gap} off your {against}" if against in ("best", "pace") \
+        else f"losing {gap} to the car {against}"
     why = "" if reason is None or verbosity == "terse" else _REASONS[reason[0]](reason[1])
     if streak >= 2:
         head = f"{corner_name}, {_STREAK.get(streak, 'lap after lap')}"
@@ -388,8 +396,8 @@ def against_words(against: str) -> str:
     """'ahead' / 'behind' / 'best' / a driver name -> 'the car ahead' / 'your best' / 'Norris'."""
     if against in ("ahead", "behind"):
         return f"the car {against}"
-    if against == "best":
-        return "your best"
+    if against in ("best", "pace"):
+        return f"your {against}"
     return against
 
 

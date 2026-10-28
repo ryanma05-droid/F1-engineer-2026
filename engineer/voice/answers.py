@@ -295,15 +295,16 @@ class QuestionAnswerer:
             return phrases._sentence("nothing to compare yet")
         this_lap = not np.isnan(dist) and corner.exit_m <= dist
         trace = traces.trace_for(p, lap if this_lap else lap - 1)
-        ref = corners._best_trace(exclude_lap=lap if this_lap else lap - 1)
+        ref_lap = lap if this_lap else lap - 1
+        ref = corners.reference_trace(ref_lap) or corners._best_trace(exclude_lap=ref_lap)
         if trace is None or ref is None:
             return phrases._sentence("no clean lap to compare with yet")
         from engineer.tools.queries import corner_stats
         from engineer.tools.queries import CornerDelta
         d = CornerDelta(corner, corner_stats(trace, corner), corner_stats(ref, corner))
         if abs(d.delta_s) < 0.05:
-            return phrases._sentence(f"{corner.name}, same as your best")
-        return phrases.corner_phrase(d.delta_s, corner.name, "best", d.reason(), "chatty")
+            return phrases._sentence(f"{corner.name}, right on your pace")
+        return phrases.corner_phrase(d.delta_s, corner.name, "pace", d.reason(), "chatty")
 
     # -- other drivers ---------------------------------------------------------------------------
 

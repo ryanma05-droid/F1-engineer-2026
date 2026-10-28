@@ -344,3 +344,14 @@ question on the CPU during that race), with drivers' names in its vocabulary.
       on 9 of 11 laps (it used to change almost every lap)
 - [ ] Turn four is now called every lap of a long streak: see the open proposals (tyre-matched
       reference, back off after 3 calls, confirm when fixed)
+
+### Corner coaching: fair, closes the loop, quiet in fights (28 Oct)
+
+- [x] "Your pace" reference: fastest clean lap on the same compound within 8 % tyre wear (was:
+      best lap of the session, usually on fresh tyres). 18-lap Austria replay: turn four's
+      11-lap "habit" mostly disappears (it was tyre wear); calls spread over T1, T3, T6, T9, T10
+- [x] "Turn four better, two tenths found." once a habit corner is fixed (your own corner time,
+      not the delta: the car ahead can change). Only after habits; one-off losses don't count
+- [x] After 3 calls on a corner in a streak: every other lap, unless it gets worse
+- [x] Within 1 s of a car: only calls vs the car ahead (where to pass); none vs your own pace
+- [x] Golden calls unchanged (5-lap Austria)

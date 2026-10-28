@@ -71,7 +71,7 @@ def build_engine(cfg: Config, out: TextIO | None = None,
                          verbosity=cfg.radio.verbosity)
     # Last: corner coaching is the least urgent call of a lap.
     corners = CornerAnalyzer(bus, state, history, traces, TrackMaps(cfg.tracks_path), director,
-                             cfg.corners, verbosity=cfg.radio.verbosity)
+                             cfg.corners, verbosity=cfg.radio.verbosity, features=features)
     pipeline.after_packet.append(corners.after_packet)
     if strategy_runner is None:
         strategy_runner = InlineRunner(cfg.features_path)
