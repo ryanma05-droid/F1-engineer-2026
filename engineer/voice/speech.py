@@ -161,6 +161,79 @@ def save_wav(path: Path, audio: np.ndarray) -> None:
         w.writeframes(pcm.tobytes())
 
 
+STALL_S = 1.0       # no audio block for this long = the microphone has stopped sending
+
+
+class _Mic:
+    """The open microphone stream: keeps the last PRE_ROLL_S, records while asked to, and can
+    tell when the device has stopped sending (a stream can go silent without an error when a
+    headset is unplugged or the Windows default device changes)."""
+
+    def __init__(self, sd, spec):
+        self.sd, self.spec = sd, spec
+        self.stream = None
+        self.name = "?"
+        self.pre = deque(maxlen=int(PRE_ROLL_S * SAMPLE_RATE / 512) + 1)
+        self.chunks: list[np.ndarray] = []
+        self.recording = False
+        self.blocks = 0                  # blocks received since recording started
+        self.last_block = time.monotonic()
+
+    def _callback(self, indata, frames, t, status):
+        block = indata[:, 0].copy()
+        self.last_block = time.monotonic()
+        if self.recording:
+            self.chunks.append(block)
+            self.blocks += 1
+        else:
+            self.pre.append(block)
+
+    def open(self) -> None:
+        device, self.name = resolve_input_device(self.spec)
+        self.stream = self.sd.InputStream(samplerate=SAMPLE_RATE, channels=1, dtype="float32",
+                                          blocksize=512, device=device, callback=self._callback)
+        self.stream.start()
+        self.last_block = time.monotonic()
+
+    def close(self) -> None:
+        if self.stream is not None:
+            try:
+                self.stream.stop()
+                self.stream.close()
+            except Exception:
+                pass
+            self.stream = None
+
+    def reopen(self) -> None:
+        self.close()
+        self.pre.clear()
+        try:
+            # PortAudio only sees a new default device after it's restarted.
+            self.sd._terminate()
+            self.sd._initialize()
+        except Exception:
+            pass
+        try:
+            self.open()
+        except Exception as exc:
+            log.warning("could not reopen the microphone: %s", exc)
+
+    def stalled(self) -> bool:
+        return self.stream is None or not self.stream.active \
+            or time.monotonic() - self.last_block > STALL_S
+
+    def start_recording(self) -> None:
+        self.chunks = list(self.pre)
+        self.blocks = 0
+        self.recording = True
+
+    def stop_recording(self) -> tuple[np.ndarray, int]:
+        self.recording = False
+        audio = np.concatenate(self.chunks) if self.chunks else np.zeros(0, np.float32)
+        self.chunks = []
+        return audio, self.blocks
+
+
 def speech_main(inbox, outbox, settings: SpeechSettings) -> None:
     """Worker process. Messages in: ("start", id), ("stop", id), ("cancel", id), None = quit.
     Out: ("ready", description), ("error", message), ("heard", id, text, wav_path, stt_ms)."""
@@ -173,43 +246,37 @@ def speech_main(inbox, outbox, settings: SpeechSettings) -> None:
             desc = "null"
         import sounddevice as sd
 
-        device, mic = resolve_input_device(settings.input_device)
-        pre = deque(maxlen=int(PRE_ROLL_S * SAMPLE_RATE / 512) + 1)
-        chunks: list[np.ndarray] = []
-        recording = {"on": False}
-
-        def callback(indata, frames, t, status):
-            block = indata[:, 0].copy()
-            if recording["on"]:
-                chunks.append(block)
-            else:
-                pre.append(block)
-
-        stream = sd.InputStream(samplerate=SAMPLE_RATE, channels=1, dtype="float32",
-                                blocksize=512, device=device, callback=callback)
-        stream.start()
-        outbox.put(("ready", f"{desc}; microphone: {mic}"))
+        mic = _Mic(sd, settings.input_device)
+        mic.open()
+        outbox.put(("ready", f"{desc}; microphone: {mic.name}"))
     except Exception as exc:
         outbox.put(("error", f"{type(exc).__name__}: {exc}"))
         return
     while True:
         msg = inbox.get()
         if msg is None:
-            stream.stop()
-            stream.close()
+            mic.close()
             return
         kind, qid = msg
         if kind == "start":
-            chunks.clear()
-            chunks.extend(pre)
-            recording["on"] = True
+            if mic.stalled():
+                # The microphone stopped sending (headset unplugged or switched, the default
+                # device changed, Bluetooth changing mode...): open it again before listening.
+                outbox.put(("error", f"microphone {mic.name!r} had stopped sending audio; "
+                                     f"reconnecting"))
+                mic.reopen()
+            mic.start_recording()
         elif kind == "cancel":
-            recording["on"] = False
-            chunks.clear()
+            mic.stop_recording()
         elif kind == "stop":
-            recording["on"] = False
-            audio = np.concatenate(chunks) if chunks else np.zeros(0, np.float32)
-            chunks.clear()
+            audio, new_blocks = mic.stop_recording()
+            if new_blocks == 0:
+                # Only the pre-roll came back: nothing at all arrived while the button was held.
+                outbox.put(("error", f"no audio from microphone {mic.name!r} while the button "
+                                     f"was held; reconnecting it. If it keeps happening, check "
+                                     f"Windows Settings > Sound > Input"))
+                mic.reopen()
+                audio = np.zeros(0, np.float32)      # the stale pre-roll isn't the question
             wav = None
             if settings.clips_dir and audio.size:
                 wav = str(Path(settings.clips_dir) / f"{time.strftime('%Y%m%dT%H%M%S')}_{qid}.wav")

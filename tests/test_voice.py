@@ -359,3 +359,56 @@ def test_welcome_is_said_once_ever(tmp_path):
     welcome(cfg, b, push_to_talk=True)                    # second start: never again
     assert b.said == []
     assert "Hold" not in welcome_text(None)               # console players: no push-to-talk
+
+
+def test_microphone_that_stops_sending_is_noticed(monkeypatch):
+    """27-29 Oct: every question came back as 0.32 s (just the pre-roll): the microphone stream
+    had stopped delivering audio. The speech process now notices and reopens it."""
+    import numpy as np
+    from engineer.voice import speech
+
+    class FakeStream:
+        def __init__(self, **kw):
+            self.callback, self.active = kw["callback"], False
+
+        def start(self):
+            self.active = True
+
+        def stop(self):
+            self.active = False
+
+        def close(self):
+            pass
+
+    class FakeSd:
+        opened = 0
+
+        def InputStream(self, **kw):
+            FakeSd.opened += 1
+            self.stream = FakeStream(**kw)
+            return self.stream
+
+        def _terminate(self):
+            pass
+
+        def _initialize(self):
+            pass
+
+    sd = FakeSd()
+    monkeypatch.setattr(speech, "resolve_input_device", lambda spec: (None, "Headset"))
+    mic = speech._Mic(sd, None)
+    mic.open()
+    block = np.zeros((512, 1), np.float32)
+    for _ in range(20):
+        sd.stream.callback(block, 512, None, None)
+    assert not mic.stalled()
+    mic.start_recording()
+    audio, new = mic.stop_recording()          # nothing arrived while "held"
+    assert new == 0 and audio.size == 10 * 512  # only the pre-roll
+    mic.last_block -= speech.STALL_S + 0.5
+    assert mic.stalled()
+    mic.reopen()
+    assert FakeSd.opened == 2 and not mic.stalled() and not mic.pre
+    mic.start_recording()
+    sd.stream.callback(block, 512, None, None)
+    assert mic.stop_recording()[1] == 1
