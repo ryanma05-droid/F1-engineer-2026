@@ -189,6 +189,10 @@ uv run python -m engineer.report                     # driver report PDF (data/r
 - Telemetry comes at 60 Hz for all 22 cars, AI speed/throttle/brake included.
 - Austria (4323 m) has 7 braking corners: T1 T3 T4 T6 T7 T9 T10 (T2 T5 T8 are flat).
 - The golden test (`tests/test_golden.py`) replays the fixture; keep it passing.
+- "Restart race" keeps the session UID; the clock just jumps back to 0 (Imola, 29 Oct). RaceState
+  treats a jump from past 60 s to under 5 s that isn't a flashback as a new session, so every
+  analyzer and the director start fresh (before this fix the restarted race's calls and answers
+  were held back or dropped until the clock passed the first race's end).
 
 ## Environment
 

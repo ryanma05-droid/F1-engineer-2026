@@ -14,6 +14,7 @@ from __future__ import annotations
 import json
 import logging
 import math
+import re
 import time
 from pathlib import Path
 
@@ -66,7 +67,13 @@ class QuestionAnswerer:
         self.log = QuestionLog(log_path)
         self.answered: list[tuple[str, str]] = []      # (intent, answer), for tests and display
         self.heard = ""                                 # the question being answered
+        self.last_radio: str | None = None              # for "repeat that"
         bus.subscribe(ev.QuestionAsked, self.on_question)
+        bus.subscribe(ev.RadioMessage, self._on_radio)
+
+    def _on_radio(self, e: ev.RadioMessage) -> None:
+        if e.text != phrases._sentence("say again"):
+            self.last_radio = e.text
 
     # -- entry point -----------------------------------------------------------------------------
 
@@ -156,6 +163,10 @@ class QuestionAnswerer:
 
     def _a_plan(self) -> str:
         sa = self.engine.strategy
+        if self._lap() is None or not self.state.session.total_laps:
+            # Before the start the game hasn't sent the race yet (28 Oct Melbourne: asked on the
+            # grid, answered "no strategy calls in this race", which wasn't true).
+            return phrases._sentence("no plan yet, I'll have one a couple of laps in")
         if not sa._active():
             return phrases._sentence("no strategy calls in this race")
         res = sa.status()
@@ -166,21 +177,135 @@ class QuestionAnswerer:
     def _a_box_now(self) -> str | None:
         sa = self.engine.strategy
 
+        compound = _compound_in(self.heard)
+
         def answer(res) -> None:
-            if res is None or res.what_if is None or res.what_if.best is None \
+            if compound is not None and res is not None and res.sim.best is not None \
+                    and (res.what_if is None or res.what_if.best is None):
+                text = phrases._sentence(f"no {phrases.say_compound(compound)} left to fit")
+            elif res is None or res.what_if is None or res.what_if.best is None \
                     or res.sim.best is None:
                 text = phrases._sentence("can't work that out right now")
             else:
                 rejoin = sa._rejoin(False) if res.model is not None else None
                 text = phrases.box_now_phrase(res.what_if.best, res.sim.best, rejoin)
             self._say("box_now", text)
+            # session_uid: so the follow-up travels with the recording's upload (28 Oct: box-now
+            # answers were missing from the uploaded logs).
             self.log.write({"time": time.strftime("%Y-%m-%dT%H:%M:%S"), "intent": "box_now",
+                            "session_uid": f"{self.state.session_uid or 0:016x}",
+                            "session_time": round(self.state.session_time or 0.0, 3),
                             "answer": text, "lap": self._lap(), "followup": True})
 
-        if not sa.ask_box_now(answer):
+        if not sa.ask_box_now(answer, compound):
             return phrases._sentence("no strategy calls in this race") if not sa._active() \
                 else phrases._sentence("too late for that one")
         return None
+
+    def _a_repeat(self) -> str:
+        return self.last_radio or phrases._sentence("nothing to repeat yet")
+
+    def _a_status(self) -> str:
+        """"How are we looking?": position, the gap ahead, the tyres and the next stop."""
+        parts = []
+        p = self._player()
+        pos = self.state.cars.position[p] if p is not None else math.nan
+        if np.isnan(pos):
+            return phrases._sentence("no timing yet")
+        parts.append(phrases.position_phrase(int(pos), self._laps_to_go()))
+        if pos > 1:
+            parts.append(self._gap("ahead"))
+        st = self.engine.tyres.status()
+        if st is not None and st.worst_wheel is not None:
+            parts.append(phrases._sentence(
+                f"tyres at {phrases.say_percent(st.worst_pct)}",
+                phrases.say_laps_left(st.laps_left) if st.laps_left is not None else ""))
+        res = self.engine.strategy.status()
+        if res is not None and res.sim.best is not None:
+            stop = res.sim.best.next_stop
+            parts.append(phrases._sentence(
+                f"box {phrases._laps_range(res.sim.best.window, stop.lap)} for "
+                f"{phrases.say_compound(stop.compound)}" if stop else "no stop planned"))
+        return " ".join(parts)
+
+    def _a_boxing_now(self) -> str:
+        """"Are we boxing now?": yes / not yet (and when) / no stop planned."""
+        res, lap = self.engine.strategy.status(), self._lap()
+        if res is None or res.sim.best is None or lap is None:
+            return self._a_plan()
+        stop = res.sim.best.next_stop
+        if stop is None:
+            return phrases._sentence("no, no stop planned, the tyres make the end")
+        lo, hi = res.sim.best.window or (stop.lap, stop.lap)
+        if lo <= lap <= hi:
+            return phrases._sentence(f"yes, box this lap for {phrases.say_compound(stop.compound)}")
+        if lap < lo:
+            return phrases._sentence(f"not yet, box {phrases._laps_range((lo, hi), stop.lap)}",
+                                     phrases.say_compound(stop.compound))
+        return phrases._sentence(f"window's gone, box as soon as you can for "
+                                 f"{phrases.say_compound(stop.compound)}")
+
+    def _a_tyres_to_end(self) -> str:
+        """"Will these tyres make the end?" / "Will I get over 45 percent?": the worst tyre's
+        wear at the flag at the current rate, against the limit (or the number you said)."""
+        st, to_go = self.engine.tyres.status(), self._laps_to_go()
+        if st is None or st.worst_wheel is None or to_go is None:
+            return phrases._sentence("no tyre numbers yet, give me a lap")
+        rate = st.wear_rate[st.worst_wheel] if st.limiting_wheel is None \
+            else st.wear_rate[st.limiting_wheel]
+        if np.isnan(rate):
+            return phrases._sentence("no wear rate yet, give me another lap")
+        wheel = st.limiting_wheel if st.limiting_wheel is not None else st.worst_wheel
+        at_flag = float(st.wear[wheel] + rate * to_go)
+        asked = _percent_in(self.heard)
+        limit = asked if asked is not None else st.limit_pct
+        where = phrases.WHEEL_NAMES[wheel]
+        finish = f"{where} finishes at about {phrases.say_percent(at_flag)}, " \
+                 f"{phrases.number_words(min(to_go, 99))} laps to go"
+        if at_flag <= limit:
+            verdict = f"stays under {phrases.say_percent(limit)}" if asked is not None \
+                else "they'll make the end"
+        else:
+            laps_ok = max(0, int((limit - st.wear[wheel]) / rate)) if rate > 0 else to_go
+            verdict = f"over {phrases.say_percent(limit)} in about " \
+                      f"{phrases.number_words(min(laps_ok, 99))} laps"
+        return phrases._sentence(finish, verdict)
+
+    def _a_tyre_age(self) -> str:
+        p = self._player()
+        age = self.state.cars.tyre_age_laps[p] if p is not None else math.nan
+        if np.isnan(age):
+            return phrases._sentence("no tyre numbers yet")
+        comp = self.state.cars.visual_compound[p]
+        name = phrases.say_compound(int(comp)) if not np.isnan(comp) else "these"
+        n = int(age)
+        return phrases._sentence(f"{phrases.number_words(min(n, 99))} lap{'s' if n != 1 else ''} "
+                                 f"on these {name}" if name != "these" else
+                                 f"{phrases.number_words(min(n, 99))} laps on these")
+
+    def _a_who_pitted(self) -> str:
+        """"Who's pitted in front of me?": the cars just ahead and behind, and how many stops
+        they've made against yours."""
+        c, p = self.state.cars, self._player()
+        if p is None or np.isnan(c.position[p]) or np.isnan(c.num_pit_stops[p]):
+            return phrases._sentence("no timing yet")
+        mine, pos = int(c.num_pit_stops[p]), int(c.position[p])
+        bits = []
+        for d, word in ((-1, "ahead"), (1, "behind")):
+            idx = np.flatnonzero(c.active & (c.position == pos + d))
+            if not idx.size or np.isnan(c.num_pit_stops[idx[0]]):
+                continue
+            n, name = int(c.num_pit_stops[idx[0]]), self._name(int(idx[0])) or f"car {word}"
+            if c.pit_status[idx[0]] > 0:
+                bits.append(f"{name} {word} is in the pits now")
+            elif n == mine:
+                bits.append(f"{name} {word} has stopped the same as you")
+            else:
+                more = "more" if n > mine else "fewer"
+                diff = abs(n - mine)
+                bits.append(f"{name} {word} has {phrases.number_words(diff)} {more} "
+                            f"stop{'s' if diff != 1 else ''} than you")
+        return phrases._sentence(*bits) if bits else phrases._sentence("nobody near you")
 
     def _gap(self, direction: str) -> str:
         c, p = self.state.cars, self._player()
@@ -436,3 +561,20 @@ class QuestionAnswerer:
     def _a_laps_left(self) -> str:
         n = self._laps_to_go()
         return phrases.laps_left_phrase(n) if n else phrases._sentence("no timing yet")
+
+
+_COMPOUNDS_SAID = {"soft": 16, "softs": 16, "medium": 17, "mediums": 17, "hard": 18, "hards": 18}
+
+
+def _compound_in(text: str) -> int | None:
+    """'what happens if I pit for hards' -> 18 (visual compound)."""
+    for w in re.findall(r"[a-z]+", text.lower()):
+        if w in _COMPOUNDS_SAID:
+            return _COMPOUNDS_SAID[w]
+    return None
+
+
+def _percent_in(text: str) -> float | None:
+    """'will I get over 45%' -> 45 (a number as digits, as speech recognition writes it)."""
+    m = re.search(r"(\d+(?:\.\d+)?)\s*(%|percent)?", text)
+    return float(m.group(1)) if m else None

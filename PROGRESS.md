@@ -419,3 +419,23 @@ served on this PC only) while it listens and records:
   race-craft chatter) but keeps strategy plans and tyre warnings.
 - Open question: the PlayStation L1 reading (winmm, button 5) is untested on a real
   DualSense/DualShock; Steam Input users are covered by also reading LB.
+
+## Questions from the 28-29 Oct races (Melbourne, Imola x2, Abu Dhabi)
+
+Replayed every logged question against its recording (what the engineer knew at that moment):
+- 17 "say again" and 8 wrong answers had the data to answer. Added: plan for "when/which lap
+  should I pit", "do I have to stop again", "what tyres should I pit for / be on", "we're on
+  hards now"; box-now for "you sure we shouldn't pit", "box", "what happens if I pit for hards"
+  (now forces that compound in the what-if); new answers: "are we boxing now" (yes / not yet,
+  lap X), "repeat that", "how are we looking" (position, gap, tyres, next stop), "will these
+  tyres make the end / get over 45%" (wear at the flag), "how many laps on these tyres", "who's
+  pitted" (stops of the cars around you); coaching phrasings -> where you're losing time;
+  "where's Hamilton winning"; "talk to me more" / "give me some chatter" -> chatty; "talk to me
+  about tyre wear" -> tyres.
+- Bug: "Restart race" keeps the session UID, so the restarted Imola race was treated as the same
+  session: calls and answers were held back or dropped (cooldowns / "speaking" times from the
+  first race) until about lap 17. Fixed (RaceState restart detection).
+- Box-now follow-up answers weren't in the uploaded question logs (no session_uid): fixed.
+- "No strategy calls in this race" on the grid was wrong (the game hadn't sent the race yet):
+  now "no plan yet". A plan before the start would need the strategy request before lap 1: open.
+- Not answerable: "About what time?" (no context).

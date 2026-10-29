@@ -146,10 +146,10 @@ class StrategyAnalyzer:
                 sets.setdefault(c, []).append(float(s["m_wear"]))
         return sets, info
 
-    def ask_box_now(self, callback) -> bool:
+    def ask_box_now(self, callback, compound: int | None = None) -> bool:
         """Push-to-talk "what if I box now?": callback(result) gets the best plan stopping at the
         end of this lap (result.what_if) next to the current plan (result.sim). False if there's
-        no strategy in this race."""
+        no strategy in this race. compound: the asked-for tyre ("what if I pit for hards?")."""
         s, c, p = self.state, self.state.cars, self.state.player_index
         if not self._active() or np.isnan(c.lap[p]) or c.pit_status[p] > 0:
             return False
@@ -161,11 +161,13 @@ class StrategyAnalyzer:
         if box_lap >= (s.session.total_laps or 0):
             return False
         sc = (box_lap,) if s.session.safety_car_status in (1, 2) else ()
-        self._submit("box_now", lap - 1, sc_laps=sc, what_if_box_lap=box_lap, callback=callback)
+        self._submit("box_now", lap - 1, sc_laps=sc, what_if_box_lap=box_lap, callback=callback,
+                     what_if_compound=compound)
         return True
 
     def _submit(self, reason: str, lap_done: int, sc_laps: tuple[int, ...] = (),
                 sc_compare: bool = False, what_if_box_lap: int | None = None,
+                what_if_compound: int | None = None,
                 callback=None) -> None:
         s, c, p = self.state, self.state.cars, self.state.player_index
         mine = self.features.for_car(p)
@@ -194,7 +196,8 @@ class StrategyAnalyzer:
                 game_prior_laps=self.cfg.game_prior_laps, game_deg_sd=self.cfg.game_deg_sd,
                 fallback_deg_s_per_pct=self.cfg.fallback_deg_s_per_pct,
                 pit_loss_s=self.cfg.pit_loss_s, sc_pit_loss_factor=self.cfg.sc_pit_loss_factor),
-            sc_compare=sc_compare, what_if_box_lap=what_if_box_lap)
+            sc_compare=sc_compare, what_if_box_lap=what_if_box_lap,
+            what_if_compound=what_if_compound)
         if callback is not None:
             self._callbacks[self._seq] = callback
         self.runner.submit(req)

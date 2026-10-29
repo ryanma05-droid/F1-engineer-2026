@@ -72,6 +72,7 @@ class RaceSituation:
     over_limit_s_per_pct: float = 1.0
     min_gain_s: float = 3.0      # an extra stop must save at least this much to be the plan
     first_stop_lap: int | None = None   # "what if I box now?": force the first stop on this lap
+    first_stop_compound: int | None = None   # ... and onto this compound ("pit for hards")
 
 
 @dataclass
@@ -169,6 +170,15 @@ def simulate(sit: RaceSituation, model: StrategyModel) -> SimResult:
 
         zero = (0,) * len(comps)
         g0 = G(zero)[0]
+        forced = None
+        if sit.first_stop_compound is not None:
+            # Only the asked-for compound may follow the first stop.
+            if sit.first_stop_compound not in comps or not sets[sit.first_stop_compound]:
+                return None
+            forced = comps.index(sit.first_stop_compound)
+            first = tuple(int(i == forced) for i in range(len(comps)))
+            g0 = pit + Vs(first, forced)[0]
+            g0[0] = g0[R] = math.inf
         if sit.first_stop_lap is not None:
             # Only the forced lap may end the first stint (no stop at all isn't allowed either).
             keep = np.full(R + 1, math.inf)
@@ -183,7 +193,7 @@ def simulate(sit: RaceSituation, model: StrategyModel) -> SimResult:
         # Walk the choices forward to read the plan.
         stops, counts, q = [], zero, int(root_arg[0])
         while q < R:
-            ci = int(G(counts)[1][q])
+            ci = forced if (forced is not None and counts == zero) else int(G(counts)[1][q])
             counts = counts[:ci] + (counts[ci] + 1,) + counts[ci + 1:]
             c = comps[ci]
             stops.append(Stop(sit.lap_done + q, c, sets[c][counts[ci] - 1]))

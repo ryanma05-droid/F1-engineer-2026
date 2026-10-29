@@ -40,6 +40,7 @@ class StrategyRequest:
     settings: ModelSettings
     sc_compare: bool = False             # also solve without the cheap SC stop
     what_if_box_lap: int | None = None   # also solve with the first stop forced on this lap
+    what_if_compound: int | None = None  # ... onto this compound
 
 
 @dataclass
@@ -84,7 +85,8 @@ def solve(req: StrategyRequest, history: list[dict]) -> StrategyResult:
         sim = simulate(sit, model)
         green = simulate(replace(sit, sc_laps=(), sc_pit_loss_s=None), model) \
             if req.sc_compare else None
-        what_if = simulate(replace(sit, first_stop_lap=req.what_if_box_lap), model) \
+        what_if = simulate(replace(sit, first_stop_lap=req.what_if_box_lap,
+                                   first_stop_compound=req.what_if_compound), model) \
             if req.what_if_box_lap is not None else None
         return StrategyResult(req.seq, req.reason, sit.lap_done, model, sim, green,
                               sc_laps=sit.sc_laps, what_if=what_if)

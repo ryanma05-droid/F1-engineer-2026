@@ -400,3 +400,15 @@ def test_worker_runner_gives_the_same_answer_as_inline():
     finally:
         worker.close()
     assert got and got[0].seq == 1 and got[0].sim.best == want.sim.best
+
+
+def test_what_if_box_now_onto_a_given_compound():
+    """Push-to-talk "what happens if I pit for hards?" (29 Oct Imola)."""
+    m = model()
+    hards = simulate(situation(first_stop_lap=5, first_stop_compound=18), m).best
+    softs = simulate(situation(first_stop_lap=5, first_stop_compound=16), m).best
+    assert (hards.stops[0].lap, hards.stops[0].compound) == (5, 18)
+    assert (softs.stops[0].lap, softs.stops[0].compound) == (5, 16)
+    none_left = simulate(situation(first_stop_lap=5, first_stop_compound=18,
+                                   sets={16: [0.0], 17: [0.0]}), m)
+    assert none_left.best is None

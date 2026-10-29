@@ -15,8 +15,9 @@ number. Instead `m_lastLapTimeInMS` changes while the lap number stays put (and 
 turns Finished on the next frame). So a last-lap time change on the same lap also completes a lap,
 numbered as the current lap. Confirmed on a real 5-lap race at Austria.
 
-SessionStarted is published on the first Session packet of a new session UID, so it always
-carries the track and session type. SessionEnded comes from the SEND event, or from the UID changing.
+SessionStarted is published on the first Session packet of a new session UID (or of a restarted
+session: same UID, clock back to 0, see RaceState._restarted), so it always carries the track and
+session type. SessionEnded comes from the SEND event, or from the UID changing / a restart.
 
 Flashbacks: after an FLBK event (or if a lap number goes backwards) we drop the baselines and any
 pending laps, so a rewound lap is never reported as completed.
@@ -97,7 +98,8 @@ class EventDetector:
     def on_new_session(self, state: RaceState, old_uid: int | None, t: float) -> None:
         if old_uid is not None and self._ended_uid != old_uid:
             self.bus.publish(ev.SessionEnded(old_uid, t, reason="new_session"))
-            self._ended_uid = old_uid
+        # Forget both, so a restarted session (same UID) gets its own start and end.
+        self._ended_uid = self._started_uid = None
         self._reset_tracking()
 
     def process(self, state: RaceState, packet_id: int, rec: np.void | None) -> None:

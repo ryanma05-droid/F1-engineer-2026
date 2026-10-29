@@ -224,6 +224,13 @@ class FlashbackInfo:
     last_session_time: float | None = None
 
 
+# "Restart race" in F1 25 keeps the same session UID (real Imola race, 29 Oct): the session clock
+# just jumps back to 0. A jump from past RESTART_FROM_S to under RESTART_TO_S that isn't a
+# flashback is treated as a new session.
+RESTART_FROM_S = 60.0
+RESTART_TO_S = 5.0
+
+
 class RaceState:
     def __init__(self):
         self.reset(session_uid=None)
@@ -239,6 +246,7 @@ class RaceState:
         self.flashbacks = FlashbackInfo()
         self.checks = checks.Checks()
         self.packets_applied = 0
+        self._flashback_to: float | None = None    # a FLBK event's target, until the clock jumps
 
     # -- reading -------------------------------------------------------------------------------
 
@@ -277,11 +285,12 @@ class RaceState:
         uid = int(header["m_sessionUID"])
         if uid == 0:
             return False  # menu packets carry no session
-        new_session = uid != self.session_uid
+        t = float(header["m_sessionTime"])
+        new_session = uid != self.session_uid or self._restarted(t)
         if new_session:
             self.reset(uid)
         self.player_index = int(header["m_playerCarIndex"])
-        self.session_time = float(header["m_sessionTime"])
+        self.session_time = t
         self.frame = int(header["m_frameIdentifier"])
         self.packets_applied += 1
         if rec is not None:
@@ -289,6 +298,17 @@ class RaceState:
             if handler is not None:
                 handler(self, rec)
         return new_session
+
+    def _restarted(self, t: float) -> bool:
+        """The same session started again: the clock jumped back to the start, and no flashback
+        explains it."""
+        last = self.session_time
+        if last is None or t >= last - 1.0:
+            return False
+        if self._flashback_to is not None and t >= self._flashback_to - 1.0:
+            self._flashback_to = None              # a flashback: the clock went back to its target
+            return False
+        return last > RESTART_FROM_S and t < RESTART_TO_S
 
     def _restricted_mask(self) -> np.ndarray:
         """True where a car's restricted fields must be treated as unknown."""
@@ -424,6 +444,7 @@ class RaceState:
             self.flashbacks.count += 1
             self.flashbacks.last_frame = details["flashbackFrameIdentifier"]
             self.flashbacks.last_session_time = details["flashbackSessionTime"]
+            self._flashback_to = float(details["flashbackSessionTime"])
 
 
 _HANDLERS = {

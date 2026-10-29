@@ -49,6 +49,35 @@ from tests.test_strategy import SETS, model, situation
     ("Keep it short", "tempo_terse"),
     ("Talk less please", "tempo_terse"),
     ("Talk to me", "talk"),
+    # From the 28-29 Oct Melbourne, Imola and Abu Dhabi races (all were "say again" or wrong):
+    ("When do you think I should pit?", "plan"),
+    ("When should I pit?", "plan"),
+    ("Yeah, but which lap should I pit?", "plan"),
+    ("Where should I pit?", "plan"),
+    ("Do I have to stop again?", "plan"),
+    ("What tyres should I pit for?", "plan"),
+    ("What tyres should I be on?", "plan"),
+    ("Okay, we're on hards now.", "plan"),
+    ("Should I pit this lap?", "box_now"),
+    ("You sure we shouldn't pit?", "box_now"),
+    ("Box.", "box_now"),
+    ("Run the simulation for hards right now.", "box_now"),
+    ("What happens if I pit for hards?", "box_now"),
+    ("Are we boxing now?", "boxing_now"),
+    ("How am I doing through some of these corners?", "losing_time"),
+    ("Is there a corner that I'm losing a lot of speed?", "losing_time"),
+    ("Am I losing speed in one particular corner?", "losing_time"),
+    ("Give me some coaching.", "losing_time"),
+    ("Where's Hamilton winning?", "compare_driver"),
+    ("Talk to me about tire wear.", "tyres"),
+    ("Talk to me more.", "tempo_chatty"),
+    ("Give me some chatter.", "tempo_chatty"),
+    ("Repeat that.", "repeat"),
+    ("How are we looking right now?", "status"),
+    ("How does this current tyre hold up to the end of the race?", "tyres_to_end"),
+    ("Do I have to stop again with these tyres? Will I get over 45%?", "tyres_to_end"),
+    ("How many laps have I done on these tyres?", "tyre_age"),
+    ("Who's pitted in front of me?", "who_pitted"),
     ("What's for dinner", "unknown"),
     # From the 27 Oct Abu Dhabi race:
     ("How does that exit?", "corner"),
@@ -412,3 +441,13 @@ def test_microphone_that_stops_sending_is_noticed(monkeypatch):
     mic.start_recording()
     sd.stream.callback(block, 512, None, None)
     assert mic.stop_recording()[1] == 1
+
+
+
+def test_percent_and_compound_in_a_question():
+    from engineer.voice.answers import _compound_in, _percent_in
+    assert _percent_in("Will I get over 45%?") == 45
+    assert _percent_in("How are the tyres?") is None
+    assert _compound_in("What happens if I pit for hards?") == 18
+    assert _compound_in("Box now?") is None
+

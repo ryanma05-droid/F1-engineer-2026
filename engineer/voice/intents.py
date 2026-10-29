@@ -40,16 +40,44 @@ _TURN = (r"\bturn (\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|t
 # first intent with a matching pattern wins, so specific questions come before general ones.
 RULES: list[tuple[str, list[str]]] = [
     ("radio_check", [r"\bradio check\b", r"\bcan you hear me\b", r"\bdo you (read|copy)\b"]),
+    # 29 Oct Imola: "Repeat that."
+    ("repeat", [r"\brepeat\b", r"\bsay (that|it) again\b", r"\bcome again\b",
+                r"\bwhat did you (just )?say\b", r"\bdidn't (catch|hear) that\b"]),
     ("quiet", [r"\b(be )?quiet\b", r"\bstop talking\b", r"\bshut up\b", r"\bsilence\b",
                r"\bleave me alone\b", r"\bno more (calls|talking)\b"]),
-    ("tempo_chatty", [r"\b(talk|say) more\b", r"\bmore (chatty|talk|info|information|detail)\b",
+    ("tempo_chatty", [r"\b(talk|say) more\b", r"\btalk to me more\b",
+                      r"\b(give me )?(some |more )?chatter\b", r"\bmore (chatty|talk|info|information|detail)\b",
                       r"\bbe (more )?chatty\b", r"\bchattier\b", r"\bmore often\b"]),
     ("tempo_terse", [r"\b(talk|say) less\b", r"\bless (chatty|talk|talking|info|detail)\b",
                      r"\bkeep it short\b", r"\bshort(er)? calls\b", r"\bless often\b",
                      r"\bessentials only\b", r"\btone it down\b"]),
-    ("talk", [r"\btalk to me\b", r"\bkeep me (posted|updated|informed)\b",
+    # "Talk to me about tyre wear" is a tyre question (29 Oct), not "talk to me".
+    ("talk", [r"\btalk to me\b(?! about| more)", r"\bkeep me (posted|updated|informed)\b",
               r"\bback to normal\b", r"\bresume\b", r"\byou can talk\b"]),
-    ("box_now", [r"\bwhat if i (box|pit|stop)\b", r"\b(box|pit|stop)(ping)? (now|this lap)\b",
+    # 29 Oct: "How does this current tyre hold up to the end of the race?", "Will I get over 45%?"
+    ("tyres_to_end", [r"\b(hold up|last|make it|get) (to|until|till) the (end|finish|flag)\b",
+                      r"\bmake the (end|finish|flag)\b", r"\bget over \d+",
+                      r"\bwill (these|the|my) tyres? (last|make it|hold)\b"]),
+    # 29 Oct: "How are we looking right now?"
+    ("status", [r"\bhow (are|is) (we|it|things|everything) (looking|going)\b",
+                r"\bhow('s| is) (it|everything) (looking|going)\b", r"\bstatus( update)?\b",
+                r"\bgive me an? update\b", r"\bsitrep\b", r"\bwhere are we at\b"]),
+    # 29 Oct Imola: "Are we boxing now?"
+    ("boxing_now", [r"\bare (we|you|i) (boxing|pitting|stopping|coming in)\b",
+                    r"\b(am i|are we) (boxing|pitting) this lap\b", r"\bis it this lap\b"]),
+    # When/which lap to stop is the plan, not "what if I box now" (28 Oct Melbourne: "when
+    # should I pit?", "which lap should I pit?", "where should I pit?").
+    ("plan", [r"\b(when|which lap|what lap)\b.*\b(pit|box|stop)\b",
+              r"\bwhere should (i|we) (pit|box|stop)\b",
+              r"\bdo (i|we) (have|need) to (stop|pit|box)( again)?\b",
+              r"\b(what|which) tyres? should (i|we) (pit|box|stop|go) (for|on|onto)\b",
+              r"\b(what|which) tyres? should (i|we) be on\b",
+              r"\bwe('re| are) on (the )?(hards|mediums|softs|new tyres|fresh tyres)\b",
+              r"\bpit strategy\b"]),
+    ("box_now", [r"\b(you )?sure (we|i) (shouldn't|should not|don't|do not) (pit|box|stop)\b",
+                 r"^box$", r"\bwhat happens if (i|we) (pit|box|stop)\b",
+                 r"\b(run|do) (the |a )?(simulation|sim|numbers)\b.*\b(hards?|mediums?|softs?|now)\b",
+                 r"\b(pit|box|stop) for (the )?(hards?|mediums?|softs?)\b",r"\bwhat if i (box|pit|stop)\b", r"\b(box|pit|stop)(ping)? (now|this lap)\b",
                  r"\bshould i (box|pit|stop)\b", r"\bif i (box|pit|stop) now\b"]),
     ("plan", [r"\bplan\b", r"\bstrategy\b", r"\bwhen (do|should|will) (i|we) (box|pit|stop)\b",
               r"\bwhen('s| is) (the|my|our) (stop|pit ?stop|box)\b", r"\bhow many stops\b",
@@ -58,9 +86,9 @@ RULES: list[tuple[str, list[str]]] = [
     ("gap_driver", [_DRIVER + r".*\b(gap|how far|interval)\b",
                     r"\b(gap|how far|interval)\b.*" + _DRIVER]),
     ("compare_driver", [_DRIVER + r".*\b(gain|gaining|losing|lose|quicker|faster|slower|pace|"
-                        r"compare|catching|time|speed)\b",
+                        r"compare|catching|time|speed|winning|beating)\b",
                         r"\b(gain|gaining|losing|lose|quicker|faster|slower|pace|compare|"
-                        r"catching|time|speed|versus|vs|against)\b.*" + _DRIVER]),
+                        r"catching|time|speed|versus|vs|against|winning|beating)\b.*" + _DRIVER]),
     # A corner: "how was that exit?" (heard as "how does that exit", 27 Oct race), "turn four?"
     ("corner", [r"\bhow (was|did|does|is|'s) (that|the|my) (exit|corner|turn|entry|braking|"
                 r"apex|chicane|hairpin|line)\b",
@@ -68,10 +96,21 @@ RULES: list[tuple[str, list[str]]] = [
                 r"\bhow (was|did|does|is) " + _TURN[2:], _TURN]),
     ("gaining_time", [r"\bwhere (am i|i'm|are we) (gaining|quicker|faster|good)\b",
                       r"\bwhere('s| is) my (strength|best)\b", r"\bgaining time\b"]),
+    # 28-29 Oct: "Is there a corner that I'm losing a lot of speed?", "Am I losing speed in one
+    # particular corner?", "How am I doing through some of these corners?", "Give me some coaching."
     ("losing_time", [r"\bwhere (am i|i'm|are we) (losing|slow)\b", r"\blosing time\b",
+                     r"\blosing (a lot of |much )?speed\b", r"\bparticular corner\b",
+                     r"\bhow am i doing (through|in|on) (some of )?(these|the|my) corners\b",
+                     r"\b(give me (some )?|any )coaching\b", r"\bcoach me\b",
                      r"\bwhich corner\b", r"\bwhere can i (gain|improve|find time|be quicker)\b",
                      r"\bwhere('s| is) the time\b", r"\bimprove (my )?pace\b"]),
     ("damage", [r"\bdamage\b", r"\bwing\b", r"\bis the car (ok|okay|alright|all right)\b"]),
+    # 29 Oct: "How many laps have I done on these tyres?"
+    ("tyre_age", [r"\bhow many laps\b.*\b(on|have) (these|this|the|my) tyres?\b",
+                  r"\bhow old are (the|these|my) tyres\b", r"\btyre age\b"]),
+    # 29 Oct: "Who's pitted in front of me?"
+    ("who_pitted", [r"\bwho('s| has|s)? (pitted|stopped|boxed)\b",
+                    r"\bhas (the car (ahead|in front|behind)|anyone|anybody) (pitted|stopped)\b"]),
     ("tyres", [r"\btyres?\b", r"\bwear\b", r"\brubber\b", r"\bgrip\b",
                r"\bfronts\b", r"\brears\b"]),
     ("best_lap", [r"\b(best|fastest|quickest) lap\b", r"\bpersonal best\b"]),
