@@ -74,6 +74,10 @@ RULES: list[tuple[str, list[str]]] = [
               r"\b(what|which) tyres? should (i|we) be on\b",
               r"\bwe('re| are) on (the )?(hards|mediums|softs|new tyres|fresh tyres)\b",
               r"\bpit strategy\b"]),
+    # "What if I go a lap later?", "two laps earlier?", "what if I extend?"
+    ("box_shift", [r"\b(a|one|two|three|\d) laps? (later|earlier|longer|sooner)\b",
+                   r"\bwhat if i (go|box|pit|stop) (later|earlier|sooner)\b",
+                   r"\bwhat if (i|we) extend\b", r"\b(box|pit|stop) (later|earlier)\b"]),
     ("box_now", [r"\b(you )?sure (we|i) (shouldn't|should not|don't|do not) (pit|box|stop)\b",
                  r"^box$", r"\bwhat happens if (i|we) (pit|box|stop)\b",
                  r"\b(run|do) (the |a )?(simulation|sim|numbers)\b.*\b(hards?|mediums?|softs?|now)\b",

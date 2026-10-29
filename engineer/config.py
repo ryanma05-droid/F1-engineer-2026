@@ -120,6 +120,16 @@ class Strategy(BaseModel):
     undercut_gap_s: float = Field(default=3.0, ge=0)
     rejoin_traffic_s: float = Field(default=1.5, ge=0)   # "you'll come out behind X" within this
     max_wait_s: float = Field(default=20.0, gt=0)
+    # Committing to a pit lap: within commit_laps of the stop, it only moves if the new best is
+    # change_gain_s quicker (or the tyres won't make it, or a safety car).
+    commit_laps: int = Field(default=3, ge=0)
+    change_gain_s: float = Field(default=1.5, ge=0)
+    # Safe call vs gamble (strategy/decision.py): a safe plan ends every stint margin_pct under
+    # the wear limit, allowing for how sure the wear rate is.
+    margin_pct: float = Field(default=5.0, ge=0)
+    rate_sd_one_lap: float = Field(default=0.3, ge=0)
+    gamble_min_s: float = Field(default=1.0, ge=0)   # quicker by less: not worth naming
+    gamble_take_s: float = Field(default=5.0, ge=0)  # quicker by more: the gamble is the call
 
 
 class Voice(BaseModel):

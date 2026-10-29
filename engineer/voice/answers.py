@@ -25,6 +25,7 @@ from engineer.radio import phrases
 from engineer.radio.director import Priority, RadioCall
 from engineer.tools.queries import lap_delta
 from engineer.state.track_maps import turn_name
+from engineer.strategy.decision import wear_at
 from engineer.voice.intents import driver_in, match, turn_in
 
 # Damage parts reported by "any damage?" (state key -> spoken name), from 10 %.
@@ -169,10 +170,13 @@ class QuestionAnswerer:
             return phrases._sentence("no plan yet, I'll have one a couple of laps in")
         if not sa._active():
             return phrases._sentence("no strategy calls in this race")
-        res = sa.status()
-        if res is None or res.sim.best is None:
+        if sa.decision is None:
             return phrases._sentence("no plan yet, give me a couple of laps")
-        return phrases.plan_phrase(res.sim.best, res.sim.alternative(), self.verbosity)
+        # The committed call, said the same way as on the radio.
+        return phrases.call_phrase(sa.decision, int(self.state.session.total_laps or 0),
+                                   self.verbosity, after_stop=bool(sa._stops_made()),
+                                   ahead=sa._ahead(), limit_pct=sa.tyres.limit_pct,
+                                   margin_pct=sa.cfg.margin_pct)
 
     def _a_box_now(self) -> str | None:
         sa = self.engine.strategy
@@ -220,30 +224,53 @@ class QuestionAnswerer:
             parts.append(phrases._sentence(
                 f"tyres at {phrases.say_percent(st.worst_pct)}",
                 phrases.say_laps_left(st.laps_left) if st.laps_left is not None else ""))
-        res = self.engine.strategy.status()
-        if res is not None and res.sim.best is not None:
-            stop = res.sim.best.next_stop
+        plan = self.engine.strategy.committed()
+        if plan is not None:
+            stop = plan.next_stop
             parts.append(phrases._sentence(
-                f"box {phrases._laps_range(res.sim.best.window, stop.lap)} for "
+                f"box end of lap {phrases.number_words(stop.lap)} for "
                 f"{phrases.say_compound(stop.compound)}" if stop else "no stop planned"))
         return " ".join(parts)
 
     def _a_boxing_now(self) -> str:
         """"Are we boxing now?": yes / not yet (and when) / no stop planned."""
-        res, lap = self.engine.strategy.status(), self._lap()
-        if res is None or res.sim.best is None or lap is None:
+        plan, lap = self.engine.strategy.committed(), self._lap()
+        if plan is None or lap is None:
             return self._a_plan()
-        stop = res.sim.best.next_stop
+        stop = plan.next_stop
         if stop is None:
             return phrases._sentence("no, no stop planned, the tyres make the end")
-        lo, hi = res.sim.best.window or (stop.lap, stop.lap)
-        if lo <= lap <= hi:
+        if stop.lap == lap:
             return phrases._sentence(f"yes, box this lap for {phrases.say_compound(stop.compound)}")
-        if lap < lo:
-            return phrases._sentence(f"not yet, box {phrases._laps_range((lo, hi), stop.lap)}",
+        if lap < stop.lap:
+            return phrases._sentence(f"not yet, box end of lap {phrases.number_words(stop.lap)}",
                                      phrases.say_compound(stop.compound))
-        return phrases._sentence(f"window's gone, box as soon as you can for "
+        return phrases._sentence(f"we're past the stop, box as soon as you can for "
                                  f"{phrases.say_compound(stop.compound)}")
+
+    def _a_box_shift(self) -> str | None:
+        """"What if I go a lap later / two laps earlier?" against the committed stop."""
+        sa, plan = self.engine.strategy, self.engine.strategy.committed()
+        if plan is None or plan.next_stop is None:
+            return phrases._sentence("no stop planned to move")
+        shift = _shift_in(self.heard)
+        stop = plan.next_stop
+        lap = stop.lap + shift
+        limit = sa.tyres.limit_pct
+
+        def answer(res) -> None:
+            if res is None or res.what_if is None or res.what_if.best is None:
+                text = phrases._sentence("can't work that out right now")
+            else:
+                keep = res.hold or res.sim.best
+                wear = wear_at(res.situation, res.model, lap) if res.situation else None
+                text = phrases.shift_phrase(shift, res.what_if.best.cost_s - keep.cost_s, wear,
+                                            limit)
+            self._say("box_shift", text)
+
+        if not sa.ask_what_if(answer, lap, stop.compound):
+            return phrases._sentence("too late for that one")
+        return None
 
     def _a_tyres_to_end(self) -> str:
         """"Will these tyres make the end?" / "Will I get over 45 percent?": the worst tyre's
@@ -578,3 +605,16 @@ def _percent_in(text: str) -> float | None:
     """'will I get over 45%' -> 45 (a number as digits, as speech recognition writes it)."""
     m = re.search(r"(\d+(?:\.\d+)?)\s*(%|percent)?", text)
     return float(m.group(1)) if m else None
+
+
+_SHIFT_WORDS = {"a": 1, "one": 1, "two": 2, "three": 3, "four": 4, "1": 1, "2": 2, "3": 3, "4": 4}
+
+
+def _shift_in(text: str) -> int:
+    """'a lap later' -> +1, 'two laps earlier' -> -2 (default one lap)."""
+    t = text.lower()
+    m = re.search(r"\b(a|one|two|three|four|\d)\s+laps?\s+(later|longer|earlier|sooner|early|late)",
+                  t)
+    n = _SHIFT_WORDS.get(m.group(1), 1) if m else 1
+    later = bool(re.search(r"\b(later|longer|late|extend|stay out)\b", t))
+    return n if later else -n

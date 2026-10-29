@@ -99,6 +99,12 @@ strategy:               # pit strategy (Phase 5): the plan, box calls, safety ca
   undercut_gap_s: 3.0
   rejoin_traffic_s: 1.5 # "you'll come out behind X" when within this
   max_wait_s: 20
+  commit_laps: 3        # within 3 laps of the stop the pit lap is locked...
+  change_gain_s: 1.5    # ...and only moves for a gain this big (or tyres that won't make it, or SC)
+  margin_pct: 5         # a safe plan ends every stint this far under tyres.limit_pct
+  rate_sd_one_lap: 0.3  # how unsure a wear rate from one lap is (shrinks as laps add up)
+  gamble_min_s: 1.0     # a riskier plan quicker by this much is named as "the gamble"
+  gamble_take_s: 5.0    # quicker by this much, the gamble becomes the call (labelled tight)
 
 voice:                  # push-to-talk questions (Phase 6)
   enabled: true

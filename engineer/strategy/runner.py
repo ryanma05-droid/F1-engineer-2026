@@ -17,7 +17,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 
 from engineer.strategy.model import (GameTyreInfo, ModelSettings, StrategyModel, build_model)
-from engineer.strategy.sim import RaceSituation, SimResult, simulate
+from engineer.strategy.sim import Plan, RaceSituation, SimResult, plan_cost, simulate
 
 log = logging.getLogger(__name__)
 
@@ -41,6 +41,9 @@ class StrategyRequest:
     sc_compare: bool = False             # also solve without the cheap SC stop
     what_if_box_lap: int | None = None   # also solve with the first stop forced on this lap
     what_if_compound: int | None = None  # ... onto this compound
+    hold_lap: int | None = None          # the committed plan's first stop: what it costs now
+    hold_compound: int | None = None
+    safe_limits: tuple[float, ...] = ()  # also plan with these (lower) wear limits: safe options
 
 
 @dataclass
@@ -54,6 +57,9 @@ class StrategyResult:
     sc_laps: tuple[int, ...] = ()        # laps where a stop was costed as a safety car stop
     what_if: SimResult | None = None     # what_if_box_lap: the best plan stopping on that lap
     error: str | None = None
+    situation: RaceSituation | None = None   # what was solved (wear, sets, laps) after the model
+    options: tuple = ()                  # candidate plans: each stop count, each next tyre
+    hold: Plan | None = None             # hold_lap: the best plan keeping the committed stop
 
 
 def load_history(features_dir: Path | str | None) -> list[dict]:
@@ -88,8 +94,32 @@ def solve(req: StrategyRequest, history: list[dict]) -> StrategyResult:
         what_if = simulate(replace(sit, first_stop_lap=req.what_if_box_lap,
                                    first_stop_compound=req.what_if_compound), model) \
             if req.what_if_box_lap is not None else None
+        # Candidates for the call (decision.py): the best plan for each number of stops, and the
+        # best plan for each tyre you could fit at the next stop.
+        options = list(sim.by_stops.values())
+        if req.what_if_box_lap is None:
+            for c, left in sorted(sit.sets.items()):
+                if left:
+                    options.append(simulate(replace(sit, first_stop_compound=c), model).best)
+        # Careful versions (stopping before the tyres get near the limit), priced at the real
+        # limit, so there's a safe plan to compare a tight one with.
+        for lim in req.safe_limits:
+            careful = replace(sit, limit_pct=lim)
+            found = list(simulate(careful, model).by_stops.values())
+            if req.what_if_box_lap is None:
+                for c, left in sorted(sit.sets.items()):
+                    if left:
+                        found.append(simulate(replace(careful, first_stop_compound=c), model).best)
+            for p in found:
+                if p is not None:
+                    options.append(replace(p, cost_s=plan_cost(p, sit, model)))
+        hold = None
+        if req.hold_lap is not None and req.hold_lap > sit.lap_done:
+            hold = simulate(replace(sit, first_stop_lap=req.hold_lap,
+                                    first_stop_compound=req.hold_compound), model).best
         return StrategyResult(req.seq, req.reason, sit.lap_done, model, sim, green,
-                              sc_laps=sit.sc_laps, what_if=what_if)
+                              sc_laps=sit.sc_laps, what_if=what_if, situation=sit,
+                              options=tuple(p for p in options if p is not None), hold=hold)
     except Exception as exc:
         log.exception("strategy solve failed")
         return StrategyResult(req.seq, req.reason, req.situation.lap_done, None, SimResult(None),

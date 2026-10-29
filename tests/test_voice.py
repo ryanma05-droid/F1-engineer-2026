@@ -78,6 +78,9 @@ from tests.test_strategy import SETS, model, situation
     ("Do I have to stop again with these tyres? Will I get over 45%?", "tyres_to_end"),
     ("How many laps have I done on these tyres?", "tyre_age"),
     ("Who's pitted in front of me?", "who_pitted"),
+    ("What if I go a lap later?", "box_shift"),
+    ("What about two laps earlier?", "box_shift"),
+    ("What if we extend?", "box_shift"),
     ("What's for dinner", "unknown"),
     # From the 27 Oct Abu Dhabi race:
     ("How does that exit?", "corner"),
@@ -179,7 +182,7 @@ def test_answers_to_each_question(tmp_path):
     got = dict(eng.answers.answered)
     assert got["radio_check"] == "Loud and clear."
     assert got["tyres"].startswith("Tyres: front right worst at sixteen percent")
-    assert got["plan"].startswith("Plan is one stop, box lap ")
+    assert got["plan"].startswith("Plan is one stop, box end of lap ")
     assert got["gap_ahead"] == "Norris ahead, one point two seconds."
     assert got["gap_behind"] == "Nobody behind."
     assert got["position"] == "P two, ten laps to go."
@@ -451,3 +454,11 @@ def test_percent_and_compound_in_a_question():
     assert _compound_in("What happens if I pit for hards?") == 18
     assert _compound_in("Box now?") is None
 
+
+
+
+def test_shift_in_a_question():
+    from engineer.voice.answers import _shift_in
+    assert _shift_in("What if I go a lap later?") == 1
+    assert _shift_in("What about two laps earlier?") == -2
+    assert _shift_in("What if we extend?") == 1

@@ -131,6 +131,17 @@ uv run python -m engineer.report                     # driver report PDF (data/r
   `build_engine` defaults to `InlineRunner` so replays and tests stay deterministic.
 - AI lap times are not used for deg (they barely slow with wear on real data); AI wear rates are
   used, scaled by your wear ratio vs the AI.
+- The call (strategy/decision.py): every candidate (each stop count, each next tyre, and careful
+  versions planned at limit - margin and limit - 2x margin, priced at the real limit) is checked
+  stint by stint; safe = every stint ends `margin_pct` under the limit allowing for wear-rate
+  uncertainty (`rate_sd_one_lap` / sqrt(laps of evidence)). The call is the fastest safe plan; a
+  quicker unsafe one is named as "the gamble", or becomes the call (labelled tight) when it's
+  `gamble_take_s` quicker. Wording: one lap and one tyre ("box end of lap nine for softs").
+- The call is committed: box calls follow `StrategyAnalyzer.announced`, not the latest best. It
+  only changes for a gain of `window_s` (two laps running) or `change_gain_s` within
+  `commit_laps`; at once if you stayed out past it, the tyres won't make it, or it's impossible.
+  After a stop: "Copy, softs." + the rest of the race, at pit exit. Plan calls are NORMAL
+  priority and are re-announced if they expire or a flashback drops them unsaid.
 
 ## Push-to-talk (Phase 6)
 

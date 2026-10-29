@@ -6,6 +6,8 @@ words out ourselves rather than letting the voice read "1:09.162".
 
 from __future__ import annotations
 
+import math
+
 from engineer.tools.queries import SAME_LAP_THRESHOLD_MS, LapDelta
 
 VERBOSITY_LEVELS = ("terse", "normal", "chatty")
@@ -283,6 +285,144 @@ def plan_phrase(plan, alternative=None, verbosity: str = "normal", change: bool 
         alt = (f"{name} is about the same" if diff_ms < 500
                else f"{name} is {say_gap(diff_ms)} slower")
     return _sentence(head) + (f" {_sentence(alt)}" if alt else "")
+
+
+def _stops_body(plan, verbosity: str, after_stop: bool) -> str:
+    """'one stop, box end of lap nine for softs' / 'no more stops'. The window (laps that cost
+    about the same) only on chatty: the call is one lap."""
+    stops = plan.stops
+    if not stops:
+        return "no more stops" if after_stop else "no stop"
+    first = stops[0]
+    window = ""
+    if verbosity == "chatty" and plan.window and plan.window[0] != plan.window[1]:
+        window = f" (anywhere from {_laps_range(plan.window, first.lap)} works)"
+    if len(stops) == 1:
+        return (f"one {'more ' if after_stop else ''}stop, box end of lap "
+                f"{number_words(first.lap)} for {say_compound(first.compound)}{window}")
+    rest = ", then ".join(f"lap {number_words(s.lap)} for {say_compound(s.compound)}"
+                          for s in stops[1:])
+    count = _STOP_WORDS[len(stops)]
+    if after_stop:
+        count = count.replace(" stops", " more stops")
+    return (f"{count}: box lap "
+            f"{number_words(first.lap)} for {say_compound(first.compound)}{window}, then {rest}")
+
+
+def _where_wear(stint, total_laps: int) -> str:
+    """'at the flag' / 'by lap nineteen'."""
+    return "at the flag" if stint.end_lap >= total_laps else f"by lap {number_words(stint.end_lap)}"
+
+
+def _option_name(option, call) -> str:
+    """How a plan differs from the call, in a word: 'softs' / 'one stop' / 'boxing lap nine'."""
+    a, b = option.plan.next_stop, call.plan.next_stop
+    if option.plan.n_stops != call.plan.n_stops:
+        stops = _STOP_WORDS[option.plan.n_stops]
+        return f"{stops} for {say_compound(a.compound)}" if a is not None else stops
+    if a is not None and (b is None or a.compound != b.compound):
+        return say_compound(a.compound)
+    return f"boxing lap {number_words(a.lap)}" if a is not None else "staying out"
+
+
+def call_phrase(decision, total_laps: int, verbosity: str = "normal",
+                change_reason: str | None = None, previous=None, copy_compound: int | None = None,
+                after_stop: bool = False, ahead: tuple[str, int] | None = None,
+                limit_pct: float = 60.0, margin_pct: float = 5.0) -> str:
+    """The strategy call (strategy.decision.Decision), said with confidence:
+    'Plan is one stop, box end of lap nine for softs.'
+    'Plan is no more stops, these need to last eleven laps, about fifty percent at the flag.'
+    + the gamble: 'Softs are the gamble: about three seconds quicker, enough to catch Norris, but
+      sixty one percent at the flag, you'd have to look after them.'
+    or a taken gamble: 'Mediums will be tight, fifty seven percent at the flag, look after them.
+      The safe call is two stops, nine seconds slower.'
+    change_reason / previous (the plan it replaces): 'Change: box lap eight instead of nine,
+      tyres wearing faster than expected.'
+    copy_compound: just pitted: 'Copy, softs.' first. ahead: (name, gap ms) of the car ahead.
+    A plan is "tight" when the expected wear runs within margin_pct of the limit; when only the
+    allowance for a not-yet-sure wear rate makes it unsafe, it's "early" instead."""
+    call = decision.call
+
+    def tight(stint) -> bool:
+        return stint.end_wear > limit_pct - margin_pct
+    plan = call.plan
+    out = []
+    if copy_compound is not None:
+        out.append(_sentence(f"copy, {say_compound(copy_compound)}"))
+    reason = change_reason or ""
+    same_shape = (previous is not None and plan.next_stop is not None
+                  and previous.next_stop is not None and previous.n_stops == plan.n_stops
+                  and [s.compound for s in previous.stops] == [s.compound for s in plan.stops])
+    if previous is not None and same_shape:
+        out.append(_sentence(f"change, box lap {number_words(plan.next_stop.lap)} instead of "
+                             f"{number_words(previous.next_stop.lap)}", reason))
+    else:
+        body = _stops_body(plan, verbosity, after_stop)
+        note = ""
+        if not plan.stops:
+            last = call.last
+            body += (f", these need to last {number_words(min(last.laps, 99))} "
+                     f"lap{'s' if last.laps != 1 else ''}, about {say_percent(last.end_wear)} "
+                     f"at the flag")
+            if decision.taken_gamble:
+                note = "that's tight, look after them" if tight(last) \
+                    else "should be fine but keep an eye on them"
+        head = f"plan change: {body}" if previous is not None else f"plan is {body}"
+        out.append(_sentence(head, reason, note))
+    if decision.taken_gamble:
+        t = call.tightest
+        if plan.stops and t.end_wear < 1000:
+            if tight(t):
+                out.append(_sentence(f"{say_compound(t.compound)} will be tight, about "
+                                     f"{say_percent(t.end_wear)} {_where_wear(t, total_laps)}",
+                                     "look after them"))
+            else:
+                out.append(_sentence(f"{say_compound(t.compound)} should make it, about "
+                                     f"{say_percent(t.end_wear)} {_where_wear(t, total_laps)}",
+                                     "but it's early, keep an eye on them"))
+        safe = decision.safe_alternative
+        if safe is not None and verbosity != "terse" and decision.gain_s < 15:
+            out.append(_sentence(f"the safe call is {_option_name(safe, call)}, "
+                                 f"{say_gap(int(decision.gain_s * 1000))} slower"))
+    elif decision.gamble is not None:
+        g, t = decision.gamble, decision.gamble.tightest
+        gain_ms = int(decision.gain_s * 1000)
+        name = _option_name(g, call)
+        name = name[:1].upper() + name[1:]
+        if verbosity == "terse":
+            out.append(_sentence(f"{name} is the gamble, {say_gap(gain_ms)} quicker but tight"))
+        else:
+            target = ""
+            if ahead is not None:
+                who, gap = ahead
+                target = (f"enough to catch {who}" if gain_ms >= gap
+                          else f"{who} is {say_gap(gap)} ahead")
+            risk = (f"but {say_compound(t.compound)} at about {say_percent(t.end_wear)} "
+                    f"{_where_wear(t, total_laps)}", "you'd have to look after them") if tight(t) \
+                else (f"but there's not much data on the {say_compound(t.compound)} yet",)
+            rest = _sentence(f"about {say_gap(gain_ms)} quicker", target, *risk)
+            verb = "are" if name.endswith("s") else "is"
+            out.append(f"{name} {verb} the gamble: {rest[:1].lower()}{rest[1:]}")
+    return " ".join(out)
+
+
+def shift_phrase(laps: int, diff_s: float, wear_pct: float | None, limit_pct: float) -> str:
+    """'A lap later costs about four tenths, tyres at fifty one percent when you box.'"""
+    when = f"{'a' if abs(laps) == 1 else number_words(abs(laps))} lap{'s' if abs(laps) != 1 else ''} " \
+           f"{'later' if laps > 0 else 'earlier'}"
+    diff_ms = int(round(diff_s * 1000))
+    if abs(diff_ms) < 300:
+        head = f"{when} is about the same"
+    elif diff_ms > 0:
+        head = f"{when} costs about {say_gap(diff_ms)}"
+    else:
+        head = f"{when} saves about {say_gap(diff_ms)}"
+    tyre = ""
+    if wear_pct is not None and not math.isnan(wear_pct):
+        tyre = f"tyres at {say_percent(wear_pct)} when you box"
+        if wear_pct > limit_pct:
+            tyre += ", that's past the limit"
+    return _sentence(head, tyre)
 
 
 def rejoin_phrase(rejoin) -> str:

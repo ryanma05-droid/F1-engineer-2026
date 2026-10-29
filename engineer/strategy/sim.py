@@ -227,3 +227,21 @@ def simulate(sit: RaceSituation, model: StrategyModel) -> SimResult:
     best = min((p for p in by_stops.values() if p.cost_s <= fastest.cost_s + sit.min_gain_s),
                key=lambda p: (p.n_stops, p.cost_s))
     return SimResult(best, by_stops)
+
+
+def plan_cost(plan: Plan, sit: RaceSituation, model: StrategyModel) -> float:
+    """What a given plan costs (tyre time + pit losses for the rest of the race), with this
+    situation's wear limit: used to price plans found with a more careful limit."""
+    total, start, wear0, comp = 0.0, sit.lap_done, sit.wear, sit.compound
+    for end_lap, next_comp, next_wear in [(s.lap, s.compound, s.set_wear) for s in plan.stops] \
+            + [(sit.total_laps, None, 0.0)]:
+        if comp not in model.compounds:
+            return math.inf
+        laps = end_lap - start
+        total += stint_costs(model.compounds[comp], wear0, laps, sit.limit_pct,
+                             sit.over_limit_s_per_pct)[laps]
+        if next_comp is not None:
+            sc = sit.sc_pit_loss_s is not None and end_lap in sit.sc_laps
+            total += sit.sc_pit_loss_s if sc else sit.pit_loss_s
+        start, wear0, comp = end_lap, next_wear, next_comp
+    return float(total)

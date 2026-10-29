@@ -3,12 +3,17 @@
 After every lap you complete (from lap `announce_after_lap`), the strategy model is rebuilt with the
 latest laps and every plan is simulated again (engineer/strategy). What you hear:
 
-- The plan, once: "Plan is one stop, box lap eleven to thirteen for hards. Two stops is four
-  seconds slower." After that only when it changes: a different number of stops or compounds, or
-  the stop moving by `replan_laps` or more. A change has to show up on two laps running before
-  it's called, so one odd lap can't flip the plan (a planned stop moving up to this lap is called
-  at once, with the box call). Box calls are only made for a plan you've heard. After each of
-  your stops the plan for the rest of the race is said again.
+- The call, once, as one lap and one tyre: "Plan is one stop, box end of lap nine for softs."
+  Which plan is the call, and whether there's a gamble worth naming ("Softs are the gamble: about
+  three seconds quicker, but sixty one percent at the flag, you'd have to look after them"), is
+  decided by strategy/decision.py from every candidate plan and how close each runs to the wear
+  limit.
+- The call is committed (29 Oct races: the best lap crept a lap later every lap and the box call
+  never came). It only changes when the new best beats keeping it by `window_s` (confirmed on two
+  laps), or by `change_gain_s` once the stop is within `commit_laps`; at once if the tyres won't
+  make the planned lap, or you stayed out past it. A change says why: "Change, box lap eight
+  instead of nine, tyres wearing faster than expected."
+- After each of your stops: "Copy, softs." and the plan for the rest of the race.
 - Box calls for the plan's next stop: one lap before the pit entry, as you start the lap you'll
   pit at the end of ("Box this lap, box this lap. Hards. You'll come out behind Sainz, about two
   seconds back."), and again half a lap before it ("Box box, end of this lap. Hards.").
@@ -37,6 +42,7 @@ from engineer.ingest.formats import f1_2025 as f
 from engineer.radio import phrases
 from engineer.radio.director import Priority, RadioCall, RadioDirector
 from engineer.state.race_state import RaceState
+from engineer.strategy.decision import Decision, DecisionSettings, decide, wear_at
 from engineer.strategy.model import DRY, GameTyreInfo, ModelSettings, TyreSet, game_tyre_info
 from engineer.strategy.runner import HISTORY_COLUMNS, StrategyRequest, StrategyResult
 from engineer.strategy.sim import Plan, RaceSituation
@@ -72,19 +78,31 @@ class StrategyAnalyzer:
         self._reset()
         bus.subscribe(ev.LapCompleted, self.on_lap)
         bus.subscribe(ev.PitEntry, self.on_pit_entry)
+        bus.subscribe(ev.PitExit, self.on_pit_exit)
+        bus.subscribe(ev.RadioDropped, self._on_dropped)
+        bus.subscribe(ev.RadioMessage, self._on_said)
         bus.subscribe(ev.SessionStarted, lambda e: (self._reset(), self._rows.clear()))
         bus.subscribe(ev.Flashback, self._on_flashback)
 
     def _reset(self) -> None:
         self.latest: StrategyResult | None = None
-        self.announced: Plan | None = None
+        self.announced: Plan | None = None       # the committed call (box calls follow it)
+        self.decision: Decision | None = None    # ... and how safe it is / the gamble
+        self.commit_rate: float | None = None    # wear rate on these tyres when it was called
+        self.copy_compound: int | None = None    # just pitted onto this: "Copy, softs."
+        self.announced_at: float | None = None   # session time of the last call
+        self.plan_said = False                   # ... and whether it has been said yet
         self.pending_change: Plan | None = None
         self.box_lap: int | None = None          # committed: "box this lap" said for this lap
         self.half_said = False
         self.sc_status = 0
         self.applied_seq = -1
 
-    def _on_flashback(self, _e) -> None:
+    def _on_flashback(self, e) -> None:
+        if not self.plan_said and self.announced is not None:
+            # The call was still waiting to be said: the director drops it on a flashback, so
+            # call it again (Melbourne, 28 Oct).
+            self.announced = self.decision = None
         self.latest = None
         self.pending_change = None
         self.box_lap = None
@@ -95,6 +113,10 @@ class StrategyAnalyzer:
 
     def status(self) -> StrategyResult | None:
         return self.latest
+
+    def committed(self) -> Plan | None:
+        """The plan the driver has been told (what box calls and answers follow)."""
+        return self.announced
 
     # -- when it applies -------------------------------------------------------------------------
 
@@ -158,7 +180,16 @@ class StrategyAnalyzer:
         late = length and not np.isnan(c.lap_distance_m[p]) \
             and c.lap_distance_m[p] > SC_LATE_IN_LAP * length
         box_lap = lap + 1 if late else lap
-        if box_lap >= (s.session.total_laps or 0):
+        return self.ask_what_if(callback, box_lap, compound)
+
+    def ask_what_if(self, callback, box_lap: int, compound: int | None = None) -> bool:
+        """The best plan with the first stop at the end of box_lap (and onto compound), next to
+        the committed one (result.hold) and the best (result.sim). False if it can't be asked."""
+        s, c, p = self.state, self.state.cars, self.state.player_index
+        if not self._active() or np.isnan(c.lap[p]) or c.pit_status[p] > 0:
+            return False
+        lap = int(c.lap[p])
+        if box_lap < lap or box_lap >= (s.session.total_laps or 0):
             return False
         sc = (box_lap,) if s.session.safety_car_status in (1, 2) else ()
         self._submit("box_now", lap - 1, sc_laps=sc, what_if_box_lap=box_lap, callback=callback,
@@ -184,6 +215,7 @@ class StrategyAnalyzer:
             max_stops=self.cfg.max_stops, window_s=self.cfg.window_s,
             over_limit_s_per_pct=self.cfg.over_limit_s_per_pct, min_gain_s=self.cfg.min_gain_s)
         self._seq += 1
+        hold = self.announced.next_stop if self.announced is not None else None
         rows = self._session_rows()
         stint_rows = tuple(self._rows[id(r)][1] for r in stint if id(r) in self._rows)
         game: GameTyreInfo | None = game_tyre_info(info) if info else None
@@ -197,7 +229,12 @@ class StrategyAnalyzer:
                 fallback_deg_s_per_pct=self.cfg.fallback_deg_s_per_pct,
                 pit_loss_s=self.cfg.pit_loss_s, sc_pit_loss_factor=self.cfg.sc_pit_loss_factor),
             sc_compare=sc_compare, what_if_box_lap=what_if_box_lap,
-            what_if_compound=what_if_compound)
+            what_if_compound=what_if_compound,
+            hold_lap=hold.lap if hold is not None else None,
+            safe_limits=(self.tyres.limit_pct - self.cfg.margin_pct,
+                         self.tyres.limit_pct - 2 * self.cfg.margin_pct) if reason != "box_now"
+            else (),
+            hold_compound=hold.compound if hold is not None else None)
         if callback is not None:
             self._callbacks[self._seq] = callback
         self.runner.submit(req)
@@ -225,11 +262,33 @@ class StrategyAnalyzer:
         if e.car_idx == p:
             self.box_lap = None
             self.half_said = False
-            # The plan from here is announced again after the stop ("Plan is no stop, tyres
-            # will make the end." confirms the rest of the race).
-            self.announced = self.pending_change = None
+            # The plan from here is announced again after the stop ("Copy, softs. Plan is no
+            # more stops, ...").
+            self.announced = self.pending_change = self.decision = None
             return
         self._undercut_check(e.car_idx)
+
+    def _on_said(self, e: ev.RadioMessage) -> None:
+        if e.topic == "strategy_plan":
+            self.plan_said = True
+
+    def _on_dropped(self, e: ev.RadioDropped) -> None:
+        """A plan call that was never said: say it again with the next result."""
+        if e.topic == "strategy_plan" and e.reason in ("expired", "cooldown") \
+                and self.box_lap is None:
+            self.announced = self.decision = None
+
+    def on_pit_exit(self, e: ev.PitExit) -> None:
+        """Out of the pits: confirm the tyres and give the plan for the rest of the race now,
+        not a lap later."""
+        s, c, p = self.state, self.state.cars, self.state.player_index
+        if e.car_idx != p or not self._active() or np.isnan(c.lap[p]):
+            return
+        comp = c.visual_compound[p]
+        self.copy_compound = int(comp) if not np.isnan(comp) else None
+        lap = int(c.lap[p])
+        if lap < (s.session.total_laps or 0):
+            self._submit("stop", lap - 1)
 
     def after_packet(self, packet_id: int | None) -> None:
         """Hooked into Pipeline.after_packet."""
@@ -257,30 +316,115 @@ class StrategyAnalyzer:
                 self._on_plan(res)
             self._box_check()
 
+    def _decide(self, res: StrategyResult) -> Decision | None:
+        if res.situation is None or res.model is None:
+            return None
+        cfg = self.cfg
+        settings = DecisionSettings(margin_pct=cfg.margin_pct, rate_sd_one_lap=cfg.rate_sd_one_lap,
+                                    gamble_min_s=cfg.gamble_min_s, gamble_take_s=cfg.gamble_take_s,
+                                    min_gain_s=cfg.min_gain_s)
+        return decide(list(res.options) + [res.sim.best], res.situation, res.model, settings,
+                      self.tyres.limit_pct)
+
+    def _ahead(self) -> tuple[str, int] | None:
+        """The car ahead and the gap to it (ms), for "enough to catch Norris"."""
+        c, p = self.state.cars, self.state.player_index
+        if p is None or np.isnan(c.position[p]) or c.position[p] <= 1:
+            return None
+        car = np.flatnonzero(c.active & (c.position == c.position[p] - 1))
+        gap = c.delta_to_car_in_front_ms[p]
+        if not car.size or np.isnan(gap):
+            return None
+        return _name(c.names[int(car[0])]) or "the car ahead", int(gap)
+
+    def _rate_now(self, res: StrategyResult) -> float | None:
+        sit, model = res.situation, res.model
+        cm = model.compounds.get(sit.compound) if (sit and model) else None
+        return cm.wear_rate.value if cm is not None else None
+
+    def _announce(self, res: StrategyResult, dec: Decision, reason: str | None = None,
+                  previous: Plan | None = None) -> None:
+        self.announced, self.decision, self.pending_change = dec.call.plan, dec, None
+        self.commit_rate = self._rate_now(res)
+        self.announced_at = self.state.session_time
+        self.plan_said = False
+        copy, self.copy_compound = self.copy_compound, None
+        text = phrases.call_phrase(dec, int(self.state.session.total_laps or 0), self.verbosity,
+                                   change_reason=reason, previous=previous, copy_compound=copy,
+                                   after_stop=res.reason == "stop" or copy is not None
+                                   or bool(self._stops_made()), ahead=self._ahead(),
+                                   limit_pct=self.tyres.limit_pct, margin_pct=self.cfg.margin_pct)
+        # NORMAL: the plan matters more than coaching or battle chatter (29 Oct Abu Dhabi: the
+        # first plan, at LOW, waited behind them and expired unsaid).
+        self._say("strategy_plan", text, Priority.NORMAL)
+
+    def _stops_made(self) -> int:
+        c, p = self.state.cars, self.state.player_index
+        n = c.num_pit_stops[p] if p is not None else math.nan
+        return 0 if np.isnan(n) else int(n)
+
     def _on_plan(self, res: StrategyResult) -> None:
-        best = res.sim.best
-        if self.box_lap is not None:             # mid box call: the box calls do the talking
+        dec = self._decide(res)
+        if dec is None or self.box_lap is not None:      # mid box call: the box calls talk
             return
-        if self.announced is None:
-            self.announced, self.pending_change = best, None
-            self._say("strategy_plan", phrases.plan_phrase(best, res.sim.alternative(),
-                                                           self.verbosity), Priority.LOW)
+        pick, held = dec.call.plan, self.announced
+        if held is None:
+            self._announce(res, dec)
             return
-        if not self._differs(best, self.announced):
-            self.pending_change = None
+        if pick.key() == held.key():
+            self.announced, self.decision, self.pending_change = pick, dec, None
             return
-        if (best.next_stop is not None and best.next_stop.lap == res.lap_done + 1
-                and best.n_stops == self.announced.n_stops):
-            # The planned stop moved up to this lap: the box call itself is the news. (A new
-            # stop, or one fewer, always needs a second lap to confirm.)
-            self.announced, self.pending_change = best, None
+        lap_now = res.lap_done + 1                       # the lap being driven
+        stop = held.next_stop
+        sit, model = res.situation, res.model
+        # Must change now: you stayed out past the stop, the tyres won't make it, or the plan
+        # isn't possible any more (no set of that tyre left).
+        if stop is not None and stop.lap < lap_now:
+            self._announce(res, dec, "you stayed out", held)
             return
-        if self.pending_change is not None and not self._differs(best, self.pending_change, 1):
-            self.announced, self.pending_change = best, None
-            self._say("strategy_plan", phrases.plan_phrase(best, None, self.verbosity,
-                                                           change=True), Priority.LOW)
-        else:
-            self.pending_change = best           # confirm on the next lap first
+        keep = res.hold if stop is not None else res.sim.by_stops.get(0)
+        if keep is None:
+            self._announce(res, dec, "that plan doesn't work any more", held)
+            return
+        if stop is not None and wear_at(sit, model, stop.lap) > self.tyres.limit_pct:
+            self._announce(res, dec, f"these won't make lap {phrases.number_words(stop.lap)}",
+                           held)
+            return
+        gain = keep.cost_s - pick.cost_s
+        locked = stop is not None and stop.lap - lap_now < self.cfg.commit_laps
+        if gain < (self.cfg.change_gain_s if locked else self.cfg.window_s):
+            self.pending_change = None                   # keep the call: the gain is noise
+            return
+        confirmed = self.pending_change is not None and self._same_call(pick, self.pending_change)
+        if not (locked or confirmed):
+            self.pending_change = pick                   # confirm on the next lap first
+            return
+        if pick.next_stop is not None and pick.next_stop.lap == lap_now and stop is not None \
+                and held.n_stops == pick.n_stops:
+            # Moved up to this lap: the box call itself is the news.
+            self.announced, self.decision, self.pending_change = pick, dec, None
+            self.commit_rate = self._rate_now(res)
+            return
+        self._announce(res, dec, self._why(res, held, pick), held)
+
+    @staticmethod
+    def _same_call(a: Plan, b: Plan) -> bool:
+        if a.n_stops != b.n_stops or [s.compound for s in a.stops] != [s.compound for s in b.stops]:
+            return False
+        return not a.stops or abs(a.stops[0].lap - b.stops[0].lap) <= 1
+
+    def _why(self, res: StrategyResult, held: Plan, pick: Plan) -> str:
+        now, then = self._rate_now(res), self.commit_rate
+        if now is not None and then:
+            if now >= then * 1.08:
+                return "tyres wearing faster than expected"
+            if now <= then * 0.92:
+                return "tyres lasting better than expected"
+        if pick.n_stops < held.n_stops:
+            return "saves a stop"
+        if pick.n_stops > held.n_stops:
+            return "the tyres won't make it comfortably"
+        return ""
 
     def _differs(self, a: Plan, b: Plan, laps: int | None = None) -> bool:
         if a.n_stops != b.n_stops or [s.compound for s in a.stops] != [s.compound for s in b.stops]:
@@ -298,12 +442,9 @@ class StrategyAnalyzer:
         lap, in_pits = int(c.lap[p]), c.pit_status[p] > 0
         length = s.session.track_length_m or 0
         dist = c.lap_distance_m[p]
-        best = self.latest.sim.best
-        stop = best.next_stop if best else None
-        # Box calls only for a plan you've been told about (a change is announced first).
-        agreed = self.announced is not None and not self._differs(best, self.announced)
-        if (self.box_lap is None and stop is not None and stop.lap == lap and not in_pits
-                and self.latest.lap_done == lap - 1 and agreed):
+        # Box calls follow the committed call, not the latest best (which can drift a lap).
+        stop = self.announced.next_stop if self.announced is not None else None
+        if (self.box_lap is None and stop is not None and stop.lap == lap and not in_pits):
             self.box_lap, self.half_said = lap, False
             if length and dist >= length / 2:    # already past half way: one call only
                 self.half_said = True
@@ -381,6 +522,7 @@ class StrategyAnalyzer:
                 green is None or green.next_stop is None or green.next_stop.lap != stop.lap):
             saving = green.cost_s - best.cost_s if green is not None else None
             self.announced, self.pending_change = best, None
+            self.decision = self._decide(res)
             if stop.lap == lap_now:
                 # This lap: commits the stop (the half-lap call still follows). Next lap: the
                 # usual "box this lap" comes when that lap starts.

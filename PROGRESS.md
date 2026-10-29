@@ -439,3 +439,24 @@ Replayed every logged question against its recording (what the engineer knew at 
 - "No strategy calls in this race" on the grid was wrong (the game hadn't sent the race yet):
   now "no plan yet". A plan before the start would need the strategy request before lap 1: open.
 - Not answerable: "About what time?" (no context).
+
+## Strategy: committed calls, safe vs gamble (29 Oct)
+
+From the 28-29 Oct races: the best stop lap crept a lap later every lap so the box call never came
+(Melbourne, Abu Dhabi), the call was a window ("lap six to eleven"), the tyre flip-flopped
+(Imola), and plans that ran to the limit weren't flagged.
+- One lap, one tyre, committed: "Plan is one stop, box end of lap nine for softs." Locked within
+  3 laps unless moving is 1.5 s+ better, the tyres won't make it, or you stayed out ("Change, box
+  lap nine instead of seven, you stayed out."). Box calls follow the committed lap.
+- Safe call vs gamble (strategy/decision.py), with uncertainty from how many laps the wear rate is
+  based on: "Softs are the gamble: about three seconds quicker, enough to catch Norris, but
+  sixty one percent at the flag, you'd have to look after them." / "Mediums will be tight, look
+  after them. The safe call is ..." / "Softs should make it, but it's early, keep an eye on
+  them."
+- After a stop, at pit exit: "Copy, softs. Plan is no more stops, these need to last six laps,
+  about twenty six percent at the flag."
+- Push-to-talk: "what if I go a lap later / two laps earlier?" (cost vs the committed stop and
+  the wear when you'd box); "are we boxing now?" follows the committed lap.
+- Plan calls are NORMAL priority (the Abu Dhabi first plan expired behind coaching at LOW) and are
+  said again if they expire or a flashback drops them.
+- Checked by replaying Melbourne, Imola and the Abu Dhabi restart lap by lap.

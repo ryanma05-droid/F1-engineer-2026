@@ -316,7 +316,7 @@ def test_plan_then_box_calls_one_lap_and_half_a_lap_before_the_stop():
     eng, radio = run(race)
     calls = strategy_calls(radio)
     t0, first = calls[0]
-    assert 60 < t0 < 70 and first.startswith("Plan is one stop, box lap ")
+    assert 60 < t0 < 70 and first.startswith("Plan is one stop, box end of lap ")
     assert "for mediums" in first or "for hards" in first
     box = [(t, r) for t, r in calls if r.startswith("Box this lap")]
     half = [(t, r) for t, r in calls if r.startswith("Box box")]
@@ -329,7 +329,7 @@ def test_plan_then_box_calls_one_lap_and_half_a_lap_before_the_stop():
 def test_no_more_calls_after_the_planned_stop():
     probe, _ = run(FakeRace({0: [30000] * 12}, wear_per_lap=[4, 4, 6, 8], extra_packets=False,
                             tyre_sets=SETS, fuel_per_lap=1.0), duration_ms=100000)
-    stop = probe.strategy.latest.sim.best.stops[0]
+    stop = probe.strategy.committed().stops[0]
     race = FakeRace({0: [30000] * 12}, wear_per_lap=[4, 4, 6, 8], extra_packets=False,
                     tyre_sets=SETS, fuel_per_lap=1.0, pit_laps={0: stop.lap},
                     compound_after_pit=stop.compound)
@@ -355,7 +355,7 @@ def test_safety_car_box_now():
     # Probe the green plan, then bring a safety car out early in the lap two before the stop.
     probe, _ = run(FakeRace({0: [30000] * 14}, wear_per_lap=[3, 3, 4, 5], extra_packets=False,
                             tyre_sets=SETS, fuel_per_lap=1.0), duration_ms=100000)
-    green_lap = probe.strategy.latest.sim.best.stops[0].lap
+    green_lap = probe.strategy.committed().stops[0].lap
     sc_lap = green_lap - 2
     start = (sc_lap - 1) * 30000 + 3000
     race = FakeRace({0: [30000] * 14}, wear_per_lap=[3, 3, 4, 5], extra_packets=False,
@@ -412,3 +412,98 @@ def test_what_if_box_now_onto_a_given_compound():
     none_left = simulate(situation(first_stop_lap=5, first_stop_compound=18,
                                    sets={16: [0.0], 17: [0.0]}), m)
     assert none_left.best is None
+
+
+
+# -- the call: safe vs gamble, committing to a lap (strategy/decision.py) ---------------------
+
+def test_decision_names_the_gamble_and_takes_it_only_when_it_pays():
+    from engineer.strategy.decision import DecisionSettings, decide
+    m = model(rates={16: 5.0, 17: 3.0, 18: 2.0})
+    sit = situation(lap_done=10, total_laps=30, wear=30.0, compound=17)
+    cfg = DecisionSettings()
+    # Softs to the end run at 5 %/lap for 18 laps after a stop on lap 12: 90 %, not safe.
+    softs = Plan((Stop(12, 16, 0.0),), 100.0)
+    hards = Plan((Stop(12, 18, 0.0),), 102.0)          # 36 % at the flag: safe
+    d = decide([softs, hards], sit, m, cfg, 60.0)
+    assert d.call.plan == hards and d.gamble.plan == softs and d.gain_s == 2.0
+    d = decide([Plan(softs.stops, 90.0), hards], sit, m, cfg, 60.0)
+    assert d.call.plan.stops[0].compound == 16 and d.taken_gamble
+    assert d.safe_alternative.plan == hards
+    d = decide([Plan(softs.stops, 101.5), hards], sit, m, cfg, 60.0)
+    assert d.call.plan == hards and d.gamble is None   # half a second: not worth naming
+
+
+def test_decision_allows_for_how_sure_the_wear_rate_is():
+    from engineer.strategy.decision import DecisionSettings, assess
+    sit = situation(lap_done=10, total_laps=30, wear=0.0, compound=17)
+    plan = Plan((), 50.0)                               # 20 laps at 2.3 %/lap: 46 %
+    sure = model(rates={16: 5.0, 17: 2.3, 18: 2.0})     # 10 laps of evidence
+    from engineer.strategy.model import CompoundModel, Estimate, StrategyModel
+    unsure = StrategyModel({c: CompoundModel(c, Estimate(cm.wear_rate.value, 1), cm.deg, 0.0,
+                                             cm.offset) for c, cm in sure.compounds.items()},
+                           sure.pit_loss, sure.pit_loss_sc, None)
+    cfg = DecisionSettings(margin_pct=5.0)
+    assert assess(plan, sit, sure, cfg, 60.0).safe            # 46 % + ~4 % allowance < 55 %
+    assert not assess(plan, sit, unsure, cfg, 60.0).safe      # 46 % + ~14 % with one lap
+
+
+def test_call_phrases():
+    from engineer.strategy.decision import Assessed, Decision, Stint
+    one = Plan((Stop(9, 16, 0.0),), 100.0, (8, 10))
+    safe = Assessed(one, (Stint(17, 2, 9, 40, 44), Stint(16, 9, 20, 50, 53)), True)
+    assert phrases.call_phrase(Decision(safe), 20) == "Plan is one stop, box end of lap nine for softs."
+    assert phrases.call_phrase(Decision(safe), 20, "chatty").startswith(
+        "Plan is one stop, box end of lap nine for softs (anywhere from lap eight to ten works)")
+    hards = Assessed(Plan((Stop(9, 18, 0.0),), 103.0), (Stint(17, 2, 9, 40, 44),
+                                                       Stint(18, 9, 20, 35, 38)), True)
+    risky = Assessed(one, (Stint(17, 2, 9, 40, 44), Stint(16, 9, 20, 58, 62)), False)
+    gamble = Decision(hards, gamble=risky, gain_s=3.0)
+    text = phrases.call_phrase(gamble, 20, ahead=("Norris", 2100))
+    assert text == ("Plan is one stop, box end of lap nine for hards. Softs are the gamble: about "
+                    "three seconds quicker, enough to catch Norris, but softs at about fifty "
+                    "eight percent at the flag, you'd have to look after them.")
+    tight = Assessed(Plan((), 90.0), (Stint(17, 10, 20, 57, 61),), False)
+    taken = Decision(tight, safe_alternative=hards, gain_s=9.0)
+    assert phrases.call_phrase(taken, 20, after_stop=True, copy_compound=17) == (
+        "Copy, mediums. Plan is no more stops, these need to last ten laps, about fifty seven "
+        "percent at the flag, that's tight, look after them. The safe call is one stop for hards, "
+        "nine seconds slower.")
+    moved = Plan((Stop(8, 16, 0.0),), 99.0)
+    assert phrases.call_phrase(Decision(Assessed(moved, safe.stints, True)), 20,
+                               change_reason="tyres wearing faster than expected",
+                               previous=one) == \
+        "Change, box lap eight instead of nine, tyres wearing faster than expected."
+    assert phrases.shift_phrase(1, 0.4, 51.0, 60.0) == \
+        "A lap later costs about four tenths, tyres at fifty one percent when you box."
+    assert phrases.shift_phrase(-2, -1.2, 40.0, 60.0) == \
+        "Two laps earlier saves about one point two seconds, tyres at forty percent when you box."
+
+
+def test_the_call_holds_its_lap_while_the_best_lap_creeps():
+    """29 Oct Melbourne: the best stop lap moved 7, 8, 9, 10 lap by lap and the box call never
+    came. Now the committed lap holds unless moving it is clearly better."""
+    from types import SimpleNamespace
+
+    from engineer.strategy.decision import Assessed, Decision
+    eng, _ = run(FakeRace({0: [30000] * 3}, wear_per_lap=[3, 3, 3, 3], extra_packets=False,
+                          tyre_sets=SETS), duration_ms=1000)
+    sa = eng.strategy
+    said = []
+    sa._say = lambda topic, text, *a, **k: said.append(text)
+    sa.state.session.total_laps = 20
+
+    def result(lap_done, best_lap, best_cost, hold_cost):
+        best = Plan((Stop(best_lap, 16, 0.0),), best_cost)
+        return SimpleNamespace(lap_done=lap_done, reason="lap", situation=situation(
+            lap_done=lap_done, total_laps=20, wear=3.0 * lap_done), model=model(),
+            hold=Plan((Stop(8, 16, 0.0),), hold_cost), sim=SimpleNamespace(by_stops={}),
+            options=(), _best=best)
+    sa._decide = lambda res: Decision(Assessed(res._best, (), True))
+    sa._on_plan(result(2, 8, 100.0, 100.0))
+    assert sa.committed().stops[0].lap == 8 and said[-1].startswith("Plan is one stop")
+    for lap_done, best_lap in ((3, 9), (4, 9), (5, 10), (6, 10)):
+        sa._on_plan(result(lap_done, best_lap, 100.0, 100.4))    # 0.4 s: noise, keep lap 8
+    assert sa.committed().stops[0].lap == 8 and len(said) == 1
+    sa._on_plan(result(6, 9, 100.0, 102.0))                       # locked, 2 s: worth moving
+    assert sa.committed().stops[0].lap == 9 and said[-1].startswith("Change, box lap nine")
