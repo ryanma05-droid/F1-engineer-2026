@@ -423,7 +423,7 @@ served on this PC only) while it listens and records:
 ## Questions from the 28-29 Oct races (Melbourne, Imola x2, Abu Dhabi)
 
 Replayed every logged question against its recording (what the engineer knew at that moment):
-- 17 "say again" and 8 wrong answers had the data to answer. Added: plan for "when/which lap
+- 19 "say again" (18 had the data to answer) and 13 off-target answers. Added: plan for "when/which lap
   should I pit", "do I have to stop again", "what tyres should I pit for / be on", "we're on
   hards now"; box-now for "you sure we shouldn't pit", "box", "what happens if I pit for hards"
   (now forces that compound in the what-if); new answers: "are we boxing now" (yes / not yet,
