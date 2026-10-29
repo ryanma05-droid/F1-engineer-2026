@@ -101,3 +101,23 @@ def test_daily_report_only_when_due(data_dir, entry, monkeypatch):
     assert daily.due(cfg)
     cfg.report.daily = False
     assert not daily.start_in_background(cfg)            # turned off in config.yaml
+
+
+def test_a_failed_analysis_is_retried_on_a_later_day(tmp_path, monkeypatch):
+    import json as _json
+    from engineer.report import analysis
+    from engineer.report.analysis import AnalysisCache
+
+    def broken(*_):
+        raise ValueError("inhomogeneous shape")
+    monkeypatch.setattr(analysis, "analyze_recording", broken)
+    from engineer.state.track_maps import TrackMaps
+    rec = tmp_path / "20261029T013436Z_a430ba440da752c8.zst"
+    rec.write_bytes(b"not a recording")
+    cache = AnalysisCache(tmp_path / "cache", TrackMaps(tmp_path / "tracks"))
+    entry = cache.get(rec, progress=lambda _: None)
+    assert entry["skipped"].startswith("error")
+    assert cache.cached(rec) is not None                 # not retried again the same day
+    p = next((tmp_path / "cache").iterdir())
+    p.write_text(_json.dumps({**_json.loads(p.read_text()), "analysed_on": "2026-10-28"}))
+    assert cache.cached(rec) is None                     # a later day: tried again

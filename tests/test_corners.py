@@ -237,3 +237,12 @@ def test_your_pace_is_a_lap_on_similar_tyre_wear(tmp_path):
     assert ca.reference_trace(6).lap == 4
     # Lap 3 (~9 %) is close enough to lap 2 (~6 %): the fast lap is the reference.
     assert ca.reference_trace(3).lap == 2
+
+
+def test_detect_corners_with_laps_of_slightly_different_length():
+    # The restarted Abu Dhabi race (29 Oct): traces a bin apart in length broke the report.
+    s, b, t = profile(n=402)
+    s2, b2, t2 = profile(n=400)
+    corners = detect_corners([trace(s, b, t), trace(s2, b2, t2)],
+                             track_length_m=400 * BIN_SIZE_M)
+    assert [c.name for c in corners] == ["turn one", "turn two"]

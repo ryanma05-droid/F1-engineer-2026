@@ -83,9 +83,12 @@ def detect_corners(laps: list[LapTrace], track_length_m: float) -> list[Corner]:
     """Find the corners in a set of clean laps of the same track."""
     if not laps:
         return []
-    speed = _smooth(np.median(np.array([t.speed_kph for t in laps]), axis=0))
-    throttle = np.median(np.array([t.throttle for t in laps]), axis=0)
-    x = laps[0].distance_m
+    # Traces can differ by a bin or so in length (the restarted Abu Dhabi race, 29 Oct, put laps
+    # of both starts in one recording): compare them over the length they all cover.
+    n = min(len(t.speed_kph) for t in laps)
+    speed = _smooth(np.median(np.array([t.speed_kph[:n] for t in laps]), axis=0))
+    throttle = np.median(np.array([t.throttle[:n] for t in laps]), axis=0)
+    x = laps[0].distance_m[:n]
     last = int(track_length_m // BIN_SIZE_M)        # sections past the line are padding
     speed, throttle, x = speed[:last], throttle[:last], x[:last]
 

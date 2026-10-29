@@ -15,7 +15,7 @@ import json
 import logging
 import re
 from dataclasses import asdict, dataclass
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from pathlib import Path
 
 import numpy as np
@@ -222,6 +222,11 @@ class AnalysisCache:
             entry = json.loads(p.read_text(encoding="utf-8"))
         except (OSError, ValueError):
             return None
+        # A recording that failed is tried again on a later day (after an update may have fixed
+        # it: the restarted Abu Dhabi race, 29 Oct), not kept as a failure for good.
+        if str(entry.get("skipped", "")).startswith("error") \
+                and entry.get("analysed_on") != date.today().isoformat():
+            return None
         return entry if self._fresh(entry, rec) else None
 
     def get(self, rec: Path, progress=print) -> dict:
@@ -234,7 +239,8 @@ class AnalysisCache:
         except Exception as exc:                 # one broken recording mustn't stop the report
             log.warning("could not analyse %s (%s)", rec.name, exc)
             entry = {"file": rec.name, "version": ANALYSIS_VERSION,
-                     "recorded_at": recorded_at(rec).isoformat(), "skipped": f"error: {exc}"}
+                     "recorded_at": recorded_at(rec).isoformat(), "skipped": f"error: {exc}",
+                     "analysed_on": date.today().isoformat()}
         entry["size"] = rec.stat().st_size
         text = json.dumps(entry, default=_plain)
         self.dir.mkdir(parents=True, exist_ok=True)
