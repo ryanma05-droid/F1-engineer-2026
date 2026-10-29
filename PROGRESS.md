@@ -460,3 +460,20 @@ From the 28-29 Oct races: the best stop lap crept a lap later every lap so the b
 - Plan calls are NORMAL priority (the Abu Dhabi first plan expired behind coaching at LOW) and are
   said again if they expire or a flashback drops them.
 - Checked by replaying Melbourne, Imola and the Abu Dhabi restart lap by lap.
+
+## Feedback log: "log that" (29 Oct)
+
+You choose which unanswered questions get worked on, by flagging them on the radio:
+- "Log that" (also "flag that", "note that", "add that to the feedback log") right after a
+  question flags it, with what the engineer said back. "Log the following question: what tyres
+  is Norris on?" flags it in one go. "Log the following question" on its own: "Go ahead, what's
+  the question?" and the next question is logged (not answered). Reply: "Copy, logged."
+- Each flagged question keeps the race at that moment (lap, position, tyre and age, worst wear,
+  gaps and names ahead/behind, the committed strategy call, safety car, the last three radio
+  calls), so it's clear afterwards whether the data to answer it was there.
+- data/feedback/logged.jsonl (append-only); data/feedback/feedback-log.md is rebuilt when the race
+  ends (SessionEnded adds the result) and when `engineer run` stops. Questions that a newer version
+  handles differently from when they were logged are marked "now goes to <intent>".
+- App window, Live tab: "Logged questions" with Dismiss (drops it from the list to answer).
+- Also in data/ptt/questions.jsonl (intent `log_question`, with the context), so flagged questions
+  go up with the recording's upload: the loop is race -> upload -> answered in the next version.

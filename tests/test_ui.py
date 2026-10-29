@@ -123,3 +123,29 @@ def test_radio_calls_reach_the_window(tmp_path):
 def test_report_insights_with_no_sessions(tmp_path):
     data = report_insights(Config(data_dir=tmp_path))
     assert data["sessions"] == 0 and data["themes"] == []
+
+
+def test_logged_questions_in_the_window(tmp_path):
+    cfg = Config(data_dir=tmp_path / "data")
+    cfg.ui.port = 21910
+    engine = _engine(cfg)
+    fb = engine.answers.feedback
+    keep = fb.add({"question": "what tyres is Norris on", "lap": 4, "track": "Imola",
+                   "intent_then": "tyres"})
+    drop = fb.add({"question": "how are the tyres", "lap": 5, "track": "Imola",
+                   "intent_then": "unknown"})
+    window = AppWindow(cfg, engine)
+
+    async def run():
+        await window.start()
+        port = window.server.port
+        st, body = await _http(port, "GET", "/api/state")
+        f = json.loads(body)["feedback"]
+        assert f["count"] == 2 and f["open"][0]["id"] == drop      # newest first
+        assert f["open"][0]["matches"] == "tyres" and f["open"][1]["matches"] is None
+        st, body = await _http(port, "POST", "/api/feedback/dismiss", {"id": drop})
+        assert st == 200 and [q["id"] for q in json.loads(body)["feedback"]["open"]] == [keep]
+        st, _ = await _http(port, "POST", "/api/feedback/dismiss", {"id": "nope"})
+        assert st == 404
+        window.close()
+    asyncio.run(run())

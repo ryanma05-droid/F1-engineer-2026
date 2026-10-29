@@ -31,6 +31,7 @@ log = logging.getLogger(__name__)
 
 RADIO_KEEP = 12
 QUESTIONS_KEEP = 6
+FEEDBACK_SHOW = 8
 LIVE_PACKET_S = 3.0          # packets within this long = "connected to the game"
 
 
@@ -63,6 +64,7 @@ class AppWindow:
         self.started = time.monotonic()
         self._last_packets, self._last_t, self._rate = 0, time.monotonic(), 0.0
         self._last_packet_at: float | None = None
+        self._feedback: tuple[float | None, list[dict]] = (None, [])   # (file mtime, entries)
         bus = engine.pipeline.bus
         bus.subscribe(ev.RadioMessage, self._on_radio)
         # Subscribed after the QuestionAnswerer, so its answer is already there when this runs.
@@ -74,6 +76,7 @@ class AppWindow:
             ("GET", "/report/latest.pdf"): self._latest_pdf,
             ("POST", "/api/settings"): self._api_settings,
             ("POST", "/api/report/build"): self._api_build,
+            ("POST", "/api/feedback/dismiss"): self._api_dismiss,
         })
 
     # -- lifecycle ----------------------------------------------------------------------------
@@ -154,6 +157,26 @@ class AppWindow:
                 "building": self.report_proc is not None and self.report_proc.poll() is None,
                 "stamp": pdf.stat().st_mtime if pdf.exists() else None}
 
+    def _feedback_status(self) -> dict:
+        """The questions you flagged with "log that" (re-read only when the log file changes)."""
+        fb = self.engine.answers.feedback if self.engine.answers else None
+        if fb is None or fb.path is None:
+            return {"on": False, "open": [], "count": 0, "file": None}
+        try:
+            mtime = fb.path.stat().st_mtime if fb.path.exists() else None
+        except OSError:
+            mtime = None
+        if mtime != self._feedback[0]:
+            self._feedback = (mtime, fb.open_entries())
+        from engineer.voice.feedback import matches_now
+        items = self._feedback[1]
+        return {"on": True, "count": len(items),
+                "file": str(fb.markdown_path),
+                "open": [{"id": e["id"], "question": e["question"], "lap": e.get("lap"),
+                          "track": e.get("track"), "answer": e.get("answer"),
+                          "matches": matches_now(e["question"], e.get("intent_then"))}
+                         for e in reversed(items[-FEEDBACK_SHOW:])]}
+
     def snapshot(self) -> dict:
         from engineer.voice.controller import button_label
         v = self.cfg.voice
@@ -168,6 +191,7 @@ class AppWindow:
             "controller": {"type": v.controller_type if v.enabled else "off",
                            "button": button_label(v.controller_type, v.button), **ptt},
             "setup_done": self.cfg.ui.setup_done, "report": self._report_status(),
+            "feedback": self._feedback_status(),
             "console_player": self.cfg.platform == "console",
         }
 
@@ -192,6 +216,16 @@ class AppWindow:
         if self.report_proc is None or self.report_proc.poll() is not None:
             self.report_proc = spawn(self.cfg, self.config_path, now=True)
         return Response(200, self._report_status())
+
+    async def _api_dismiss(self, body: dict) -> Response:
+        fb = self.engine.answers.feedback if self.engine.answers else None
+        entry_id = body.get("id")
+        if fb is None or not isinstance(entry_id, str):
+            return Response(400, {"error": "expected an id"})
+        if not await asyncio.to_thread(fb.dismiss, entry_id):
+            return Response(404, {"error": "no such question"})
+        fb.write_markdown_in_background()
+        return Response(200, self.snapshot())
 
     async def _api_settings(self, body: dict) -> Response:
         save: dict = {}

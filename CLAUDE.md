@@ -159,6 +159,12 @@ uv run python -m engineer.report                     # driver report PDF (data/r
 - Intents are keyword rules in `engineer/voice/intents.py`. Every question is logged to
   `data/ptt/questions.jsonl`; "unknown" entries are the phrasings to add next. Logs for a session
   travel with its recording upload (`<recording>.questions.jsonl`).
+- Feedback log (`engineer/voice/feedback.py`): "log that" / "log the following question: ..."
+  (intent `log_question`, first in RULES, only at the start of what was said) flags a question
+  with a snapshot of the race into data/feedback/logged.jsonl; feedback-log.md is rebuilt on
+  SessionEnded and at shutdown. Off when `voice.log` is off (replays of logged questions). When
+  answering an uploaded flagged question, add the phrasing to intents.py and the answer to
+  answers.py as usual; it then shows as "now goes to <intent>".
 - `replay --questions` re-asks logged questions at their session time (record everything, replay
   anything).
 

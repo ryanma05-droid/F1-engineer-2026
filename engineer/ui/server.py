@@ -12,6 +12,7 @@ Routes:
     GET  /report/latest.pdf  the latest driver report PDF
     POST /api/settings       {"controller": "xbox"|"playstation"|"off", "tempo": ..., "setup_done"}
     POST /api/report/build   build a new driver report in the background
+    POST /api/feedback/dismiss {"id": ...}  drop a question from your feedback log
 """
 
 from __future__ import annotations

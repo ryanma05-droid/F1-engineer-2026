@@ -39,6 +39,13 @@ _TURN = (r"\bturn (\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|t
 # (intent, patterns). A pattern is a regex searched in the normalised text. Order matters: the
 # first intent with a matching pattern wins, so specific questions come before general ones.
 RULES: list[tuple[str, list[str]]] = [
+    # "Log that" / "log the following question: ..." goes to your feedback log (feedback.py).
+    # First, so the question being logged isn't answered instead. Only at the start of what was
+    # said, and "lock" (a common mishearing of "log") only before that/this/the following.
+    ("log_question", [r"^(please |can you |could you )?(log|flag|note|mark)\b",
+                      r"^(please |can you |could you )?lock (that|this|it|the following|the last|"
+                      r"the previous|my|a|question)\b",
+                      r"\b(log|add|put) (that|this|it) (to|in|on) (the |my )?(feedback|log|list)\b"]),
     ("radio_check", [r"\bradio check\b", r"\bcan you hear me\b", r"\bdo you (read|copy)\b"]),
     # 29 Oct Imola: "Repeat that."
     ("repeat", [r"\brepeat\b", r"\bsay (that|it) again\b", r"\bcome again\b",
@@ -153,6 +160,23 @@ def match(text: str) -> Intent:
         if any(re.search(p, t) for p in patterns):
             return Intent(name, t)
     return Intent("unknown", t)
+
+
+_LOG_TRIGGER = re.compile(
+    r"^\W*(?:(?:please|can you|could you)\s+)?(?:log|lock|flag|note|mark|add|put)(?:\s+down)?\b"
+    r"(?:\s+(?:the\s+following|the\s+last|the\s+previous|this|that|it|my|last|previous|a|the))?"
+    r"(?:\s+(?:question|one|request|call|for\s+later))?"
+    r"(?:\s+(?:to|in|on)\s+(?:the\s+|my\s+)?(?:feedback|log|list)(?:\s+log)?)?"
+    r"(?:\s+please)?\s*[:,.;!?\-\u2013\u2014]*\s*", re.I)
+
+
+def log_text(text: str) -> str:
+    """What to log from "log the following question: when should I pit?" (-> "when should I
+    pit?", as heard). "" when nothing but the command was said ("log that"): the question is
+    then the one asked just before (or the next one)."""
+    rest = _LOG_TRIGGER.sub("", text, count=1).strip()
+    rest = re.sub(r"^(please|thanks|thank you)\W*$", "", rest, flags=re.I).strip()
+    return rest if len(re.findall(r"[a-z0-9']+", rest, re.I)) >= 3 else ""
 
 
 def driver_in(text: str, names: list[str | None]) -> int | None:

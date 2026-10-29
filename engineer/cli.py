@@ -221,6 +221,9 @@ async def _run(cfg: Config, record: bool | None, voice: bool, ptt_on: bool = Tru
         if audio:
             audio.close()
         strategy_runner.close()
+        if engine.answers is not None:
+            # Stopped mid-race (no session end from the game): the feedback list still updates.
+            engine.answers.feedback.write_markdown()
         print(f"Stopped. {listener.packets_received} packets received, "
               f"{pipeline.bad_packets} rejected, {pipeline.unknown_packets} unknown id.")
         if recorder and cfg.features_auto_add and recorder.paths_this_run:

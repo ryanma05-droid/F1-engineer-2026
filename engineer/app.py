@@ -25,6 +25,7 @@ from engineer.state.track_maps import TrackMaps
 from engineer.state.traces import TraceRecorder
 from engineer.strategy.runner import InlineRunner
 from engineer.voice.answers import QuestionAnswerer
+from engineer.voice.feedback import FeedbackLog
 
 
 @dataclass
@@ -110,6 +111,11 @@ def build_engine(cfg: Config, out: TextIO | None = None,
     engine.racecraft = racecraft
     engine.default_tempo = cfg.radio.verbosity
     director.tempo = cfg.radio.verbosity
+    # "Log that" on the radio: the feedback log (data/feedback/). Off when the question log is
+    # (replays of logged questions), so a replayed "log that" isn't logged twice.
+    feedback = FeedbackLog(cfg.data_path / "feedback" if cfg.voice.log else None,
+                           cfg.sessions_path)
     engine.answers = QuestionAnswerer(bus, engine, log_path, verbosity=cfg.radio.verbosity,
-                                      max_answer_delay_s=cfg.voice.max_answer_delay_s)
+                                      max_answer_delay_s=cfg.voice.max_answer_delay_s,
+                                      feedback=feedback)
     return engine

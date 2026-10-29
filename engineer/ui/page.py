@@ -69,6 +69,7 @@ button { font: inherit; color: inherit; }
 .feed .t { color: var(--ink-3); font-size: 12px; padding-top: 1px; }
 .feed .lap { color: var(--ink-3); font-size: 11.5px; }
 .empty { color: var(--ink-3); padding: 10px 0; }
+.feed li.empty { display: block; }
 /* push to talk */
 .ptt { display: flex; gap: 16px; align-items: center; }
 .pad { width: 128px; flex: none; }
@@ -81,6 +82,14 @@ button { font: inherit; color: inherit; }
 .qa { list-style: none; margin: 14px 0 0; padding: 0; display: grid; gap: 8px; }
 .qa li { padding: 8px 10px; background: var(--panel-2); border-radius: 8px; font-size: 13px; }
 .qa .q { color: var(--ink-2); } .qa .a { margin-top: 2px; }
+.fb { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; max-height: 300px; overflow: auto; }
+.fb li { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: start;
+  padding: 8px 10px; background: var(--panel-2); border-radius: 8px; font-size: 13px; }
+.fb .meta { color: var(--ink-3); font-size: 12px; margin-top: 2px; }
+.fb .now { color: var(--good); }
+.fb button { background: none; border: 1px solid var(--line); border-radius: 6px; color: var(--ink-3);
+  padding: 2px 8px; font-size: 12px; cursor: pointer; }
+.fb button:hover { color: var(--ink); border-color: #444862; }
 /* segmented tempo */
 .seg { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
 .opt { text-align: left; background: var(--panel-2); border: 1px solid var(--line);
@@ -193,6 +202,8 @@ ul.good li::before { content: "\2713"; position: absolute; left: 0; top: 1px; wi
         <div class="card"><h3>Push to talk</h3><div id="ptt"></div></div>
         <div class="card"><h3>Engineer tempo</h3><div class="seg" id="tempoLive"></div>
           <div class="tip" id="tempoTipLive"></div></div>
+        <div class="card"><h3><span class="grow">Logged questions</span><span class="muted small" id="fbCount"></span></h3>
+          <div id="feedback"></div></div>
       </div>
     </div>
   </section>
@@ -338,6 +349,23 @@ function renderPtt() {
       <div class="a">${esc(q.answer || "—")}</div></li>`).join("")}</ul>` : ""}`);
 }
 
+function renderFeedback() {
+  const f = S.feedback, el = $("#feedback");
+  $("#fbCount").textContent = f.count ? `${f.count} open` : "";
+  const b = S.controller.type !== "off" ? `hold <span class="btnkey">${esc(S.controller.button)}</span> and say` : "say";
+  const how = `<div class="tip" style="margin-top:${f.count ? 12 : 0}px">Didn't get a good answer? ${b}
+    <span class="say">“log that”</span>, or <span class="say">“log the following question: …”</span>.
+    It's saved with the race at that moment and written up when the race ends${f.file ?
+    ` in <span class="num">${esc(f.file)}</span>` : ""}.</div>`;
+  if (!f.on) { paint(el, `<p class="muted" style="margin:0">Off while replaying.</p>`); return; }
+  if (!paint(el, (f.count ? `<ul class="fb">${f.open.map(q => `<li><div>“${esc(q.question)}”
+    <div class="meta">${q.track ? esc(q.track) + " · " : ""}${q.lap ? "lap " + q.lap : "before the start"}${q.matches ?
+    ` · <span class="now">handled in a newer version: check</span>` : ""}${q.answer ? ` · said: ${esc(q.answer)}` : ""}</div></div>
+    <button data-id="${esc(q.id)}" title="Don't answer this one">Dismiss</button></li>`).join("")}</ul>` : "") + how)) return;
+  el.querySelectorAll("button[data-id]").forEach(x => x.onclick = async () => {
+    S = await post("/api/feedback/dismiss", {id: x.dataset.id}); render(); });
+}
+
 function renderTop() {
   const c = S.connection, conn = $("#conn"), rec = $("#rec");
   conn.innerHTML = c.live ? `<span class="dot live"></span><span>Connected to F1 25 · ${c.rate} packets/s</span>`
@@ -471,7 +499,7 @@ function renderWizard() {
 
 function render() {
   if (!S) return;
-  renderTop(); renderSession(); renderFeed(); renderPtt(); renderReportHead();
+  renderTop(); renderSession(); renderFeed(); renderPtt(); renderFeedback(); renderReportHead();
   tempoButtons($("#tempoLive"), S.tempo, setTempo);
   $("#tempoTipLive").innerHTML = tempoTip();
   renderSettings();

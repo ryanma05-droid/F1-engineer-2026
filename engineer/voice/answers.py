@@ -16,6 +16,7 @@ import logging
 import math
 import re
 import time
+from collections import deque
 from pathlib import Path
 
 import numpy as np
@@ -26,7 +27,8 @@ from engineer.radio.director import Priority, RadioCall
 from engineer.tools.queries import lap_delta
 from engineer.state.track_maps import turn_name
 from engineer.strategy.decision import wear_at
-from engineer.voice.intents import driver_in, match, turn_in
+from engineer.voice.feedback import FeedbackLog
+from engineer.voice.intents import driver_in, log_text, match, turn_in
 
 # Damage parts reported by "any damage?" (state key -> spoken name), from 10 %.
 DAMAGE_PARTS = {"front_left_wing": "front left wing", "front_right_wing": "front right wing",
@@ -37,6 +39,8 @@ DAMAGE_MIN_PCT = 10
 log = logging.getLogger(__name__)
 
 ANSWER_MAX_WAIT_S = 8.0
+LOG_LAST_WITHIN_S = 180.0    # "log that" means the question asked up to this long before
+LOG_NEXT_WITHIN_S = 30.0     # "log the following question" alone: the next question, this soon
 
 
 class QuestionLog:
@@ -56,10 +60,12 @@ class QuestionLog:
 
 class QuestionAnswerer:
     def __init__(self, bus: ev.EventBus, engine, log_path: Path | str | None = None,
-                 verbosity: str = "normal", max_answer_delay_s: float = 10.0):
+                 verbosity: str = "normal", max_answer_delay_s: float = 10.0,
+                 feedback: FeedbackLog | None = None):
         """engine: the app's Engine (state, director and the analyzers whose numbers we read).
         max_answer_delay_s: if speech recognition took longer than this, the answer would be
-        stale (a gap from 40 s ago), so it isn't said; the question is still logged."""
+        stale (a gap from 40 s ago), so it isn't said; the question is still logged.
+        feedback: where "log that" puts flagged questions (data/feedback/), None = nowhere."""
         self.engine = engine
         self.max_answer_delay_s = max_answer_delay_s
         self.state = engine.pipeline.state
@@ -69,12 +75,19 @@ class QuestionAnswerer:
         self.answered: list[tuple[str, str]] = []      # (intent, answer), for tests and display
         self.heard = ""                                 # the question being answered
         self.last_radio: str | None = None              # for "repeat that"
+        self.feedback = feedback or FeedbackLog(None)
+        self.recent_radio: deque[str] = deque(maxlen=3)  # kept with a flagged question
+        self._prev: dict | None = None                  # the last question, for "log that"
+        self._log_next_until: float | None = None       # "log the following question" alone
         bus.subscribe(ev.QuestionAsked, self.on_question)
         bus.subscribe(ev.RadioMessage, self._on_radio)
+        bus.subscribe(ev.SessionEnded, self._on_session_ended)
 
     def _on_radio(self, e: ev.RadioMessage) -> None:
         if e.text != phrases._sentence("say again"):
             self.last_radio = e.text
+        if e.topic != "answer":
+            self.recent_radio.append(e.text)
 
     # -- entry point -----------------------------------------------------------------------------
 
@@ -84,6 +97,11 @@ class QuestionAnswerer:
                  "session_uid": f"{e.session_uid:016x}", "session_time": round(e.session_time, 3),
                  "lap": self._lap(), "heard": e.text, "intent": intent.name,
                  "audio": e.audio_path, "stt_ms": e.stt_ms}
+        # Flagging a question for the feedback log isn't time-critical, so it goes before the
+        # recognition-delay check.
+        if intent.name == "log_question" or self._logging_next():
+            self._log_question(e, entry, intent.name == "log_question")
+            return
         if e.stt_ms is not None and e.stt_ms > self.max_answer_delay_s * 1000:
             entry["answer"] = f"(not said: speech recognition took {e.stt_ms / 1000:.0f} s)"
             log.warning("question %r not answered: recognition took %.0f s", e.text,
@@ -104,11 +122,115 @@ class QuestionAnswerer:
             entry["answer"] = text
             self._say(intent.name, text)
         self.log.write(entry)
+        self._prev = {"heard": e.text, "intent": intent.name, "answer": entry.get("answer"),
+                      "at": time.monotonic()}
 
     def _say(self, intent: str, text: str) -> None:
         self.answered.append((intent, text))
+        if self._prev and self._prev["intent"] == intent \
+                and str(self._prev["answer"]).startswith("(pending"):
+            self._prev["answer"] = text          # a strategy answer that came a moment later
         self.director.submit(RadioCall(topic="answer", text=text, priority=Priority.HIGH,
                                        max_wait_s=ANSWER_MAX_WAIT_S, wait_for_straight=False))
+
+    # -- the feedback log ("log that") ------------------------------------------------------------
+
+    def _logging_next(self) -> bool:
+        if self._log_next_until is None:
+            return False
+        if time.monotonic() > self._log_next_until:
+            self._log_next_until = None
+            return False
+        return True
+
+    def _log_question(self, e: ev.QuestionAsked, entry: dict, command: bool) -> None:
+        """Put a question in the feedback log: the one said with the command ("log the following
+        question: ..."), the one just asked ("log that"), or, if neither, the next one."""
+        self._log_next_until = None
+        said = log_text(e.text) if command else e.text
+        prev = self._prev if self._prev and time.monotonic() - self._prev["at"] \
+            <= LOG_LAST_WITHIN_S else None
+        flagged = {"time": entry["time"], "session_uid": entry["session_uid"],
+                   "session_time": entry["session_time"], "lap": self._lap(),
+                   "total_laps": int(self.state.session.total_laps or 0) or None,
+                   "track": self.state.session.track_name,
+                   "session": self.state.session.session_name, "said": e.text}
+        if said:
+            flagged.update(question=said, source="said" if command else "next question",
+                           intent_then=match(said).name)
+            reply = "copy, logged"
+        elif prev is not None:
+            flagged.update(question=prev["heard"], source="last question",
+                           answer=prev["answer"], intent_then=prev["intent"])
+            reply = "copy, logged that one"
+        else:
+            self._log_next_until = time.monotonic() + LOG_NEXT_WITHIN_S
+            entry["answer"] = text = phrases._sentence("go ahead, what's the question")
+            self._say("log_question", text)
+            self.log.write(entry)
+            return
+        try:
+            flagged["context"] = self._context()
+        except Exception:                                # never lose the question over context
+            log.exception("could not snapshot the race for the feedback log")
+        entry["logged"] = flagged["question"]
+        entry["context"] = flagged.get("context")
+        entry["feedback_id"] = self.feedback.add(flagged)
+        entry["answer"] = text = phrases._sentence(reply)
+        self._say("log_question", text)
+        self.log.write(entry)
+        self._prev = None                                # "log that" twice doesn't log it twice
+
+    def _context(self) -> dict:
+        """The race when a question was flagged: enough to tell afterwards whether the data to
+        answer it was there."""
+        c, p = self.state.cars, self._player()
+        ctx: dict = {"recent_radio": list(self.recent_radio),
+                     "safety_car": self.state.session.safety_car_status in (1, 2)}
+        if p is None:
+            return ctx
+
+        def num(v):
+            return None if v is None or np.isnan(v) else v
+
+        pos = num(c.position[p])
+        ctx["position"] = int(pos) if pos else None
+        ctx["cars"] = int(np.sum(c.active)) or None
+        comp = num(c.visual_compound[p])
+        ctx["tyre"] = phrases.say_compound(int(comp)) if comp is not None else None
+        age = num(c.tyre_age_laps[p])
+        ctx["tyre_age"] = int(age) if age is not None else None
+        wear = c.tyre_wear_pct[p]
+        ctx["wear_pct"] = None if np.isnan(wear).all() else round(float(np.nanmax(wear)))
+        gap = num(c.delta_to_car_in_front_ms[p])
+        if pos and pos > 1 and gap is not None:
+            ctx["gap_ahead_s"] = round(gap / 1000, 1)
+            ahead = np.flatnonzero(c.active & (c.position == pos - 1))
+            ctx["ahead"] = self._name(int(ahead[0])) if ahead.size else None
+        if pos:
+            behind = np.flatnonzero(c.active & (c.position == pos + 1))
+            if behind.size and num(c.delta_to_car_in_front_ms[behind[0]]) is not None:
+                ctx["gap_behind_s"] = round(c.delta_to_car_in_front_ms[behind[0]] / 1000, 1)
+                ctx["behind"] = self._name(int(behind[0]))
+        plan = self.engine.strategy.committed() if self.engine.strategy else None
+        if plan is not None:
+            stop = plan.next_stop
+            ctx["plan"] = (f"box end of lap {stop.lap} for {phrases.say_compound(stop.compound)}"
+                           if stop else "no more stops")
+        return ctx
+
+    def _on_session_ended(self, e: ev.SessionEnded) -> None:
+        """The race is over: its flagged questions get the result, and feedback-log.md is
+        rebuilt (off the loop) so the list is ready when you get out of the car."""
+        uid = f"{e.session_uid:016x}"
+        result: dict = {"ended": e.reason}
+        p = self._player()
+        if self.state.session_uid == e.session_uid and p is not None:
+            pos = self.state.cars.position[p]
+            result["position"] = None if np.isnan(pos) else int(pos)
+            result["laps"] = self._lap()
+        if self.feedback.finish(uid, result):
+            self.feedback.write_markdown_in_background()
 
     # -- helpers ---------------------------------------------------------------------------------
 
