@@ -477,3 +477,12 @@ You choose which unanswered questions get worked on, by flagging them on the rad
 - App window, Live tab: "Logged questions" with Dismiss (drops it from the list to answer).
 - Also in data/ptt/questions.jsonl (intent `log_question`, with the context), so flagged questions
   go up with the recording's upload: the loop is race -> upload -> answered in the next version.
+
+## Moving to the installed app (2 Nov)
+
+- `RaceEngineer.exe` first run finds a terminal install (a clone with engineer/ and data/ in the
+  home folder, Documents or Desktop) and offers to copy its data (recordings, features, tracks,
+  reports, push-to-talk log and models, voice, feedback log) and settings; `--import "<folder>"`
+  does it by hand. Never overwrites, safe to repeat; the old folder is untouched.
+- `upload.repo`: the installed app pushes recordings through that clone, so auto-upload (and the
+  feedback loop) keeps working.

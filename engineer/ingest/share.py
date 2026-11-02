@@ -163,10 +163,15 @@ def upload_pending(cfg: Config, paths: list[Path] | None = None, progress=print)
     if not todo:
         progress("No new recordings to upload.")
         return []
+    repo = Path(cfg.upload.repo) if cfg.upload.repo else PROJECT_ROOT
+    if not (repo / ".git").exists():
+        progress(f"Uploads need a git clone of the project (upload: repo: in config.local.yaml); "
+                 f"{repo} isn't one.")
+        return []
     branches = []
     for p in todo:
         try:
-            branches.append(upload(p, share_dir, cfg.upload.remote, progress=progress,
+            branches.append(upload(p, share_dir, cfg.upload.remote, repo=repo, progress=progress,
                                    questions_log=cfg.ptt_path / "questions.jsonl"))
         except UploadError as exc:
             progress(f"Upload of {p.name} failed: {exc}")
@@ -202,6 +207,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.upload:
         try:
             upload(path, cfg.data_path / "share", cfg.upload.remote,
+                   repo=Path(cfg.upload.repo) if cfg.upload.repo else PROJECT_ROOT,
                    questions_log=cfg.ptt_path / "questions.jsonl")
         except UploadError as exc:
             print(f"Upload failed: {exc}")

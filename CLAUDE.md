@@ -182,6 +182,10 @@ uv run python -m engineer.report                     # driver report PDF (data/r
   `packaging/macos/build_dmg.sh` into "Race Engineer.app" (a shell launcher that opens Terminal)
   and a .dmg; ad-hoc signed only. Always console mode (F1 25 isn't on macOS); data in
   ~/Library/Application Support/RaceEngineer; fallback voice is the `say` command.
+- Moving from a terminal install: `engineer/migrate.py` copies a clone's data/ into APP_HOME
+  (never overwriting) and merges its config.local.yaml, setting `upload.repo` to the clone so
+  uploads keep going through it. Offered on first run (`launcher.offer_import` finds clones in
+  home/Documents/Desktop) or `RaceEngineer.exe --import "<folder>"`.
 - The installed app adds each run's recordings to `laps`/`stints` when it closes
   (`features_auto_add`), so the tyre/strategy history grows without a manual build.
 

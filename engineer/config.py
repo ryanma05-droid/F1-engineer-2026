@@ -169,6 +169,7 @@ class Report(BaseModel):
 class Upload(BaseModel):
     auto: bool = False          # push new recordings to GitHub when `engineer run` stops
     remote: str = "origin"
+    repo: str | None = None     # the git clone to push from (installed app: the old terminal folder)
     min_mb: float = Field(default=2.0, ge=0)   # skip tiny recordings (menus, a few seconds)
 
 

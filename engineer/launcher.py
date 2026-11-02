@@ -2,7 +2,8 @@
 
 First launch: a short setup in the window (where you play, voice and speech downloads, the
 telemetry settings to use). After that it starts the engineer straight away, like
-`python -m engineer run`. `RaceEngineer.exe --setup` runs the setup again.
+`python -m engineer run`. `RaceEngineer.exe --setup` runs the setup again;
+`RaceEngineer.exe --import "<folder>"` brings over the data of a terminal install (migrate.py).
 
 Settings and data live in %LOCALAPPDATA%\\RaceEngineer (config.local.yaml, recordings, voices).
 """
@@ -130,10 +131,46 @@ def seed_tracks(cfg) -> None:
             shutil.copy2(f, dest)
 
 
+def offer_import() -> bool:
+    """First run: if the engineer was used from a terminal (a clone of the project) before, offer
+    to bring its recordings, history, reports and settings over. True if it was imported."""
+    from engineer.migrate import find_project_folders, recording_count
+    found = find_project_folders()
+    if not found:
+        return False
+    src = found[0]
+    n = recording_count(src)
+    answer = _ask(f"\nFound your earlier engineer folder: {src} ({n} recording"
+                  f"{'s' if n != 1 else ''}).\nBring your recordings, history, reports and "
+                  f"settings over? [Y/n]: ", {"y": True, "n": False, "": True}, "y")
+    return bool(answer) and import_from(src)
+
+
+def import_from(src: Path) -> bool:
+    from engineer.migrate import import_folder
+    print(f"\nCopying from {src} (nothing there is changed or deleted)...")
+    try:
+        done = import_folder(src, APP_HOME)
+    except (OSError, ValueError) as exc:
+        print(f"  Could not import it: {exc}")
+        return False
+    print(f"  Done: {done['copied']} files ({done['mb']} MB) copied, {done['skipped']} already "
+          f"here.")
+    if done["upload_repo"]:
+        state = "on" if done["upload_auto"] else "off (upload: {auto: true} turns it on)"
+        print(f"  Uploads go through {done['upload_repo']} with your git login; auto-upload "
+              f"is {state}.")
+    return True
+
+
 def first_run_setup() -> None:
     print("=" * 64)
     print(" Race Engineer setup")
     print("=" * 64)
+    if not LOCAL_CONFIG.exists() and offer_import():
+        # Settings, the voice and the speech model came over too: nothing to download.
+        seed_tracks(load_config())
+        return
     if MAC:
         # F1 25 doesn't run on macOS: the Mac is the engineer for an Xbox/PlayStation player.
         print("\nThis Mac will be the race engineer for F1 25 on your Xbox or PlayStation.")
@@ -246,6 +283,12 @@ def main(argv: list[str] | None = None) -> int:
     start_log()
     code = 0
     try:
+        if "--import" in args:                     # --import "C:\\path\\to\\F1-engineer-2026"
+            i = args.index("--import")
+            if i + 1 >= len(args):
+                print('Usage: RaceEngineer.exe --import "<folder you ran the engineer from>"')
+                return 2
+            import_from(Path(args[i + 1]))
         if "--setup" in args or not LOCAL_CONFIG.exists():
             first_run_setup()
         cfg = load_config()

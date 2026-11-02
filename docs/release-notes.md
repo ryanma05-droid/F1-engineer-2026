@@ -13,7 +13,21 @@
    shown at the end of setup, and in Start menu > Race Engineer > Telemetry guide.
 4. When Windows asks about the firewall, allow it on **Private networks**.
 
-Your settings and recordings are kept in `%LOCALAPPDATA%\RaceEngineer`.
+Your settings and recordings are kept in `%LOCALAPPDATA%\RaceEngineer`, and updates keep them:
+install a newer version over the old one and everything carries on.
+
+Ran the engineer from a terminal before (a copy of the project folder)? The first start finds that
+folder and offers to bring your recordings, history, reports and settings over (or run
+`RaceEngineer.exe --import "<that folder>"`). Nothing in the old folder is changed.
+
+### New in this version
+
+- Strategy: one committed call ("box end of lap nine for softs"), the safe call vs a named
+  gamble, "Copy, softs." after a stop, and "what if I go a lap later?" on the radio.
+- "Log that" on the radio flags a question you didn't get a good answer to; the Live tab lists
+  them and they're written up when the race ends.
+- More questions understood, a restarted race handled as a new race, the microphone reconnects
+  if it stops sending audio, and the driver report includes restarted races.
 
 ### Mac (Apple Silicon, for F1 25 on Xbox / PlayStation)
 
