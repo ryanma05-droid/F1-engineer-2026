@@ -176,6 +176,10 @@ async def _run(cfg: Config, record: bool | None, voice: bool, ptt_on: bool = Tru
     engine = build_engine(cfg, strategy_runner=strategy_runner)
     engine.coaching.save_dir = cfg.data_path / "coaching"   # live only: replays don't write
     engine.director.idle_after_s = IDLE_AFTER_S              # menus: say answers at once
+    # Wordings used lately, remembered across races so the next one sounds different.
+    from engineer.radio.variety import VARIETY
+    VARIETY.load(cfg.data_path / "radio" / "variety.json")
+    engine.pipeline.bus.subscribe(ev.SessionEnded, lambda e: VARIETY.save_in_background())
     pipeline = engine.pipeline
     audio = start_voice(cfg, engine) if voice else None
     if audio:
@@ -227,6 +231,7 @@ async def _run(cfg: Config, record: bool | None, voice: bool, ptt_on: bool = Tru
             last = listener.packets_received
     finally:
         idle.cancel()
+        VARIETY.save_in_background()
         listener.close()
         if window:
             window.close()

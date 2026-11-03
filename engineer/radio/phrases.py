@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import math
 
+from engineer.radio.variety import pick
 from engineer.tools.queries import SAME_LAP_THRESHOLD_MS, LapDelta
 
 VERBOSITY_LEVELS = ("terse", "normal", "chatty")
@@ -83,10 +84,13 @@ def lap_delta_phrase(d: LapDelta, verbosity: str = "normal") -> str:
 
     delta = d.delta_ms
     same = abs(delta) < SAME_LAP_THRESHOLD_MS
+    gap = say_gap(delta)
     if same:
-        change = "same again"
+        change = pick("lap_same", ["same again", "matched it", "right on your last one"])
+    elif delta < 0:
+        change = pick("lap_quicker", [f"{gap} quicker", f"up {gap}", f"{gap} better"])
     else:
-        change = f"{say_gap(delta)} {'quicker' if delta < 0 else 'slower'}"
+        change = pick("lap_slower", [f"{gap} slower", f"down {gap}", f"{gap} off that"])
     if verbosity == "terse":
         return _sentence(change)
 
@@ -98,7 +102,11 @@ def lap_delta_phrase(d: LapDelta, verbosity: str = "normal") -> str:
             # "but" when the sector goes against the overall result: "same again, but gained in
             # sector two" / "a tenth quicker, but lost in sector three".
             against = same or (sd < 0) != (delta < 0)
-            sector = f"{'but ' if against else ''}{verb} in sector {_ONES[d.biggest_sector]}"
+            sec = f"sector {_ONES[d.biggest_sector]}"
+            words = pick("lap_sector_" + verb, [f"{verb} in {sec}",
+                                                f"{'found it' if sd < 0 else 'dropped it'} in {sec}",
+                                                f"{sec} {'was the good one' if sd < 0 else 'cost you'}"])
+            sector = f"{'but ' if against else ''}{words}"
     reference = "" if d.reference_is_previous_lap else "on your last clean lap"
     if verbosity == "chatty" and d.reference is not None and d.reference_is_previous_lap:
         reference = f"on lap {number_words(d.reference.lap)}"
@@ -119,7 +127,9 @@ def say_percent(pct: float) -> str:
 def say_laps_left(laps: int) -> str:
     if laps <= 0:
         return "they're at the limit"
-    return f"about {number_words(min(laps, 99))} lap{'s' if laps != 1 else ''} left on these"
+    n = f"{number_words(min(laps, 99))} lap{'s' if laps != 1 else ''}"
+    return pick("laps_left", [f"about {n} left on these", f"good for about {n} more",
+                              f"around {n} left in them"])
 
 
 def say_wear_rate(rate: float) -> str:
@@ -146,7 +156,9 @@ def tyre_status_phrase(st, verbosity: str = "normal", laps_left_from_pct: float 
     even = float(st.wear.max() - st.wear.min()) < 1.0              # all four the same
     if verbosity == "terse":
         return _sentence(f"{'all four' if even else wheel} {pct}", left)
-    head = f"tyres all even at {pct}" if even else f"tyres: {wheel} worst at {pct}"
+    head = pick("tyre_even", [f"tyres all even at {pct}", f"all four even, {pct}"]) if even \
+        else pick("tyre_worst", [f"tyres: {wheel} worst at {pct}", f"{wheel} is the worst one, {pct}",
+                                 f"tyres, {wheel} leading the wear at {pct}"])
     if verbosity == "chatty":
         return _sentence(head, rate_part, left)
     return _sentence(head, left or rate_part)
@@ -159,7 +171,8 @@ def tyre_warning_phrase(st, threshold: float, verbosity: str = "normal",
     left = _laps_left_part(st, laps_left_from_pct)
     if verbosity == "terse":
         return _sentence(f"{wheel} {say_percent(threshold)}", left)
-    return _sentence(f"{wheel} at {say_percent(threshold)}", "look after it", left)
+    care = pick("tyre_care", ["look after it", "manage that one", "go easy on it"])
+    return _sentence(f"{wheel} at {say_percent(threshold)}", care, left)
 
 
 def tyre_temp_phrase(kind: str, wheels: list[int], sector: int) -> str:
@@ -178,7 +191,9 @@ def tyre_dropoff_phrase(ms_per_lap: float, verbosity: str = "normal") -> str:
     """'Pace dropping two tenths a lap, tyres are going.'"""
     if verbosity == "terse":
         return _sentence(f"pace dropping {say_gap(int(ms_per_lap))} a lap")
-    return _sentence(f"pace dropping {say_gap(int(ms_per_lap))} a lap", "tyres are going")
+    going = pick("tyre_going", ["tyres are going", "they're starting to go",
+                                "that's the tyres dropping off"])
+    return _sentence(f"pace dropping {say_gap(int(ms_per_lap))} a lap", going)
 
 
 def tyre_damage_phrase(wheel: int, pct: float, kind: str = "damage") -> str:
@@ -268,9 +283,11 @@ _STREAK = {2: "second lap running", 3: "third lap running", 4: "fourth lap runni
 
 def corner_better_phrase(corner_name: str, gained_s: float | None = None) -> str:
     """'Turn four better, two tenths found.' / without the amount: 'Turn four better.'"""
+    head = pick("corner_better", [f"{corner_name} better", f"better through {corner_name}",
+                                  f"{corner_name} sorted"])
     if gained_s is None:
-        return _sentence(f"{corner_name} better")
-    return _sentence(f"{corner_name} better", f"{say_gap(int(round(gained_s * 1000)))} found")
+        return _sentence(head)
+    return _sentence(head, f"{say_gap(int(round(gained_s * 1000)))} found")
 
 
 def corner_phrase(delta_s: float, corner_name: str, against: str,
@@ -295,7 +312,9 @@ def corner_phrase(delta_s: float, corner_name: str, against: str,
             return _sentence(f"{corner_name}, {gap} up on your {against}")
         return _sentence(f"gaining {gap} on the car {against} through {corner_name}")
     loss = f"{gap} off your {against}" if against in ("best", "pace") \
-        else f"losing {gap} to the car {against}"
+        else pick("corner_loss", [f"losing {gap} to the car {against}",
+                                  f"{gap} down on the car {against}",
+                                  f"giving {gap} to the car {against}"])
     why = "" if verbosity == "terse" else reason_words(reason, reasons, detail)
     if streak >= 2:
         head = f"{corner_name}, {_STREAK.get(streak, 'lap after lap')}"
@@ -319,7 +338,9 @@ def coaching_phrase(lap_ms: int | None, gap_ms: int, who: str,
     quicker through turn four. Brake slightly later.'"""
     out = []
     if better:
-        out.append(_sentence(f"better into {better}", "keep doing that"))
+        out.append(_sentence(f"better into {better}",
+                             pick("coach_keep", ["keep doing that", "that's the way",
+                                                 "more of that"])))
     lap = say_lap_time(lap_ms) if lap_ms else ""
     fastest = gap_ms < 0
     if fastest:
@@ -343,7 +364,9 @@ def coaching_phrase(lap_ms: int | None, gap_ms: int, who: str,
             elif streak >= 2:
                 where = f"still {name}, {say_gap(loss_ms)}"
             else:
-                where = f"most of it's {name}, {say_gap(loss_ms)}"
+                where = pick("coach_most", [f"most of it's {name}, {say_gap(loss_ms)}",
+                                            f"the big one is {name}, {say_gap(loss_ms)}",
+                                            f"{name} is where it is, {say_gap(loss_ms)}"])
             out.append(_sentence(where))
             if why:
                 out.append(_sentence(why))
@@ -529,7 +552,8 @@ def call_phrase(decision, total_laps: int, verbosity: str = "normal",
             if decision.taken_gamble:
                 note = "that's tight, look after them" if tight(last) \
                     else "should be fine but keep an eye on them"
-        head = f"plan change: {body}" if previous is not None else f"plan is {body}"
+        head = f"plan change: {body}" if previous is not None else \
+            pick("plan_head", [f"plan is {body}", f"strategy is {body}", f"we're going {body}"])
         out.append(_sentence(head, reason, note))
     if decision.taken_gamble:
         t = call.tightest
@@ -659,14 +683,18 @@ def tyre_tips_phrase(wheel: int, rate: float | None, target, hot_sector: int | N
 
 def box_phrase(compound: int, rejoin=None, verbosity: str = "normal") -> str:
     """One lap before the pit entry: 'Box this lap, box this lap. Hards. You'll come out ...'"""
-    text = f"Box this lap, box this lap. {_sentence(say_compound(compound))}"
+    tyre = pick("box_tyre", [say_compound(compound), f"{say_compound(compound)} are ready",
+                             f"going onto {say_compound(compound)}"])
+    text = f"Box this lap, box this lap. {_sentence(tyre)}"
     extra = "" if verbosity == "terse" else rejoin_phrase(rejoin)
     return f"{text} {extra}".strip()
 
 
 def box_half_phrase(compound: int) -> str:
     """Half a lap before the pit entry: 'Box box, end of this lap. Hards.'"""
-    return f"Box box, end of this lap. {_sentence(say_compound(compound))}"
+    head = pick("box_half", ["Box box, end of this lap.", "Box box, box box.",
+                             "Pit this lap, box box."])
+    return f"{head} {_sentence(say_compound(compound))}"
 
 
 def safety_car_box_phrase(kind: str, compound: int, next_lap: bool = False,
@@ -682,13 +710,15 @@ def safety_car_box_phrase(kind: str, compound: int, next_lap: bool = False,
 
 def safety_car_stay_phrase(kind: str) -> str:
     """'Safety car, stay out. Stopping now doesn't pay.'"""
-    return _sentence(f"{kind}, stay out") + " " + _sentence("stopping now doesn't pay")
+    return _sentence(f"{kind}, stay out") + " " + _sentence(pick("sc_stay", [
+        "stopping now doesn't pay", "no gain stopping now", "we lose out if we stop now"]))
 
 
 def undercut_phrase(name: str | None) -> str:
     """'Norris behind has pitted, watch the undercut.'"""
     who = f"{name} behind" if name else "the car behind"
-    return _sentence(f"{who} has pitted, watch the undercut")
+    return _sentence(f"{who} has pitted", pick("undercut", [
+        "watch the undercut", "they're trying the undercut", "push now, undercut is on"]))
 
 
 # -- push-to-talk answers (Phase 6) ------------------------------------------------------------
@@ -840,23 +870,33 @@ def start_phrase(gained: int) -> str:
     """After race lap 1. 'Great start, up eight places.' / 'Lost two places at the start, long
     way to go.'"""
     if gained > 0:
-        return _sentence(f"great start, up {_places(gained)}")
-    return _sentence(f"lost {_places(-gained)} at the start", "long way to go")
+        p = _places(gained)
+        return _sentence(pick("start_up", [f"great start, up {p}", f"brilliant launch, up {p}",
+                                           f"up {p} off the line, great start"]))
+    p = _places(-gained)
+    return _sentence(*pick("start_down", [(f"lost {p} at the start", "long way to go"),
+                                          (f"dropped {p} off the line", "plenty of time"),
+                                          (f"lost {p} at the start", "stay calm, long race")]))
 
 
 _PASS_WORDS = ("great move", "nice pass", "lovely move", "good job, that's one more")
+# With variety on: every wording names the car passed.
+_PASS_WORDS_VARIED = ("great move", "nice pass", "lovely move", "beautiful move", "clean pass",
+                      "superb move", "good move")
 
 
 def pass_phrase(names: list[str | None], position: int, n: int = 0) -> str:
     """'Great move on Norris, P three.' / 'Two cars in one go, P five.'
     n: how many pass calls so far; the wording rotates (in order, so replays stay the same)."""
     if len(names) == 1:
-        words = _PASS_WORDS[n % len(_PASS_WORDS)]
+        words = pick("pass", list(_PASS_WORDS_VARIED if _variety_on() else _PASS_WORDS), n)
         if words.startswith("good job"):
             return _sentence(words, say_position(position))
         who = f" on {names[0]}" if names[0] else ""
         return _sentence(f"{words}{who}", say_position(position))
-    return _sentence(f"{number_words(len(names))} cars in one go", say_position(position))
+    many = number_words(len(names))
+    return _sentence(pick("pass_many", [f"{many} cars in one go", f"{many} at once, brilliant",
+                                        f"that's {many} cars in one move"]), say_position(position))
 
 
 def lost_place_phrase(name: str | None, position: int, n: int = 0) -> str:
@@ -866,16 +906,17 @@ def lost_place_phrase(name: str | None, position: int, n: int = 0) -> str:
         return _sentence(f"lost {say_position(position - 1)}", "stay with them")
     lost = say_position(position - 1)
     now = say_position(position)
-    return [f"{_sentence(f'lost {lost} to {name}')} {_sentence(f'stay with {name}')}",
+    opts = [f"{_sentence(f'lost {lost} to {name}')} {_sentence(f'stay with {name}')}",
             f"{_sentence(f'{name} got by, {now}')} {_sentence('stay close, the move back is on')}",
             f"{_sentence(f'{name} is through, {now}')} {_sentence('keep the pressure on')}",
-            ][n % 3]
+            f"{_sentence(f'{name} past, {now}')} {_sentence(f'stick with {name}, chances will come')}"]
+    return pick("lost_place", opts if _variety_on() else opts[:3], n)
 
 
 def lost_places_phrase(count: int, position: int) -> str:
     """'Lost two places, P eight. Heads down, plenty of race left.'"""
     return f"{_sentence(f'lost {number_words(count)} places, {say_position(position)}')} " \
-           f"{_sentence('heads down, keep at it')}"
+           f"{_sentence(pick('lost_places', ['heads down, keep at it', 'reset, plenty of race left', 'shake it off, keep going']))}"
 
 
 def fight_back_phrase(name: str | None, position: int, heard_lost: bool, n: int = 0) -> str:
@@ -885,25 +926,28 @@ def fight_back_phrase(name: str | None, position: int, heard_lost: bool, n: int 
     who = name or "them"
     pos = say_position(position)
     if heard_lost:
-        return [f"{_sentence(f'straight back past {who}, {pos}')} Great response.",
-                f"{_sentence(f'got it back from {who}, {pos}')} That's how you answer.",
-                f"{_sentence(f'back ahead of {who}, {pos}')} Good fight."][n % 3]
-    return [_sentence(f"good fight, {who} couldn't make it stick, {pos}"),
-            _sentence(f"nicely defended, back ahead of {who}, {pos}"),
-            _sentence(f"great racing with {who}, you kept the place, {pos}")][n % 3]
+        return pick("fight_back", [
+            f"{_sentence(f'straight back past {who}, {pos}')} Great response.",
+            f"{_sentence(f'got it back from {who}, {pos}')} That's how you answer.",
+            f"{_sentence(f'back ahead of {who}, {pos}')} Good fight."], n)
+    return pick("fight_held", [_sentence(f"good fight, {who} couldn't make it stick, {pos}"),
+                               _sentence(f"nicely defended, back ahead of {who}, {pos}"),
+                               _sentence(f"great racing with {who}, you kept the place, {pos}")], n)
 
 
 def defend_phrase(name: str | None, gap_ms: float) -> str:
     """'Leclerc behind, eight tenths and closing, DRS range. Defend.'"""
     who = name or "car"
     drs = ", DRS range" if gap_ms <= 1000 else ""
-    return f"{_sentence(f'{who} behind, {say_gap(int(gap_ms))} and closing{drs}')} Defend."
+    return (f"{_sentence(f'{who} behind, {say_gap(int(gap_ms))} and closing{drs}')} "
+            + pick("defend", ["Defend.", "Watch your mirrors.", "Cover the inside."]))
 
 
 def breathing_room_phrase(name: str | None, gap_ms: float) -> str:
     """'Leclerc dropping back, two seconds now. Good defending.'"""
     who = name or "car behind"
-    return f"{_sentence(f'{who} dropping back, {say_gap(int(gap_ms))} now')} Good defending."
+    return (f"{_sentence(f'{who} dropping back, {say_gap(int(gap_ms))} now')} "
+            + pick("breathing", ["Good defending.", "Nicely done.", "That's the gap opening up."]))
 
 
 def attack_phrase(name: str | None, gap_ms: float, closing_ms: float, laps_to_catch: int) -> str:
@@ -914,14 +958,15 @@ def attack_phrase(name: str | None, gap_ms: float, closing_ms: float, laps_to_ca
     laps = "next lap" if laps_to_catch <= 1 else f"in about {number_words(min(laps_to_catch, 99))} laps"
     return (f"{_sentence(f'{who} ahead, {say_gap(int(gap_ms))}')} "
             f"{_sentence(f'catching {say_gap(int(closing_ms))} a lap', f'{on} {laps}')} "
-            f"Keep pushing.")
+            + pick("attack", ["Keep pushing.", "Keep it coming.", "Reel them in."]))
 
 
 def drs_range_phrase(name: str | None) -> str:
     """'DRS range on Norris. Go get Norris.' (names, not pronouns)"""
     if not name:
         return f"{_sentence('DRS range on the car ahead')} Go get it."
-    return f"{_sentence(f'DRS range on {name}')} {_sentence(f'go get {name}')}"
+    return f"{_sentence(f'DRS range on {name}')} " + _sentence(pick("drs", [
+        f"go get {name}", f"have a look at {name}", f"use it on {name}"]))
 
 
 def laps_to_go_phrase(laps: int, position: int, ahead: str | None, gap_ms: float | None) -> str:
@@ -930,7 +975,8 @@ def laps_to_go_phrase(laps: int, position: int, ahead: str | None, gap_ms: float
     head = "last lap" if laps <= 1 else f"{number_words(laps)} laps to go"
     first = _sentence(head, say_position(position))
     if laps <= 1:
-        return f"{first} Bring it home."
+        return f"{first} " + pick("last_lap", ["Bring it home.", "Nice and clean to the flag.",
+                                               "One more, bring it home."])
     if ahead and gap_ms is not None and gap_ms < 5000:
         return f"{first} {_sentence(f'{ahead} ahead, {say_gap(int(gap_ms))}')}"
     return first
@@ -940,20 +986,29 @@ def finish_phrase(position: int, gained_from_grid: int | None) -> str:
     """'P one! You've won it! Brilliant drive.' / 'Chequered flag, P three. Up six from the grid,
     great drive.' / 'Chequered flag, P twelve. Tough one, we'll learn from it.'"""
     if position == 1:
-        return "P one! You've won it! Brilliant drive."
-    first = _sentence("chequered flag", say_position(position))
+        return pick("finish_win", ["P one! You've won it! Brilliant drive.",
+                                   "P one! Get in there! What a drive.",
+                                   "You've won it! P one! Fantastic job."])
+    first = _sentence(pick("flag", ["chequered flag", "that's the flag"]), say_position(position))
     if gained_from_grid is not None and gained_from_grid > 0:
-        return f"{first} {_sentence(f'up {_places(gained_from_grid)} from the grid', 'great drive')}"
+        up = f"up {_places(gained_from_grid)} from the grid"
+        return f"{first} {_sentence(up, pick('finish_up', ['great drive', 'really good work', 'well driven']))}"
     if position <= 3:
-        return f"{first} Podium. Great drive."
+        return f"{first} " + pick("finish_podium", ["Podium. Great drive.",
+                                                    "On the podium. Great job.",
+                                                    "That's a podium. Well done."])
     if gained_from_grid is not None and gained_from_grid < 0:
-        return f"{first} Tough one, we'll learn from it."
-    return f"{first} Good job."
+        return f"{first} " + pick("finish_down", ["Tough one, we'll learn from it.",
+                                                  "Not our day, we'll come back stronger.",
+                                                  "Hard race, we'll look at it."])
+    return f"{first} " + pick("finish_ok", ["Good job.", "Solid work.", "Good race."])
 
 
 def fastest_lap_phrase(lap_time_s: float) -> str:
     """'Fastest lap of the race, one oh nine one.'"""
-    return _sentence("fastest lap of the race", say_lap_time(int(lap_time_s * 1000)))
+    return _sentence(pick("fastest", ["fastest lap of the race", "that's the fastest lap",
+                                      "purple, fastest lap of the race"]),
+                     say_lap_time(int(lap_time_s * 1000)))
 
 
 # Penalty and infringement IDs from the F1 25 data spec (Data_Output_from_F1_25_v3.pdf).
@@ -989,9 +1044,16 @@ def safety_car_in_phrase(kind: str) -> str:
     ready.'"""
     if kind == "virtual safety car":
         return "VSC ending, get ready."
-    return _sentence("safety car in this lap", "get the tyres ready")
+    return _sentence("safety car in this lap", pick("sc_in", [
+        "get the tyres ready", "get some heat in the tyres", "be ready for the restart"]))
 
 
 def contact_damage_phrase(parts: list[tuple[str, float]]) -> str:
     """After contact: 'Front left wing damage, twenty percent.'"""
     return _sentence(*[f"{name} damage, {say_percent(pct)}" for name, pct in parts])
+
+
+def _variety_on() -> bool:
+    """Longer wording lists only with variety on; off keeps the old rotation exactly."""
+    from engineer.radio.variety import VARIETY
+    return VARIETY.enabled

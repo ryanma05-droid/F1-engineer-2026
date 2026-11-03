@@ -62,6 +62,8 @@ class Radio(BaseModel):
         e = BY_KEY.get(self.engineer or "")
         return e.length_scale if e else 1.0
     radio_effect: bool = True
+    # Say calls a few different ways so races don't sound the same (radio/variety.py).
+    variety: bool = True
     volume: float = Field(default=1.0, ge=0.0, le=2.0)
     output_device: str | int | None = None   # None = Windows default; part of a name, or index
     lap_delta_max_wait_s: float = Field(default=3.0, gt=0)

@@ -553,3 +553,15 @@ You choose which unanswered questions get worked on, by flagging them on the rad
   voices couldn't be listened to from the build machine (no voice downloads there): check each
   one on the PC.
 
+## Wording variety (3 Nov)
+
+- Calls that come up every race now have a few wordings each, chosen so the same call doesn't
+  repeat its last two wordings, and that memory carries over between races. Same facts, same
+  structure, different words: "Great start, up nine places." / "Brilliant launch, up nine
+  places." / "Up nine places off the line, great start." Box calls keep "Box this lap, box this
+  lap" word for word; only the tyre line after it varies ("Hards." / "Hards are ready." /
+  "Going onto hards.").
+- Three replays of the same Austria race: 14 of 19 calls worded differently between them, every
+  position, gap, name and lap time the same. Settings: `radio.variety: false` brings back the
+  fixed wording.
+

@@ -180,6 +180,17 @@ uv run python -m engineer.report                     # driver report PDF (data/r
   1 s (game time is frozen there, nothing would release the queue); `cli._idle_loop` calls
   `Engine.idle_tick` to pick up worker answers. Replays/tests keep the queued behaviour.
 
+## Wording variety
+
+- `radio/variety.py`: calls that recur (start, passes, lost places, fights, defend/attack, DRS,
+  last lap, finish, lap-time change words, tyre status/warnings, corner losses, coaching, plan
+  head, box tyre line, SC stay/in, undercut, fastest lap) pick from a few wordings with
+  `pick(key, options, n)`. Facts stay in every wording; "box this lap, box this lap" never
+  varies. No repeat of a call's last two wordings, remembered across races
+  (data/radio/variety.json, live only; live seeds randomly per session, replays seed from the
+  session UID). The suite runs with it off (tests/conftest.py) so option 0 = the old wording and
+  the golden calls are unchanged; tests/test_variety.py runs the fixture with it on.
+
 ## Engineer voices
 
 - `radio/engineers.py`: six engineers (Settings tab), each a Piper voice + speed; Kevin (work

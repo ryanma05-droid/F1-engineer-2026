@@ -5,6 +5,7 @@ Keeping this in one place is what guarantees replay behaves like live: both call
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from typing import TextIO
 
@@ -23,6 +24,7 @@ from engineer.features.priors import WearPriors
 from engineer.pipeline import Pipeline
 from engineer.radio.director import RadioDirector
 from engineer.radio.engineers import personality
+from engineer.radio.variety import VARIETY
 from engineer.state.traces import TraceRecorder
 from engineer.state.track_maps import TrackMaps
 from engineer.strategy.runner import InlineRunner
@@ -87,6 +89,8 @@ def build_engine(cfg: Config, out: TextIO | None = None,
     packets always give the same calls); live play passes a WorkerRunner (a separate process)."""
     pipeline = Pipeline()
     bus, state = pipeline.bus, pipeline.state
+    # First, so a new session's calls are already worded from its own seed.
+    bus.subscribe(ev.SessionStarted, lambda e: VARIETY.new_session(e.session_uid))
     # Analyzers know terse/normal/chatty; coaching is set up by set_tempo at the end.
     talk = "normal" if cfg.radio.verbosity == "coaching" else cfg.radio.verbosity
     # Order matters: the bus calls handlers in subscription order, so the lap history must store
@@ -142,4 +146,7 @@ def build_engine(cfg: Config, out: TextIO | None = None,
                                       feedback=feedback, detail=cfg.radio.detail)
     engine.set_tempo(cfg.radio.verbosity)
     engine.director.persona = personality(cfg.radio.engineer)
+    # Wording variety: each session reseeded (live: random; replay: from the session UID).
+    VARIETY.enabled = cfg.radio.variety and os.environ.get("RACE_ENGINEER_VARIETY", "1") != "0"
+    VARIETY.new_session(None)
     return engine

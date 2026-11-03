@@ -22,6 +22,8 @@ folder and offers to bring your recordings, history, reports and settings over (
 
 ### New in this version
 
+- The engineer words things a few different ways, so one race doesn't sound like the last.
+
 - Pick your engineer's voice on the Settings tab: five real-sounding engineers, and Kevin, who
   is on work experience.
 
