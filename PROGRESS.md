@@ -565,3 +565,20 @@ You choose which unanswered questions get worked on, by flagging them on the rad
   position, gap, name and lap time the same. Settings: `radio.variety: false` brings back the
   fixed wording.
 
+## Pit loss from the game's pit lane timer (3 Nov)
+
+- F1 25 sends every car's time in the pit lane and time stationary; checked on every stop of
+  the 2 Nov Melbourne race (entry 5040 m, exit 44 m, ~18.3 s in the lane). The loss is now the
+  time from 300 m before the pit entry to 300 m after the exit, against the same car's normal
+  laps over that stretch: traffic, cold-tyre out-laps and mistakes no longer count.
+- From your recordings: Melbourne 19.0 s (34 stops), Abu Dhabi 22.6 s (38), Imola 22.9 s (20;
+  the old in/out-lap estimate said 27.3). Austria's lap 2 safety car stops can't be measured:
+  every car stopped, so nobody was left to compare with. Stops held in the box 2 s longer than
+  usual (repairs, penalties) are left out.
+- Real F1 pit loss per track (OpenF1, 2023-25 Grands Prix) as a starting value for tracks with
+  no timed stop yet: fetched in the background on your PC, or
+  `uv run python -m engineer.strategy.real_pit_loss`. Not checked against the live service yet
+  (blocked from the build machine).
+- Run `uv run python -m engineer.features build` once to time the stops in your existing
+  recordings; new races are added automatically.
+

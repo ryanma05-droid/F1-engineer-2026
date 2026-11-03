@@ -176,6 +176,16 @@ uv run python -m engineer.report                     # driver report PDF (data/r
   worker (`StrategyRequest.starts`); the pick is the quickest safe start. No history at a track =
   no plan. On the grid it uses the game's laps and fitted tyre. Said by itself when qualifying
   ends; "what's the plan?" before lights out gets it too.
+- Pit loss (strategy/model.py): stops timed by the game's pit lane timer
+  (`features/pit_loss.py` `PitLossMeter`, wired in build_engine and the feature tables ->
+  data/features/pit_losses.parquet): time over a window from 300 m before the entry line to 300 m
+  after the exit, minus the same car's median over that stretch on green laps ±4 (SC stops: the
+  other cars at the same time). Stops held 2 s+ over the usual are left out (repairs, penalties).
+  When any are timed at a track they replace the in/out-lap estimate; the real F1 figure
+  (`strategy/real_pit_loss.py`, OpenF1 2023-25, data/features/real_pit_loss.json, fetched in the
+  background when missing) counts like 3 stops; then the default. Melbourne 19.0 s (34 stops),
+  Abu Dhabi 22.6 (38), Imola 22.9 (20, was 27.3 from in/out laps). One recording can hold
+  several races under one UID: the meter keeps each finished session's stops (`done_rows`).
 - Menus: `RadioDirector.idle_after_s` (cli only) says calls at once when no packet has come for
   1 s (game time is frozen there, nothing would release the queue); `cli._idle_loop` calls
   `Engine.idle_tick` to pick up worker answers. Replays/tests keep the queued behaviour.

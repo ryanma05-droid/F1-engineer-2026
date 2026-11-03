@@ -13,17 +13,21 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
+import numpy as np
 import pyarrow as pa
 import pyarrow.parquet as pq
 
-import numpy as np
-
 from engineer.bus import events as ev
-from engineer.features.lap_features import LapFeatureBuilder, LapFeatures, summarize_stints
+from engineer.features.lap_features import (
+    LapFeatureBuilder,
+    LapFeatures,
+    summarize_stints,
+)
+from engineer.features.pit_loss import PitLossMeter
 from engineer.ingest.recorder import read_recording
 from engineer.pipeline import Pipeline
-from engineer.state.track_maps import TrackMaps
 from engineer.state.traces import LapTrace, TraceRecorder
+from engineer.state.track_maps import TrackMaps
 from engineer.tools.queries import corner_stats
 
 log = logging.getLogger(__name__)
@@ -42,6 +46,8 @@ def _replay(path: Path | str) -> tuple[list[LapFeatures], list[LapTrace], dict]:
     pipeline.bus.subscribe(ev.SessionStarted, lambda e: traces.reset())
     pipeline.bus.subscribe(ev.Flashback, lambda e: traces.rewind())
     pipeline.after_packet.append(traces.after_packet)
+    meter = PitLossMeter(pipeline.bus, pipeline.state)
+    pipeline.after_packet.append(meter.after_packet)
     rows: list[LapFeatures] = []
     builder.listeners.append(rows.append)
     lap_traces: dict[tuple[int, int], LapTrace] = {}
@@ -55,6 +61,7 @@ def _replay(path: Path | str) -> tuple[list[LapFeatures], list[LapTrace], dict]:
         pipeline.feed(raw, t_ns)
     s = pipeline.state
     info = {"session_uid": f"{s.session_uid or 0:016x}", "track_id": s.session.track_id}
+    info["pit_losses"] = meter.rows(info["session_uid"], info["track_id"])
     return rows, list(lap_traces.values()), info
 
 
@@ -84,12 +91,14 @@ def build(sessions_dir: Path | str, features_dir: Path | str, progress=print,
     recordings = sorted(sessions_dir.glob("*.zst"))
     laps: list[LapFeatures] = []
     corner_rows: list[dict] = []
+    pit_rows: list[dict] = []
     trace_path = features_dir / "traces.parquet"
     writer = None
     for n, path in enumerate(recordings, start=1):
         got, lap_traces, info = _replay(path)
         progress(f"[{n}/{len(recordings)}] {path.name}: {len(got)} laps")
         laps.extend(got)
+        pit_rows.extend(info["pit_losses"])
         tmap = maps.load(info["track_id"]) if info["track_id"] is not None else None
         for tr in lap_traces:
             table = pa.table(_trace_rows(tr, info))
@@ -113,6 +122,7 @@ def build(sessions_dir: Path | str, features_dir: Path | str, progress=print,
     _write([r.to_row() for r in laps], features_dir / "laps.parquet")
     _write([s.to_row() for s in stints], features_dir / "stints.parquet")
     _write(corner_rows, features_dir / "corners.parquet")
+    _write(pit_rows, features_dir / "pit_losses.parquet")
     return len(laps), len(stints)
 
 
@@ -123,15 +133,18 @@ def add_recordings(paths: list[Path], features_dir: Path | str, progress=print) 
     features_dir = Path(features_dir)
     features_dir.mkdir(parents=True, exist_ok=True)
     new: list[LapFeatures] = []
+    pit_rows: list[dict] = []
     for n, path in enumerate(paths, start=1):
-        got = features_from_recording(path)
+        got, _traces, info = _replay(path)
         progress(f"[{n}/{len(paths)}] {Path(path).name}: {len(got)} laps")
         new.extend(got)
+        pit_rows.extend(info["pit_losses"])
     if not new:
         return 0
     uids = {f"{r.session_uid:016x}" for r in new}
     for name, rows in (("laps", [r.to_row() for r in new]),
-                       ("stints", [s.to_row() for s in summarize_stints(new)])):
+                       ("stints", [s.to_row() for s in summarize_stints(new)]),
+                       ("pit_losses", pit_rows)):
         path = features_dir / f"{name}.parquet"
         old = []
         if path.exists():

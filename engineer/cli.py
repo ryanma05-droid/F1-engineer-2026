@@ -173,6 +173,9 @@ async def _run(cfg: Config, record: bool | None, voice: bool, ptt_on: bool = Tru
 
     from engineer.strategy.runner import WorkerRunner
     strategy_runner = WorkerRunner(cfg.features_path)     # strategy sims in their own process
+    # Real F1 pit losses per track, a starting value until the game's own stops are timed.
+    from engineer.strategy.real_pit_loss import fetch_in_background
+    fetch_in_background(cfg.features_path)
     engine = build_engine(cfg, strategy_runner=strategy_runner)
     engine.coaching.save_dir = cfg.data_path / "coaching"   # live only: replays don't write
     engine.director.idle_after_s = IDLE_AFTER_S              # menus: say answers at once

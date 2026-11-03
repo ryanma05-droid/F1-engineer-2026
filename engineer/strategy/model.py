@@ -322,6 +322,8 @@ def measure_pit_losses(rows: list[dict]) -> tuple[list[float], list[float]]:
 
 # -- building the model ------------------------------------------------------------------------
 
+REAL_F1_WEIGHT = 3.0     # the real F1 pit loss counts like three measured stops
+
 @dataclass
 class ModelSettings:
     fuel_s_per_kg: float = 0.03
@@ -335,10 +337,15 @@ class ModelSettings:
 
 
 def build_model(track_rows: list[dict], all_rows: list[dict], current_stint: list[dict],
-                game: GameTyreInfo | None, cfg: ModelSettings) -> StrategyModel:
+                game: GameTyreInfo | None, cfg: ModelSettings,
+                timer: tuple[list[float], list[float]] | None = None,
+                real_pit_s: float | None = None) -> StrategyModel:
     """track_rows: every lap at this track (history + this session, all cars).
     all_rows: every lap at every track (for how hard you are on tyres compared with the AI).
-    current_stint: your laps on the current set (the freshest wear evidence)."""
+    current_stint: your laps on the current set (the freshest wear evidence).
+    timer: (green, safety car) pit losses measured with the game's pit lane timer at this track
+    (features/pit_loss.py); they replace the lap-time estimate when there are any.
+    real_pit_s: the real F1 pit loss at this track (strategy/real_pit_loss.py), a starting value."""
     game = game or GameTyreInfo({}, {}, {})
     aw, gw = cfg.ai_weight, cfg.game_prior_laps
     notes = []
@@ -432,10 +439,21 @@ def build_model(track_rows: list[dict], all_rows: list[dict], current_stint: lis
         est = combine([(v, n, f"laps on both ({n})"), (game.offsets.get(c), gw, "game")])
         offsets[c] = est or Estimate(0.0, 0.0, ("not measured yet",))
 
-    # Pit loss.
-    g_losses, sc_losses = measure_pit_losses(track_rows)
-    g = combine([(float(np.median(g_losses)) if g_losses else None, len(g_losses),
-                  f"{len(g_losses)} stops measured"), (cfg.pit_loss_s, 1.0, "default")])
+    # Pit loss: the game's pit lane timer when any stop here was timed (traffic, cold tyres and
+    # mistakes on the in/out laps don't count), else the in/out-lap estimate; the real F1 figure
+    # and the default only carry weight until stops are measured.
+    t_green, t_sc = timer or ([], [])
+    lap_green, lap_sc = measure_pit_losses(track_rows)
+    if t_green:
+        g_losses, g_how = t_green, "pit lane timer"
+    else:
+        g_losses, g_how = lap_green, "in and out laps"
+    parts = [(float(np.median(g_losses)) if g_losses else None, len(g_losses),
+              f"{len(g_losses)} stops measured ({g_how})")]
+    if real_pit_s is not None:
+        parts.append((real_pit_s, REAL_F1_WEIGHT, "real F1"))
+    g = combine(parts + [(cfg.pit_loss_s, 1.0, "default")])
+    sc_losses = t_sc or lap_sc
     sc_measured = float(np.median(sc_losses)) if sc_losses else None
     sc = combine([(sc_measured, len(sc_losses), f"{len(sc_losses)} SC stops measured"),
                   (g.value * cfg.sc_pit_loss_factor, 1.0, "share of green loss")])

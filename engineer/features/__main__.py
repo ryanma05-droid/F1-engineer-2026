@@ -40,11 +40,13 @@ GROUP BY ALL ORDER BY track, corner
 
 def strategy_report(cfg, track: str | None) -> int:
     """What the strategy model has learned so far, per track (before any live race data)."""
+    from engineer.features.pit_loss import samples_from
     from engineer.ingest.formats import f1_2025 as f
     from engineer.strategy.model import COMPOUND_NAMES, ModelSettings, build_model
-    from engineer.strategy.runner import load_history
+    from engineer.strategy.runner import load_history, load_pit_history
 
     rows = load_history(cfg.features_path)
+    timed, real = load_pit_history(cfg.features_path)
     ids = sorted({r["track_id"] for r in rows if r.get("track_id") is not None})
     if track:
         ids = [t for t in ids if track.lower() in f.TRACKS.get(t, "").lower()]
@@ -57,7 +59,9 @@ def strategy_report(cfg, track: str | None) -> int:
                              fallback_deg_s_per_pct=st.fallback_deg_s_per_pct,
                              pit_loss_s=st.pit_loss_s, sc_pit_loss_factor=st.sc_pit_loss_factor)
     for t in ids:
-        m = build_model([r for r in rows if r["track_id"] == t], rows, [], None, settings)
+        m = build_model([r for r in rows if r["track_id"] == t], rows, [], None, settings,
+                        timer=samples_from([r for r in timed if r.get("track_id") == t]),
+                        real_pit_s=real.get(t))
         print(f"\n{f.TRACKS.get(t, t)}  (in a race the game's own tyre figures are added)")
         for c, cm in m.compounds.items():
             print(f"  {COMPOUND_NAMES[c]:<8} wear {cm.wear_rate.value:4.1f} %/lap "

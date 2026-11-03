@@ -101,6 +101,9 @@ class Cars:
         self.sector2_ms = _nan()
         self.current_lap_invalid = _nan()
         self.pit_status = _nan()           # 0 none, 1 pitting, 2 in pit area
+        self.pit_lane_timer_active = _nan()  # 1 while in the pit lane (entry to exit line)
+        self.pit_lane_time_ms = _nan()     # time in the pit lane so far (0 when not in it)
+        self.pit_stop_timer_ms = _nan()    # time stationary in the box so far
         self.num_pit_stops = _nan()
         self.penalties_s = _nan()
         self.grid_position = _nan()
@@ -368,6 +371,9 @@ class RaceState:
         put("sector2_ms", ld["m_sector2TimeMSPart"] + ld["m_sector2TimeMinutesPart"] * 60000.0)
         put("current_lap_invalid", ld["m_currentLapInvalid"])
         put("pit_status", ld["m_pitStatus"])
+        put("pit_lane_timer_active", ld["m_pitLaneTimerActive"])
+        put("pit_lane_time_ms", ld["m_pitLaneTimeInLaneInMS"])
+        put("pit_stop_timer_ms", ld["m_pitStopTimerInMS"])
         put("num_pit_stops", ld["m_numPitStops"])
         put("penalties_s", ld["m_penalties"])
         put("grid_position", ld["m_gridPosition"])

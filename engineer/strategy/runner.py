@@ -16,6 +16,7 @@ import queue
 from dataclasses import dataclass, replace
 from pathlib import Path
 
+from engineer.features.pit_loss import samples_from
 from engineer.strategy.model import (
     GameTyreInfo,
     ModelSettings,
@@ -23,6 +24,7 @@ from engineer.strategy.model import (
     build_model,
 )
 from engineer.strategy.prerace import RaceLength, race_length, start_situations
+from engineer.strategy.real_pit_loss import REAL_FILE, load_real
 from engineer.strategy.sim import Plan, RaceSituation, SimResult, plan_cost, simulate
 
 log = logging.getLogger(__name__)
@@ -56,6 +58,8 @@ class StrategyRequest:
     laps_how: str = "game"               # where situation.total_laps came from
     recent_race: tuple[int, int] | None = None   # (track, laps) of a race seen live this run
     two_compound: tuple[str, int] = ("auto", 10)  # strategy.two_compound_rule, ..._min_laps
+    # This session's stops timed by the game's pit lane timer: (green, safety car) losses.
+    pit_samples: tuple[tuple[float, ...], tuple[float, ...]] = ((), ())
 
 
 @dataclass
@@ -93,7 +97,8 @@ def load_history(features_dir: Path | str | None) -> list[dict]:
         return []
 
 
-def solve_prerace(req: StrategyRequest, history: list[dict]) -> StrategyResult:
+def solve_prerace(req: StrategyRequest, history: list[dict],
+                  pit: tuple[list[dict], dict] = ([], {})) -> StrategyResult:
     """Every start compound from lap 0 (strategy/prerace.py)."""
     sit = req.situation
     length = RaceLength(sit.total_laps, req.laps_how) if sit.total_laps \
@@ -105,7 +110,7 @@ def solve_prerace(req: StrategyRequest, history: list[dict]) -> StrategyResult:
                    require_two=rule == "on" or (rule == "auto" and length.laps >= min_laps))
     found = []
     for c, s in start_situations(base, req.starts):
-        r = solve(replace(req, starts=(), situation=s), history)
+        r = solve(replace(req, starts=(), situation=s), history, pit)
         if r.error is None and r.sim.best is not None:
             found.append((c, r))
     best = min((r.sim.best for _, r in found), key=lambda p: p.cost_s, default=None)
@@ -114,15 +119,40 @@ def solve_prerace(req: StrategyRequest, history: list[dict]) -> StrategyResult:
                           race_length=length)
 
 
-def solve(req: StrategyRequest, history: list[dict]) -> StrategyResult:
+def load_pit_history(features_dir: Path | str | None) -> tuple[list[dict], dict[int, float]]:
+    """Past timed stops (data/features/pit_losses.parquet) and the real F1 pit loss per track
+    (data/features/real_pit_loss.json); empty when not there."""
+    if features_dir is None:
+        return [], {}
+    stops: list[dict] = []
+    path = Path(features_dir) / "pit_losses.parquet"
+    if path.exists():
+        try:
+            import pyarrow.parquet as pq
+            stops = pq.read_table(path).to_pylist()
+        except Exception as exc:
+            log.warning("could not read %s (%s)", path, exc)
+    return stops, load_real(Path(features_dir) / REAL_FILE)
+
+
+def _timer(req: StrategyRequest, pit: tuple[list[dict], dict]) -> tuple[list[float], list[float]]:
+    past = [r for r in pit[0] if r.get("track_id") == req.track_id
+            and r.get("session_uid") != req.session_uid]
+    green, sc = samples_from(past)
+    return green + list(req.pit_samples[0]), sc + list(req.pit_samples[1])
+
+
+def solve(req: StrategyRequest, history: list[dict],
+          pit: tuple[list[dict], dict] = ([], {})) -> StrategyResult:
     try:
         if req.starts:
-            return solve_prerace(req, history)
+            return solve_prerace(req, history, pit)
         # This session might also be in the history table (a replay of a built recording).
         past = [r for r in history if r.get("session_uid") != req.session_uid]
         all_rows = past + list(req.session_rows)
         track_rows = [r for r in all_rows if r.get("track_id") == req.track_id]
-        model = build_model(track_rows, all_rows, list(req.current_stint), req.game, req.settings)
+        model = build_model(track_rows, all_rows, list(req.current_stint), req.game, req.settings,
+                            timer=_timer(req, pit), real_pit_s=pit[1].get(req.track_id))
         sit = replace(req.situation, pit_loss_s=model.pit_loss.value,
                       sc_pit_loss_s=model.pit_loss_sc.value if req.situation.sc_laps else None)
         sim = simulate(sit, model)
@@ -169,7 +199,14 @@ class InlineRunner:
     def __init__(self, features_dir: Path | str | None):
         self.features_dir = features_dir
         self._history: list[dict] | None = None
+        self._pit: tuple[list[dict], dict] | None = None
         self._done: list[StrategyResult] = []
+
+    @property
+    def pit(self) -> tuple[list[dict], dict]:
+        if self._pit is None:
+            self._pit = load_pit_history(self.features_dir)
+        return self._pit
 
     @property
     def history(self) -> list[dict]:
@@ -178,7 +215,7 @@ class InlineRunner:
         return self._history
 
     def submit(self, req: StrategyRequest) -> None:
-        self._done.append(solve(req, self.history))
+        self._done.append(solve(req, self.history, self.pit))
 
     def poll(self) -> list[StrategyResult]:
         out, self._done = self._done, []
@@ -191,11 +228,12 @@ class InlineRunner:
 def worker_main(inbox, outbox, features_dir) -> None:
     """Worker process: load the history once, then answer requests until told to stop (None)."""
     history = load_history(features_dir)
+    pit = load_pit_history(features_dir)
     while True:
         req = inbox.get()
         if req is None:
             return
-        outbox.put(solve(req, history))
+        outbox.put(solve(req, history, pit))
 
 
 class WorkerRunner:

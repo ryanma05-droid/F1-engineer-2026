@@ -20,6 +20,7 @@ from engineer.config import Config
 from engineer.console import LapPrinter, RadioPrinter
 from engineer.features.lap_features import LapFeatureBuilder
 from engineer.features.laps import LapHistory
+from engineer.features.pit_loss import PitLossMeter
 from engineer.features.priors import WearPriors
 from engineer.pipeline import Pipeline
 from engineer.radio.director import RadioDirector
@@ -124,6 +125,11 @@ def build_engine(cfg: Config, out: TextIO | None = None,
         strategy_runner = InlineRunner(cfg.features_path)
     strategy = StrategyAnalyzer(bus, state, features, director, strategy_runner, cfg.strategy,
                                 cfg.tyres, verbosity=talk)
+    # Pit stops timed with the game's pit lane timer (before strategy: a stop is measured on the
+    # packet that ends it).
+    pit_meter = PitLossMeter(bus, state)
+    pipeline.after_packet.append(pit_meter.after_packet)
+    strategy.pit_meter = pit_meter
     pipeline.after_packet.append(strategy.after_packet)
     racecraft = RaceCraftAnalyzer(bus, state, director, cfg.racecraft)
     pipeline.after_packet.append(racecraft.after_packet)

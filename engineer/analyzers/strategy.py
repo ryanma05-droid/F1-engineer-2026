@@ -102,6 +102,7 @@ class StrategyAnalyzer:
         self._sets_seen: tuple[int, object] | None = None  # (track, Tyre Sets) last received
         self.prerace: PreRacePlan | None = None     # the latest pre-race plan (app window)
         self.prerace_auto = True                    # say it when qualifying ends
+        self.pit_meter = None                       # features.pit_loss.PitLossMeter (build_engine)
         self._prerace_auto_done: int | None = None  # ... once per session
         self._reset()
         bus.subscribe(ev.LapCompleted, self.on_lap)
@@ -262,7 +263,8 @@ class StrategyAnalyzer:
             safe_limits=(self.tyres.limit_pct - self.cfg.margin_pct,
                          self.tyres.limit_pct - 2 * self.cfg.margin_pct) if reason != "box_now"
             else (),
-            hold_compound=hold.compound if hold is not None else None)
+            hold_compound=hold.compound if hold is not None else None,
+            pit_samples=self._pit_samples())
         if callback is not None:
             self._callbacks[self._seq] = callback
         self.runner.submit(req)
@@ -723,6 +725,13 @@ class StrategyAnalyzer:
             if dec is not None:
                 starts.append(PreRaceStart(c, dec, r.situation))
         return PreRacePlan(track, res.race_length, tuple(order_starts(starts)), grid)
+
+    def _pit_samples(self) -> tuple[tuple[float, ...], tuple[float, ...]]:
+        """This race's stops so far, timed with the game's pit lane timer."""
+        if self.pit_meter is None:
+            return (), ()
+        green, sc = self.pit_meter.samples()
+        return tuple(green), tuple(sc)
 
     def _model_settings(self) -> ModelSettings:
         return ModelSettings(
