@@ -7,7 +7,7 @@
 2. The first start asks where you play (PC, or Xbox/PlayStation) and downloads the engineer's
    voice. Then the app window opens and asks which controller you use (PlayStation: hold
    **L1** to ask the engineer something; Xbox: hold **LB**) and how much the engineer should
-   talk (Quiet, Normal or Chatty; change it mid-race by saying "talk more" or "keep it short").
+   talk (Quiet, Normal, Chatty or Coaching; change it mid-race by saying "talk more" or "keep it short").
    The window shows your race live, the team radio, and your driver report.
 3. Turn on telemetry in F1 25 (Game Options > Settings > Telemetry Settings). The settings are
    shown at the end of setup, and in Start menu > Race Engineer > Telemetry guide.
@@ -22,21 +22,21 @@ folder and offers to bring your recordings, history, reports and settings over (
 
 ### New in this version
 
-- The engineer words things a few different ways, so one race doesn't sound like the last.
-
-- Pick your engineer's voice on the Settings tab: five real-sounding engineers, and Kevin, who
-  is on work experience.
-
-- Pre-race tyre plan: before the race ask "what tyres should I start on?" (or "strategy for
+- **Pre-race tyre plan**: before the race ask "what tyres should I start on?" (or "strategy for
   Suzuka, fifteen laps"), or use the Pre-race card on the Live tab. It's also said when
   qualifying ends.
-
-- Strategy: one committed call ("box end of lap nine for softs"), the safe call vs a named
-  gamble, "Copy, softs." after a stop, and "what if I go a lap later?" on the radio.
-- "Log that" on the radio flags a question you didn't get a good answer to; the Live tab lists
-  them and they're written up when the race ends.
-- More questions understood, a restarted race handled as a new race, the microphone reconnects
-  if it stops sending audio, and the driver report includes restarted races.
+- **Coaching mode**, a fourth tempo: each lap against the fastest car on track, corner by corner,
+  with a summary when the session ends and a Coaching card on the Live tab.
+- **Plain corner advice** by default ("brake slightly later, then carry a bit more speed through
+  the corner"); say "give me the numbers" or pick Specific in Settings for metres and km/h.
+- **Pick your engineer's voice** on the Settings tab: five real-sounding engineers, and Kevin,
+  who is on work experience.
+- **Calls worded a few different ways**, so one race doesn't sound like the last.
+- **Better pit stop timing**: pit loss is measured with the game's own pit lane timer (real F1
+  figures are used until a track has a timed stop), so box calls and "where do I come out?" are
+  closer to reality.
+- Losing a place is called the same way as a pass (after it sticks), a good defence is praised,
+  and no place changes are called around your own stop.
 
 ### Mac (Apple Silicon, for F1 25 on Xbox / PlayStation)
 
