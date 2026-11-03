@@ -518,3 +518,9 @@ You choose which unanswered questions get worked on, by flagging them on the rad
   call to one corner instead of silencing it.
 - Next (not built): pick focus corners from the driver report's habits, an end-of-session
   coaching summary into the report, and a Coaching card on the Live tab.
+- Built (3 Nov): end-of-session coaching summary ("Session done. Best lap seven tenths off
+  Russell, down from one point nine seconds on your first. Turn two sorted, three tenths found.
+  Still to work on: turn seven, ..." on the Melbourne replay), saved to data/coaching/ and listed
+  in the driver report; Coaching card on the Live tab (gap to the fastest lap, each corner's
+  loss with its trend, up to two focus corners with their advice, "fixed" badges).
+- Still next: choosing focus corners from the driver report's habits.

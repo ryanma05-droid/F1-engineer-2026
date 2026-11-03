@@ -122,6 +122,7 @@ def test_radio_calls_reach_the_window(tmp_path):
     engine.pipeline.bus.publish(ev.RadioMessage(0, 0.0, topic="box", text="Box this lap.",
                                                   priority=3, queued_at=0.0, origin_t_ns=None))
     assert window.snapshot()["radio"][0]["text"] == "Box this lap."
+    assert window.snapshot()["coaching"] == {"laps": 0}       # the Coaching card, before a lap
 
 
 def test_report_insights_with_no_sessions(tmp_path):

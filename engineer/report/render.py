@@ -215,6 +215,31 @@ def _since(report: Report) -> str:
     return f'<div class="since">{" ".join(bits)}</div>'
 
 
+def _coaching_section(r: Report) -> str:
+    """07: the latest coaching sessions (engineer/analyzers/coaching.py summaries)."""
+    if not r.coaching:
+        return ""
+    rows = []
+    for c in r.coaching:
+        best = c.get("best_gap_ms", 0)
+        first = c.get("first_gap_ms", best)
+        when = escape(str(c.get("date", ""))[:10])
+        gap = "fastest on track" if best < 0 else f"{best / 1000:.2f}s off {escape(c.get('bench_name', ''))}"
+        moved = f" (from {first / 1000:.2f}s)" if first - best >= 100 and best >= 0 else ""
+        fixed = ", ".join(f"{escape(f['name'])} (&minus;{f['found_s']:.2f}s)" for f in c.get("fixed", []))
+        open_ = ", ".join(f"{escape(o['name'])} ({o['loss_s']:.2f}s)" for o in c.get("open", [])[:3])
+        rows.append(f"<tr><td>{when}</td><td>{escape(c.get('track', ''))}<br><span style='color:#777'>"
+                    f"{escape(c.get('session', ''))} · {c.get('laps', 0)} laps</span></td>"
+                    f"<td>{gap}{moved}</td><td style='color:{GAIN}'>{fixed or '&mdash;'}</td>"
+                    f"<td style='color:{LOSS}'>{open_ or '&mdash;'}</td></tr>")
+    return (f"""<section><h2><span class="n">07</span>Coaching sessions</h2>
+<p class="lede">Laps compared with the fastest lap on track. Fixed: a corner that kept losing time
+early in the session and stopped. Open: still losing at the end.</p>
+<div class="card" style="padding:6px 8px"><table>
+<tr><th>Date</th><th>Session</th><th>Best lap vs fastest</th><th>Fixed</th><th>Still open</th></tr>
+{"".join(rows)}</table></div></section>""")
+
+
 def render_html(report: Report) -> str:
     r = report
     gen = r.generated.astimezone()
@@ -322,6 +347,8 @@ through that corner.</p>
 <tr><th>Corner</th><th>Type</th><th class="r">AI min kph</th><th class="r">vs AI</th><th></th>
 <th>Where</th><th class="r">Spread</th><th class="r">Laps</th></tr>
 {corner_rows}</table></div></section>
+
+{_coaching_section(r)}
 
 <footer>
 <p>Built from your recordings by the race engineer. Reference: the five quickest AI cars in each

@@ -81,6 +81,13 @@ uv run python -m engineer.report                     # driver report PDF (data/r
   up to two corners (habits first) with plain advice, "Better into ..." when a habit is fixed,
   "fastest lap on track, X still quicker through ..." when you're quickest. In a fight: one
   corner, not silence.
+- `engineer/analyzers/coaching.py`: every clean lap vs the bench is logged in
+  `CornerAnalyzer.coach_laps` in any tempo (the Live tab's Coaching card, `card()`). The summary
+  (`summarize`: fixed = lost on 2+ of the first half, not on the last 2; open = still losing over
+  the last 3; gaps against the fastest lap at the END) is said in coaching mode on your last race
+  lap (wired after race craft, so after the finish call) or at SessionEnded
+  (`RadioDirector.release_now`), and saved to data/coaching/ by live play only (`save_dir`, set in
+  cli). The driver report lists the latest ones (section 07).
 - `data/tracks/<track>.json` is committed and hand-editable (official turn numbers). Without a
   file the map is learned from the first 2 clean laps and saved. The golden test uses
   `data/tracks/austria.json`.

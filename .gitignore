@@ -42,3 +42,4 @@ data/once.json
 data/reports/
 data/feedback/*
 !data/feedback/README.md
+data/coaching/*

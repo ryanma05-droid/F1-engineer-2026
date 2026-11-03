@@ -408,6 +408,7 @@ class Report:
     overall_pct: float
     ideal_gap_s: float          # per lap: your median vs your best through every corner
     previous: dict | None = None
+    coaching: list[dict] = field(default_factory=list)   # latest coaching summaries, newest first
 
     @property
     def laps(self) -> int:

@@ -82,6 +82,20 @@ button { font: inherit; color: inherit; }
 .qa { list-style: none; margin: 14px 0 0; padding: 0; display: grid; gap: 8px; }
 .qa li { padding: 8px 10px; background: var(--panel-2); border-radius: 8px; font-size: 13px; }
 .qa .q { color: var(--ink-2); } .qa .a { margin-top: 2px; }
+/* coaching card */
+.coach-head { display: flex; gap: 22px; align-items: flex-end; flex-wrap: wrap; margin-bottom: 14px; }
+.coach-head .big { font-size: 30px; font-weight: 750; line-height: 1; }
+.coach-head .big.loss { color: var(--loss); } .coach-head .big.gain { color: var(--gain); }
+.coach-head .k { font-size: 11px; color: var(--ink-3); text-transform: uppercase; letter-spacing: .1em; margin-bottom: 4px; }
+.crows { display: grid; grid-template-columns: 92px 1fr 64px 92px; gap: 6px 12px; align-items: center; }
+.crows .n { font-weight: 600; font-size: 13px; text-transform: capitalize; }
+.crows .v { text-align: right; font-size: 13px; font-weight: 600; }
+.crows .adv { grid-column: 1 / -1; font-size: 12.5px; color: var(--ink-2); margin: -2px 0 6px;
+  padding-left: 10px; border-left: 2px solid var(--red); }
+.badge { display: inline-block; font-size: 10.5px; font-weight: 700; padding: 1px 6px; border-radius: 99px;
+  margin-left: 4px; vertical-align: 1px; text-transform: uppercase; letter-spacing: .04em; }
+.badge.focus { background: rgba(225,6,0,.18); color: var(--red-2); }
+.badge.fixed { background: rgba(12,163,12,.18); color: #5fd35f; }
 .fb { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; max-height: 300px; overflow: auto; }
 .fb li { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: start;
   padding: 8px 10px; background: var(--panel-2); border-radius: 8px; font-size: 13px; }
@@ -198,6 +212,8 @@ ul.good li::before { content: "\2713"; position: absolute; left: 0; top: 1px; wi
         <div class="card hero" id="session"></div>
         <div class="card"><h3><span class="grow">Team radio</span><span class="muted small" id="quietNote"></span></h3>
           <ul class="feed" id="feed"></ul></div>
+        <div class="card"><h3><span class="grow">Coaching</span><span class="muted small" id="coachVs"></span></h3>
+          <div id="coach"></div></div>
       </div>
       <div style="display:grid;gap:16px;align-content:start">
         <div class="card"><h3>Push to talk</h3><div id="ptt"></div></div>
@@ -360,6 +376,48 @@ function renderPtt() {
       <div class="a">${esc(q.answer || "—")}</div></li>`).join("")}</ul>` : ""}`);
 }
 
+function gapText(ms) {
+  if (ms === null || ms === undefined) return "—";
+  return (ms < 0 ? "−" : "+") + (Math.abs(ms) / 1000).toFixed(2) + "s";
+}
+
+function trendSvg(vals) {
+  // Loss per lap at this corner (newest right); the line under is "matching the fastest".
+  if (!vals || vals.length < 2) return "";
+  const w = 92, h = 26, p = 3, top = Math.max(...vals.map(Math.abs), 0.1);
+  const y = v => h / 2 - v / top * (h / 2 - p);
+  const pts = vals.map((v, i) => [p + i * (w - 2 * p) / (vals.length - 1), y(v)]);
+  return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" aria-hidden="true"><line x1="0" x2="${w}"
+    y1="${h / 2}" y2="${h / 2}" stroke="#2b2e40"/><path d="${pts.map((q, i) => (i ? "L" : "M") + q[0].toFixed(1) + ","
+    + q[1].toFixed(1)).join(" ")}" fill="none" stroke="#b4b6c4" stroke-width="1.5"/><circle cx="${pts.at(-1)[0].toFixed(1)}"
+    cy="${pts.at(-1)[1].toFixed(1)}" r="3" fill="${vals.at(-1) > 0 ? "#e66767" : "#3987e5"}"/></svg>`;
+}
+
+function renderCoach() {
+  const c = S.coaching, el = $("#coach");
+  const hint = S.tempo === "coaching" ? "" : `<div class="tip" style="margin-top:12px">Switch the tempo to
+    <b>Coaching</b> (or say <span class="say">“coaching mode”</span>) to hear this after every lap.</div>`;
+  $("#coachVs").textContent = c.laps ? `vs ${c.bench} · ${c.laps} lap${c.laps === 1 ? "" : "s"}` : "";
+  if (!c.laps) {
+    paint(el, `<p class="muted" style="margin:0">After your first clean lap, each lap is compared with the
+      fastest lap on track, corner by corner.</p>` + hint);
+    return;
+  }
+  const span = Math.max(0.2, ...c.corners.map(x => Math.abs(x.delta_s)));
+  const rows = c.corners.map(x => `<span class="n">${esc(x.name)}${x.focus ? '<span class="badge focus">focus</span>' : ""}${x.fixed ?
+      '<span class="badge fixed">fixed</span>' : ""}</span>${dbar(x.delta_s, span)}
+    <span class="v num" style="color:${x.delta_s > 0 ? "var(--loss)" : "var(--gain)"}">${signed(x.delta_s, "", 2)}</span>
+    <span>${trendSvg(x.trend)}</span>${x.focus && x.advice ? `<div class="adv">${esc(x.advice[0].toUpperCase() + x.advice.slice(1))}.</div>` : ""}`).join("");
+  paint(el, `<div class="coach-head">
+      <div><div class="k">Last lap · L${c.lap}</div><div class="big num ${c.gap_ms > 0 ? "loss" : "gain"}">${gapText(c.gap_ms)}</div></div>
+      <div><div class="k">Best</div><div class="num" style="font-size:18px;font-weight:700">${gapText(c.best_gap_ms)}</div></div>
+      <div><div class="k">First lap</div><div class="num muted" style="font-size:18px;font-weight:700">${gapText(c.first_gap_ms)}</div></div>
+    </div>
+    <div class="crows">${rows}</div>
+    <div class="legend"><span><i style="background:var(--loss)"></i>slower than ${esc(c.bench)} here</span>
+      <span><i style="background:var(--gain)"></i>quicker</span><span>line: last ${Math.min(6, c.laps)} laps</span></div>` + hint);
+}
+
 function renderFeedback() {
   const f = S.feedback, el = $("#feedback");
   $("#fbCount").textContent = f.count ? `${f.count} open` : "";
@@ -516,7 +574,8 @@ function renderWizard() {
 
 function render() {
   if (!S) return;
-  renderTop(); renderSession(); renderFeed(); renderPtt(); renderFeedback(); renderReportHead();
+  renderTop(); renderSession(); renderFeed(); renderCoach(); renderPtt(); renderFeedback();
+  renderReportHead();
   tempoButtons($("#tempoLive"), S.tempo, setTempo);
   $("#tempoTipLive").innerHTML = tempoTip();
   renderSettings();

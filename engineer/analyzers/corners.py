@@ -56,6 +56,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from engineer.bus import events as ev
+from engineer.analyzers.coaching import CoachCorner, CoachLap
 from engineer.config import Corners
 from engineer.features.lap_features import LapFeatureBuilder
 from engineer.features.laps import LapHistory, LapRecord
@@ -104,6 +105,7 @@ class CornerAnalyzer:
         self.detail = detail                       # "plain" or "specific" causes
         self.coaching = False                      # tempo "coaching" (Engine.set_tempo)
         self.bench: _Bench | None = None
+        self.coach_laps: list[CoachLap] = []       # every clean lap vs the bench (coaching.py)
         self._bench_todo: list[tuple[int, int, int]] = []   # (car, lap, ms): trace not ready
         self.features = features                   # tyre wear per lap (for the reference lap)
         self.track_map: TrackMap | None = None
@@ -125,6 +127,7 @@ class CornerAnalyzer:
         self.pending = None
         self.bench = None
         self._bench_todo = []
+        self.coach_laps = []
         self.last = []
         self.called_on = {}
         self.compared_laps = []
@@ -257,8 +260,9 @@ class CornerAnalyzer:
             self._learn_map()
             if self.track_map is None:
                 return
-        if self.coaching and self.bench is not None:
-            self._coach(trace, e)
+        deltas = self._log_coach_lap(trace, e)
+        if self.coaching and deltas is not None:
+            self._coach(e, deltas)
             return
         gap_ms = self.cfg.nearby_gap_s * 1000
         c = self.state.cars
@@ -328,12 +332,28 @@ class CornerAnalyzer:
         self.director.submit(RadioCall(topic="corner", text=text, priority=priority,
                                        max_wait_s=self.cfg.max_wait_s))
 
-    def _coach(self, trace: LapTrace, e: ev.LapCompleted) -> None:
+    def _log_coach_lap(self, trace: LapTrace, e: ev.LapCompleted) -> list[CornerDelta] | None:
+        """Every clean lap of yours against the fastest lap on track, in any tempo: the app
+        window's Coaching card and the end-of-session summary (coaching.py) read coach_laps."""
+        if self.bench is None or self.track_map is None:
+            return None
+        deltas = corner_deltas(trace, self.bench.trace, self.track_map)
+        rec = next((r for r in self.history.for_car(self.state.player_index)
+                    if r.lap == e.lap), None)
+        lap_ms = rec.lap_time_ms if rec is not None else 0
+        lap = CoachLap(e.lap, lap_ms, lap_ms - self.bench.lap_time_ms if lap_ms else 0,
+                       self._name(self.bench.car),
+                       [CoachCorner(d.corner.number, d.corner.name, round(d.delta_s, 3),
+                                    d.reasons()) for d in deltas])
+        # A lap driven again after a flashback replaces the old one.
+        self.coach_laps = [x for x in self.coach_laps if x.lap < e.lap] + [lap]
+        return deltas
+
+    def _coach(self, e: ev.LapCompleted, deltas: list[CornerDelta]) -> None:
         """Coaching mode: this lap against the fastest lap on track."""
         bench, me = self.bench, self.state.player_index
         rec = next((r for r in self.history.for_car(me) if r.lap == e.lap), None)
         lap_ms = rec.lap_time_ms if rec is not None else None
-        deltas = corner_deltas(trace, bench.trace, self.track_map)
         self.last, self.last_against = deltas, "fastest"
         if not deltas:
             return

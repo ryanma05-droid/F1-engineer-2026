@@ -255,6 +255,11 @@ class RadioDirector:
                     origin_t_ns=call.origin_t_ns))
         self.queue.clear()
 
+    def release_now(self) -> None:
+        """Say the HIGH calls waiting now (a call made after the session ended, when no packet
+        will come to release it: the coaching summary)."""
+        self._on_session_ended(None)
+
     def _on_flashback(self, _e) -> None:
         # Time jumped backwards: anything queued belongs to the rewound future.
         self.queue.clear()

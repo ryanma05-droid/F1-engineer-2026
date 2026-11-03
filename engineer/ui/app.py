@@ -177,6 +177,11 @@ class AppWindow:
                           "matches": matches_now(e["question"], e.get("intent_then"))}
                          for e in reversed(items[-FEEDBACK_SHOW:])]}
 
+    def _coaching(self) -> dict:
+        from engineer.analyzers.coaching import card
+        corners = self.engine.corners
+        return card(corners.coach_laps, corners.cfg.focus_after_laps, corners.cfg.min_loss_s)
+
     def snapshot(self) -> dict:
         from engineer.voice.controller import button_label
         v = self.cfg.voice
@@ -193,6 +198,7 @@ class AppWindow:
                            "button": button_label(v.controller_type, v.button), **ptt},
             "setup_done": self.cfg.ui.setup_done, "report": self._report_status(),
             "feedback": self._feedback_status(),
+            "coaching": self._coaching(),
             "console_player": self.cfg.platform == "console",
         }
 

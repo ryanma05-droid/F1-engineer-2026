@@ -74,6 +74,8 @@ def generate(cfg: Config, progress=print) -> Path | None:
     # "Since last report" compares with the last report from an earlier day.
     previous = state.get("before") if state.get("date") == _today() else state.get("last")
     report = build_report(entries, datetime.now(timezone.utc), previous)
+    from engineer.analyzers.coaching import load_summaries
+    report.coaching = load_summaries(cfg.data_path / "coaching")
     if not report.sessions:
         progress(f"No sessions with laps to compare yet ({len(recs)} recordings in "
                  f"{cfg.sessions_path}). Race a few laps with the engineer running first.")
