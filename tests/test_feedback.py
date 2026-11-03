@@ -59,13 +59,13 @@ def test_log_that_flags_the_last_question_with_the_race(tmp_path):
     assert ctx["tyre"] and ctx["wear_pct"] is not None
     # Also in the question log, so it travels with the recording upload.
     q = [json.loads(line) for line in
-         (tmp_path / "ptt" / "questions.jsonl").read_text().splitlines()]
+         (tmp_path / "ptt" / "questions.jsonl").read_text(encoding="utf-8").splitlines()]
     assert [e["logged"] for e in q if e.get("logged")] == [e["question"] for e in items]
 
     # The race ends: its entries get the result and the readable list is written.
     eng.pipeline.bus.publish(ev.SessionEnded(0xdeadbeef12345678, 95.0, reason="SEND"))
     assert all(e["result"]["position"] == 2 for e in fb.entries())
-    md = fb.write_markdown().read_text()
+    md = fb.write_markdown().read_text(encoding="utf-8")
     assert "**3 open**" in md and "finished P2" in md
     assert "Engineer answered: \"Say again.\"" in md and "1.2 s to Norris" in md
 
