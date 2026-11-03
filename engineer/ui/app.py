@@ -52,8 +52,12 @@ def _laptime(ms: float | None) -> str | None:
 
 class AppWindow:
     def __init__(self, cfg: Config, engine, listener=None, recorder=None, ptt=None,
-                 config_path: Path | None = None):
-        """ptt: the push-to-talk control (cli.PushToTalkControl) or None (replays, tests)."""
+                 config_path: Path | None = None, voice=None):
+        """ptt: the push-to-talk control (cli.PushToTalkControl) or None (replays, tests).
+        voice: radio.switch.VoiceControl (picks the engineer); None = personality only."""
+        from engineer.radio.switch import VoiceControl
+        self.voice = voice or VoiceControl(cfg, engine, None)
+        self._voice_task = None
         self.cfg, self.engine, self.listener, self.recorder = cfg, engine, listener, recorder
         self.ptt, self.config_path = ptt, config_path
         self.on_setup_done = None              # called once when the first-time questions are done
@@ -93,7 +97,7 @@ class AppWindow:
     # -- events -------------------------------------------------------------------------------
 
     def _on_radio(self, e: ev.RadioMessage) -> None:
-        self.radio.appendleft({"at": time.strftime("%H:%M:%S"), "text": e.text,
+        self.radio.appendleft({"at": time.strftime("%H:%M:%S"), "text": e.said,
                                "lap": self._player_lap()})
 
     def _on_question(self, e: ev.QuestionAsked) -> None:
@@ -208,6 +212,7 @@ class AppWindow:
             "feedback": self._feedback_status(),
             "coaching": self._coaching(),
             "prerace": self._prerace(),
+            "voice": self.voice.status(),
             "console_player": self.cfg.platform == "console",
         }
 
@@ -286,6 +291,16 @@ class AppWindow:
             self.engine.set_detail(detail)
             self.cfg.radio.detail = detail
             save.setdefault("radio", {})["detail"] = detail
+        eng = body.get("engineer")
+        if eng is not None:
+            from engineer.radio.engineers import BY_KEY
+            if eng not in BY_KEY:
+                return Response(400, {"error": f"engineer must be one of {', '.join(BY_KEY)}"})
+            save.setdefault("radio", {})["engineer"] = eng
+            # Downloading and loading a voice takes a while: in the background, the window
+            # shows how it's going.
+            self._voice_task = asyncio.ensure_future(self.voice.switch(eng))
+            await asyncio.sleep(0)
         controller = body.get("controller")
         if controller is not None:
             if controller not in ("xbox", "playstation", "off"):

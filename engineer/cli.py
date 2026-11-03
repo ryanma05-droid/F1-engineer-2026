@@ -28,9 +28,9 @@ IDLE_AFTER_S = 1.0          # no packet for this long: the game is in a menu
 def start_voice(cfg: Config, engine) -> AudioProcess:
     """Start the audio process and connect it to the director's radio messages."""
     audio = AudioProcess(AudioSettings(
-        voice_model=str(voice_model_path(cfg.voices_path, cfg.radio.voice)),
+        voice_model=str(voice_model_path(cfg.voices_path, cfg.radio.voice_name)),
         radio_effect=cfg.radio.radio_effect, volume=cfg.radio.volume,
-        output_device=cfg.radio.output_device))
+        output_device=cfg.radio.output_device, length_scale=cfg.radio.length_scale))
     print("Loading the engineer's voice...", flush=True)
     backend = audio.start()
     print(f"Voice: {backend or 'not ready'}"
@@ -39,7 +39,7 @@ def start_voice(cfg: Config, engine) -> AudioProcess:
         print(f"  (Using the {'Windows' if backend == 'pyttsx3' else 'Mac'} voice. For the "
               f"engineer's voice run setup again, or: python -m engineer.radio.setup_voice)")
     engine.pipeline.bus.subscribe(ev.RadioMessage,
-                                  lambda e: audio.say(e.text, e.origin_t_ns))
+                                  lambda e: audio.say(e.said, e.origin_t_ns))
     return audio
 
 
@@ -199,7 +199,9 @@ async def _run(cfg: Config, record: bool | None, voice: bool, ptt_on: bool = Tru
     window = None
     if ui and cfg.ui.enabled:
         from engineer.ui.app import AppWindow, open_window
-        window = AppWindow(cfg, engine, listener, recorder, ptt, config_path)
+        from engineer.radio.switch import VoiceControl
+        window = AppWindow(cfg, engine, listener, recorder, ptt, config_path,
+                           voice=VoiceControl(cfg, engine, audio))
         if audio and wait_for_setup:
             window.on_setup_done = lambda: welcome(cfg, audio, ptt.wanted(cfg))
         try:

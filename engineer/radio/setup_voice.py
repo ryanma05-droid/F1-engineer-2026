@@ -61,7 +61,7 @@ def download_voice(voice: str, voices_dir: Path, force: bool = False) -> Path:
 def main(argv: list[str] | None = None) -> int:
     cfg = load_config()
     ap = argparse.ArgumentParser(prog="python -m engineer.radio.setup_voice")
-    ap.add_argument("--voice", default=cfg.radio.voice, help="Piper voice name")
+    ap.add_argument("--voice", default=cfg.radio.voice_name, help="Piper voice name")
     ap.add_argument("--force", action="store_true", help="download again even if present")
     ap.add_argument("--test", action="store_true", help="say a test message afterwards")
     ap.add_argument("--no-effect", action="store_true", help="test without the radio effect")

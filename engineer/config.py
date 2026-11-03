@@ -46,7 +46,21 @@ class Radio(BaseModel):
     # How corner causes are said: "plain" ("brake slightly later, then carry a bit more speed
     # through the corner") or "specific" ("braking fifteen metres earlier").
     detail: Literal["plain", "specific"] = "plain"
-    voice: str = "en_GB-northern_english_male-medium"
+    voice: str = "en_GB-northern_english_male-medium"   # used when no engineer is picked
+    # The engineer picked in the app window (radio/engineers.py): their voice and manner.
+    engineer: str | None = None
+
+    @property
+    def voice_name(self) -> str:
+        from engineer.radio.engineers import BY_KEY
+        e = BY_KEY.get(self.engineer or "")
+        return e.voice if e else self.voice
+
+    @property
+    def length_scale(self) -> float:
+        from engineer.radio.engineers import BY_KEY
+        e = BY_KEY.get(self.engineer or "")
+        return e.length_scale if e else 1.0
     radio_effect: bool = True
     volume: float = Field(default=1.0, ge=0.0, le=2.0)
     output_device: str | int | None = None   # None = Windows default; part of a name, or index

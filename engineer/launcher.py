@@ -192,7 +192,7 @@ def first_run_setup() -> None:
     print("\nDownloading the engineer's voice (about 60 MB)...")
     try:
         from engineer.radio.setup_voice import download_voice
-        download_voice(cfg.radio.voice, cfg.voices_path)
+        download_voice(cfg.radio.voice_name, cfg.voices_path)
     except Exception as exc:
         print(f"  Could not download the voice ({exc}). The {'Mac' if MAC else 'Windows'} "
               f"voice will be used; run setup again later to retry.")

@@ -8,23 +8,24 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TextIO
 
+from engineer.analyzers.coaching import CoachingSummary
 from engineer.analyzers.corners import CornerAnalyzer
 from engineer.analyzers.lap_delta import LapDeltaAnalyzer
 from engineer.analyzers.racecraft import RaceCraftAnalyzer
 from engineer.analyzers.strategy import StrategyAnalyzer
 from engineer.analyzers.tyres import TyreAnalyzer
+from engineer.bus import events as ev
 from engineer.config import Config
 from engineer.console import LapPrinter, RadioPrinter
 from engineer.features.lap_features import LapFeatureBuilder
 from engineer.features.laps import LapHistory
 from engineer.features.priors import WearPriors
 from engineer.pipeline import Pipeline
-from engineer.bus import events as ev
 from engineer.radio.director import RadioDirector
-from engineer.state.track_maps import TrackMaps
+from engineer.radio.engineers import personality
 from engineer.state.traces import TraceRecorder
+from engineer.state.track_maps import TrackMaps
 from engineer.strategy.runner import InlineRunner
-from engineer.analyzers.coaching import CoachingSummary
 from engineer.voice.answers import QuestionAnswerer
 from engineer.voice.feedback import FeedbackLog
 
@@ -140,4 +141,5 @@ def build_engine(cfg: Config, out: TextIO | None = None,
                                       max_answer_delay_s=cfg.voice.max_answer_delay_s,
                                       feedback=feedback, detail=cfg.radio.detail)
     engine.set_tempo(cfg.radio.verbosity)
+    engine.director.persona = personality(cfg.radio.engineer)
     return engine

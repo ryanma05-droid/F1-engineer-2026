@@ -105,7 +105,7 @@ class RadioPrinter:
 
     def on_message(self, e: ev.RadioMessage) -> None:
         waited = e.session_time - e.queued_at
-        print(f"RADIO {e.session_time:7.1f}s  {e.text}"
+        print(f"RADIO {e.session_time:7.1f}s  {e.said}"
               + (f"  (held {waited:.1f}s)" if waited >= 0.05 else ""),
               file=self.out, flush=True)
 

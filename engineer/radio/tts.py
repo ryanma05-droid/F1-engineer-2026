@@ -39,6 +39,7 @@ class AudioSettings:
     backend: str = "auto"            # "auto", "piper", "pyttsx3" or "null" (tests)
     show_latency: bool = True
     output_device: str | int | None = None   # None = Windows default; name part or index
+    length_scale: float = 1.0        # Piper: < 1 talks faster (radio/engineers.py)
 
 
 def list_output_devices() -> list[tuple[int, str, bool]]:
@@ -84,11 +85,17 @@ class PiperBackend:
         self.settings = settings
         self.device, self.device_name = resolve_output_device(settings.output_device)
         self.voice = PiperVoice.load(settings.voice_model)
+        self.syn = None
+        if settings.length_scale != 1.0:
+            from piper import SynthesisConfig
+            self.syn = SynthesisConfig(length_scale=settings.length_scale)
         self._seed = 0
         self.render("Radio check.")    # warm-up: the first synthesis is much slower
 
     def render(self, text: str) -> tuple[np.ndarray, int]:
-        chunks = list(self.voice.synthesize(text))
+        syn = getattr(self, "syn", None)
+        chunks = list(self.voice.synthesize(text, syn_config=syn) if syn
+                      else self.voice.synthesize(text))
         sr = chunks[0].sample_rate
         audio = np.concatenate([c.audio_float_array for c in chunks]).astype(np.float32)
         if self.settings.radio_effect:
@@ -229,6 +236,14 @@ class AudioProcess:
             log.warning("audio process did not report ready within %.0fs", wait_ready_s)
         return self.backend
 
+    def restart(self, settings: AudioSettings, wait_ready_s: float = 30.0) -> str | None:
+        """Another voice: stop this process and start one with the new settings (blocks while
+        the voice loads, so call it off the asyncio loop)."""
+        self.close()
+        self.settings = settings
+        self.backend = None
+        return self.start(wait_ready_s)
+
     def say(self, text: str, origin_t_ns: int | None = None) -> None:
         if self._calls is not None:
             self._calls.put((text, origin_t_ns))
@@ -251,7 +266,7 @@ if __name__ == "__main__":   # quick manual check: python -m engineer.radio.tts 
     from engineer.config import load_config
 
     cfg = load_config()
-    ap = AudioProcess(AudioSettings(str(voice_model_path(cfg.voices_path, cfg.radio.voice)),
+    ap = AudioProcess(AudioSettings(str(voice_model_path(cfg.voices_path, cfg.radio.voice_name)),
                                     cfg.radio.radio_effect, cfg.radio.volume))
     print("voice:", ap.start())
     ap.say(" ".join(sys.argv[1:]) or "Radio check.", time.time_ns())

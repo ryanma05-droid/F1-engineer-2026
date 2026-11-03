@@ -127,6 +127,10 @@ button { font: inherit; color: inherit; }
 /* segmented tempo */
 .seg { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
 .seg.two { grid-template-columns: repeat(2, 1fr); }
+.seg.three { grid-template-columns: repeat(3, 1fr); }
+.opt .who { display: flex; align-items: baseline; gap: 8px; }
+.opt .who em { font-style: normal; font-size: 11px; color: var(--ink-3); text-transform: uppercase; letter-spacing: .08em; }
+.opt.joke[aria-pressed="true"] { border-color: #f2c94c; background: #2a2412; }
 .opt { text-align: left; background: var(--panel-2); border: 1px solid var(--line);
   border-radius: 10px; padding: 12px; cursor: pointer; }
 .opt:hover { border-color: #444862; }
@@ -208,7 +212,7 @@ ul.good li::before { content: "\2713"; position: absolute; left: 0; top: 1px; wi
 @media (max-width: 900px) {
   .grid, .cols { grid-template-columns: 1fr; }
   .kpis, .stats { grid-template-columns: repeat(2, 1fr); }
-  .ctrls, .seg { grid-template-columns: 1fr; }
+  .ctrls, .seg, .seg.two, .seg.three { grid-template-columns: 1fr; }
 }
 </style></head>
 <body>
@@ -263,6 +267,9 @@ ul.good li::before { content: "\2713"; position: absolute; left: 0; top: 1px; wi
   <section class="view" id="view-settings">
     <div class="card" style="margin-bottom:16px"><h3>Your controller (push to talk)</h3>
       <div id="ctrlSettings"></div></div>
+    <div class="card" style="margin-bottom:16px"><h3><span class="grow">Engineer voice</span><span class="muted small" id="voiceNote"></span></h3>
+      <div class="seg three" id="voiceSettings"></div>
+      <div class="tip" id="voiceTip"></div></div>
     <div class="card" style="margin-bottom:16px"><h3>Engineer tempo (default)</h3>
       <div class="seg" id="tempoSettings"></div><div class="tip" id="tempoTipSettings"></div></div>
     <div class="card" style="margin-bottom:16px"><h3>Corner advice</h3>
@@ -285,6 +292,7 @@ const TEMPOS = [
   ["coaching", "Coaching", "Where to find speed each lap against the fastest car on track. Less race chatter."],
 ];
 const TRACKS = __TRACKS__;
+const ENGINEERS = __ENGINEERS__;
 const DETAILS = [
   ["plain", "Plain", "“Brake slightly later, then carry a bit more speed through the corner.”"],
   ["specific", "Specific", "“Braking fifteen metres earlier, minimum speed eight k p h down.”"],
@@ -604,12 +612,29 @@ function renderReportHead() {
 /* ---- settings ---- */
 async function setDetail(d) { S = await post("/api/settings", {detail: d}); render(); }
 
+const VOICE_STATE = {downloading: "downloading the voice…", loading: "loading the voice…",
+  failed: "", ready: "", off: "voice is off"};
+async function setEngineer(k) { S = await post("/api/settings", {engineer: k}); render(); }
+function renderVoice() {
+  const v = S.voice, el = $("#voiceSettings");
+  if (paint(el, ENGINEERS.map(e => `<button class="opt${e.joke ? " joke" : ""}" data-k="${e.key}"
+    aria-pressed="${e.key === v.engineer}"><div class="who"><b>${esc(e.name)}</b><em>${esc(e.accent)}</em></div>
+    <span>${esc(e.blurb)}</span></button>`).join("")))
+    el.querySelectorAll(".opt").forEach(b => b.onclick = () => setEngineer(b.dataset.k));
+  $("#voiceNote").textContent = VOICE_STATE[v.state] ?? "";
+  const cur = ENGINEERS.find(e => e.key === v.engineer);
+  $("#voiceTip").innerHTML = v.error ? esc(v.error) + ". Check the internet connection and pick again."
+    : `Picking one says a line in that voice. A voice is downloaded the first time (20–110 MB).` +
+      (cur && cur.joke ? ` <b>${esc(cur.name)}</b> still says every call in full; he just adds to it.` : "");
+}
+
 function renderSettings() {
   controllerButtons($("#ctrlSettings"), S.controller.type, setController, S.console_player);
   const del = $("#detailSettings");
   if (paint(del, DETAILS.map(([k, n, d]) => `<button class="opt" data-k="${k}"
     aria-pressed="${k === S.detail}"><b>${n}</b><span>${d}</span></button>`).join("")))
     del.querySelectorAll(".opt").forEach(b => b.onclick = () => setDetail(b.dataset.k));
+  renderVoice();
   tempoButtons($("#tempoSettings"), S.default_tempo, setTempo);
   $("#tempoTipSettings").innerHTML = tempoTip();
   $("#telemetry").innerHTML = S.console_player
@@ -685,4 +710,14 @@ def _tracks_json() -> str:
     return json.dumps(sorted(([k, say_track(k)] for k in TRACKS), key=lambda t: t[1]))
 
 
-PAGE = PAGE.replace("__TRACKS__", _tracks_json())
+def _engineers_json() -> str:
+    import json
+    from engineer.radio.engineers import ENGINEERS
+    accent = {"northern": "Northern", "scottish": "Scottish", "english": "English",
+              "southern": "Southern", "american": "American", "intern": "Work experience"}
+    return json.dumps([{"key": e.key, "name": e.name, "blurb": e.blurb,
+                        "accent": accent.get(e.key, ""), "joke": e.personality is not None}
+                       for e in ENGINEERS])
+
+
+PAGE = PAGE.replace("__TRACKS__", _tracks_json()).replace("__ENGINEERS__", _engineers_json())

@@ -180,6 +180,16 @@ uv run python -m engineer.report                     # driver report PDF (data/r
   1 s (game time is frozen there, nothing would release the queue); `cli._idle_loop` calls
   `Engine.idle_tick` to pick up worker answers. Replays/tests keep the queued behaviour.
 
+## Engineer voices
+
+- `radio/engineers.py`: six engineers (Settings tab), each a Piper voice + speed; Kevin (work
+  experience) also has a personality that wraps calls with panic/apologies, seeded so replays
+  repeat. The call text is never changed: `RadioMessage.text` stays the call (racecraft and
+  answers match on it), `RadioMessage.spoken` / `.said` is what's heard (audio, console, feed).
+  `radio.engineer` picks one (`radio.voice_name` / `length_scale` follow it); unset = the old
+  `radio.voice`. `radio/switch.py` downloads a voice on first pick and restarts the audio
+  process off the loop.
+
 ## Push-to-talk (Phase 6)
 
 - Hold LB (XInput) or L1 (PlayStation, winmm), shared with the game -> speech process (faster-whisper, own process, default

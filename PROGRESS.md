@@ -543,3 +543,13 @@ You choose which unanswered questions get worked on, by flagging them on the rad
   there, so the radio queue never moved on); "what if I go a lap later?" also said "Say again."
   before its answer.
 
+## Engineer voices (3 Nov)
+
+- Settings tab, Engineer voice: Gary (Northern, the original), Alan (Scottish), Cori (English),
+  Sophie (Southern, lo-fi), Ryan (American), and Kevin, first day on work experience: "Okay don't
+  panic. I'm not panicking. Box this lap, box this lap. Hards. I wrote it on my hand." Kevin's
+  calls are all still there word for word; he only adds to them.
+- A voice downloads the first time it's picked; picking one says a line in that voice. The
+  voices couldn't be listened to from the build machine (no voice downloads there): check each
+  one on the PC.
+

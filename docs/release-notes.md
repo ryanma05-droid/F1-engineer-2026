@@ -22,6 +22,9 @@ folder and offers to bring your recordings, history, reports and settings over (
 
 ### New in this version
 
+- Pick your engineer's voice on the Settings tab: five real-sounding engineers, and Kevin, who
+  is on work experience.
+
 - Pre-race tyre plan: before the race ask "what tyres should I start on?" (or "strategy for
   Suzuka, fifteen laps"), or use the Pre-race card on the Live tab. It's also said when
   qualifying ends.

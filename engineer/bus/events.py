@@ -122,6 +122,13 @@ class RadioMessage(Event):
     priority: int
     queued_at: float             # session time the call was first requested
     origin_t_ns: int | None      # arrival time of the packet that triggered it (latency checks)
+    # What the engineer actually says, when their personality adds to the call (Kevin). `text`
+    # stays the call itself, so code matching on it keeps working.
+    spoken: str | None = None
+
+    @property
+    def said(self) -> str:
+        return self.spoken or self.text
 
 
 @dataclass(frozen=True)

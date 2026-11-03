@@ -179,6 +179,8 @@ class RadioDirector:
         # game time stands still, so nothing would release a call: say it at once instead.
         self.idle_after_s: float | None = None
         self._last_packet = -math.inf               # time.monotonic() of the last packet
+        # The engineer's manner (radio/engineers.py): f(topic, text) -> what's said, or None.
+        self.persona = None
         bus.subscribe(ev.SessionStarted, self._on_session_started)
         bus.subscribe(ev.SessionEnded, self._on_session_ended)
         bus.subscribe(ev.Flashback, self._on_flashback)
@@ -204,10 +206,7 @@ class RadioDirector:
             return
         call.queued_at = t
         if self.idle():
-            self.last_said[call.topic] = t
-            self.bus.publish(ev.RadioMessage(
-                self.state.session_uid or 0, t, topic=call.topic, text=call.text,
-                priority=call.priority, queued_at=t, origin_t_ns=call.origin_t_ns))
+            self._publish(call, t)
             return
         self.queue.append(call)
         self.after_packet(None)   # try straight away: no need to wait for the next packet
@@ -236,13 +235,20 @@ class RadioDirector:
         if call.wait_for_straight and self.zones.driver_busy(self.state, duration):
             return
         self.queue.remove(call)
-        self.speaking_until = t + duration
-        self.last_said[call.topic] = t
-        self.bus.publish(ev.RadioMessage(
-            self.state.session_uid or 0, t, topic=call.topic, text=call.text,
-            priority=call.priority, queued_at=call.queued_at, origin_t_ns=call.origin_t_ns))
+        said = self._publish(call, t)
+        # The engineer's personality can make it longer (Kevin).
+        self.speaking_until = t + (duration if said == call.text else estimate_duration_s(said))
 
     # -- internals -----------------------------------------------------------------------------
+
+    def _publish(self, call: RadioCall, t: float) -> str:
+        self.last_said[call.topic] = t
+        spoken = self.persona(call.topic, call.text) if self.persona else None
+        self.bus.publish(ev.RadioMessage(
+            self.state.session_uid or 0, t, topic=call.topic, text=call.text,
+            priority=call.priority, queued_at=call.queued_at, origin_t_ns=call.origin_t_ns,
+            spoken=spoken if spoken != call.text else None))
+        return spoken or call.text
 
     def _now(self) -> float:
         return self.state.session_time or 0.0
@@ -266,11 +272,7 @@ class RadioDirector:
         t = self._now()
         for call in sorted(self.queue, key=lambda c: (-c.priority, c.queued_at)):
             if call.priority >= Priority.HIGH:
-                self.last_said[call.topic] = t
-                self.bus.publish(ev.RadioMessage(
-                    self.state.session_uid or 0, t, topic=call.topic, text=call.text,
-                    priority=call.priority, queued_at=call.queued_at,
-                    origin_t_ns=call.origin_t_ns))
+                self._publish(call, t)
         self.queue.clear()
 
     def release_now(self) -> None:
