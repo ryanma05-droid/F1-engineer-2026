@@ -42,25 +42,34 @@ class Engine:
     answers: QuestionAnswerer | None = None
     racecraft: RaceCraftAnalyzer | None = None
     default_tempo: str = "normal"        # what "back to normal" returns to (radio.verbosity)
-
-    @property
-    def tempo(self) -> str:
-        """How much the engineer says: "terse" (shown as Quiet), "normal" or "chatty"."""
-        return self.lap_delta.verbosity
+    tempo: str = "normal"                # "terse" (shown as Quiet), "normal", "chatty", "coaching"
 
     def set_tempo(self, tempo: str) -> None:
-        """Change how much the engineer says, live (the app window or "talk more" on the radio).
-        Also ends radio silence ("be quiet")."""
+        """Change how the engineer talks, live (the app window or "talk more" on the radio).
+        "coaching" talks like normal, but the corner calls compare every lap with the fastest
+        lap on track and the race-craft chatter is left out. Also ends radio silence."""
         if tempo not in TEMPOS:
             raise ValueError(f"unknown tempo {tempo!r}; one of {', '.join(TEMPOS)}")
+        self.tempo = tempo
+        base = "normal" if tempo == "coaching" else tempo
         for part in (self.lap_delta, self.tyres, self.corners, self.strategy, self.answers):
             if part is not None:
-                part.verbosity = tempo
+                part.verbosity = base
+        self.corners.coaching = tempo == "coaching"
         self.director.tempo = tempo
         self.director.quiet = False
 
+    def set_detail(self, detail: str) -> None:
+        """How corner causes are said: "plain" ("brake slightly later") or "specific"
+        ("braking fifteen metres earlier"). Live, from the app window or by voice."""
+        if detail not in ("plain", "specific"):
+            raise ValueError(f"unknown detail {detail!r}")
+        self.corners.detail = detail
+        if self.answers is not None:
+            self.answers.detail = detail
 
-TEMPOS = ("terse", "normal", "chatty")
+
+TEMPOS = ("terse", "normal", "chatty", "coaching")
 
 
 def build_engine(cfg: Config, out: TextIO | None = None,
@@ -70,6 +79,8 @@ def build_engine(cfg: Config, out: TextIO | None = None,
     packets always give the same calls); live play passes a WorkerRunner (a separate process)."""
     pipeline = Pipeline()
     bus, state = pipeline.bus, pipeline.state
+    # Analyzers know terse/normal/chatty; coaching is set up by set_tempo at the end.
+    talk = "normal" if cfg.radio.verbosity == "coaching" else cfg.radio.verbosity
     # Order matters: the bus calls handlers in subscription order, so the lap history must store
     # a lap before the analyzer asks about it.
     # The lap line is printed before any radio call about that lap.
@@ -85,21 +96,22 @@ def build_engine(cfg: Config, out: TextIO | None = None,
     director = RadioDirector(bus, state, cooldowns_s=cfg.radio.cooldowns_s)
     pipeline.after_packet.append(director.after_packet)
     analyzer = LapDeltaAnalyzer(bus, state, history, director,
-                                verbosity=cfg.radio.verbosity,
+                                verbosity=talk,
                                 max_wait_s=cfg.radio.lap_delta_max_wait_s)
     # After the lap delta analyzer: on the same lap, the lap delta is submitted (and said) first.
     if priors is None:
         priors = WearPriors.load(cfg.features_path)
     tyres = TyreAnalyzer(bus, state, features, director, cfg.tyres, priors=priors,
-                         verbosity=cfg.radio.verbosity)
+                         verbosity=talk)
     # Last: corner coaching is the least urgent call of a lap.
     corners = CornerAnalyzer(bus, state, history, traces, TrackMaps(cfg.tracks_path), director,
-                             cfg.corners, verbosity=cfg.radio.verbosity, features=features)
+                             cfg.corners, verbosity=talk, features=features,
+                             detail=cfg.radio.detail)
     pipeline.after_packet.append(corners.after_packet)
     if strategy_runner is None:
         strategy_runner = InlineRunner(cfg.features_path)
     strategy = StrategyAnalyzer(bus, state, features, director, strategy_runner, cfg.strategy,
-                                cfg.tyres, verbosity=cfg.radio.verbosity)
+                                cfg.tyres, verbosity=talk)
     pipeline.after_packet.append(strategy.after_packet)
     racecraft = RaceCraftAnalyzer(bus, state, director, cfg.racecraft)
     pipeline.after_packet.append(racecraft.after_packet)
@@ -110,12 +122,12 @@ def build_engine(cfg: Config, out: TextIO | None = None,
     log_path = cfg.ptt_path / "questions.jsonl" if cfg.voice.log else None
     engine.racecraft = racecraft
     engine.default_tempo = cfg.radio.verbosity
-    director.tempo = cfg.radio.verbosity
     # "Log that" on the radio: the feedback log (data/feedback/). Off when the question log is
     # (replays of logged questions), so a replayed "log that" isn't logged twice.
     feedback = FeedbackLog(cfg.data_path / "feedback" if cfg.voice.log else None,
                            cfg.sessions_path)
-    engine.answers = QuestionAnswerer(bus, engine, log_path, verbosity=cfg.radio.verbosity,
+    engine.answers = QuestionAnswerer(bus, engine, log_path, verbosity=talk,
                                       max_answer_delay_s=cfg.voice.max_answer_delay_s,
-                                      feedback=feedback)
+                                      feedback=feedback, detail=cfg.radio.detail)
+    engine.set_tempo(cfg.radio.verbosity)
     return engine

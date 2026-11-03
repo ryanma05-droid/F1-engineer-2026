@@ -42,7 +42,10 @@ class Endpoint(BaseModel):
 
 class Radio(BaseModel):
     enabled: bool = True
-    verbosity: Literal["terse", "normal", "chatty"] = "normal"
+    verbosity: Literal["terse", "normal", "chatty", "coaching"] = "normal"
+    # How corner causes are said: "plain" ("brake slightly later, then carry a bit more speed
+    # through the corner") or "specific" ("braking fifteen metres earlier").
+    detail: Literal["plain", "specific"] = "plain"
     voice: str = "en_GB-northern_english_male-medium"
     radio_effect: bool = True
     volume: float = Field(default=1.0, ge=0.0, le=2.0)

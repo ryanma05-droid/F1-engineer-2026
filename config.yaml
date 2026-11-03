@@ -16,7 +16,8 @@ record: true        # save every raw packet to data/sessions/
 
 radio:
   enabled: true         # speak calls (python -m engineer run --no-voice turns it off for one run)
-  verbosity: normal     # terse | normal | chatty
+  verbosity: normal     # terse (Quiet) | normal | chatty | coaching (where to find speed vs the fastest car)
+  detail: plain         # plain ("brake slightly later") | specific ("braking fifteen metres earlier")
   voice: en_GB-northern_english_male-medium   # Piper voice in data/voices/
   radio_effect: true    # squelch beeps + band-limited "team radio" sound
   volume: 1.0

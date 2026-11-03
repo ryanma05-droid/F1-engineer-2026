@@ -99,6 +99,10 @@ def test_app_window_state_and_settings(tmp_path):
                                        "button": "L1"}
         st, _ = await _http(port, "POST", "/api/settings", {"tempo": "loud"})
         assert st == 400
+        st, body = await _http(port, "POST", "/api/settings", {"detail": "specific"})
+        assert st == 200 and json.loads(body)["detail"] == "specific"
+        st, body = await _http(port, "POST", "/api/settings", {"detail": "plain"})
+        assert json.loads(body)["detail"] == "plain"
         st, _ = await _http(port, "GET", "/nope")
         assert st == 404
         window.close()
@@ -107,7 +111,7 @@ def test_app_window_state_and_settings(tmp_path):
     assert engine.tempo == "chatty" and engine.default_tempo == "chatty"
     assert done == [True]
     saved = yaml.safe_load((tmp_path / "config.local.yaml").read_text())
-    assert saved == {"radio": {"verbosity": "chatty"},
+    assert saved == {"radio": {"verbosity": "chatty", "detail": "plain"},
                      "voice": {"enabled": True, "controller_type": "playstation"},
                      "ui": {"setup_done": True}}
 

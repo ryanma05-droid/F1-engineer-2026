@@ -501,3 +501,20 @@ You choose which unanswered questions get worked on, by flagging them on the rad
   make it", "be definitive", "repeat the strategy", tyres-vs-strategy phrasing.
 - Open: the pit loss estimate looks high at Melbourne (26 s from two measured stops); the rejoin
   answer in the pit lane leans on it.
+
+## Coaching mode and plain wording (3 Nov)
+
+- Plain wording is the default for every corner call and answer: "Turn four, losing two tenths
+  to the car ahead. Brake slightly later, then carry a bit more speed through the corner."
+  `radio.detail: specific` (Settings tab, or "give me the numbers") brings back the metres/kph.
+- Coaching, the fourth tempo: each lap against the fastest lap on track by another car. "One
+  twenty three nine, seven tenths off Piastri. Still turn two, three tenths. Brake slightly
+  later, then get on the power much earlier." Habits first, "Better into turn two, keep doing
+  that" when fixed; when you're quickest, where the next car is still quicker. Lap-time calls,
+  passes and attack/defend chatter are left out; strategy, box, safety car, tyres, start/finish
+  and answers stay. "How far off the fastest car?" / "Where's the time?" on the radio.
+- Replayed Melbourne (2 Nov): a coaching call on every clean lap but the first two (corner map
+  still being learned); nine of fifteen laps had a car within a second, so fights shorten the
+  call to one corner instead of silencing it.
+- Next (not built): pick focus corners from the driver report's habits, an end-of-session
+  coaching summary into the report, and a Coaching card on the Live tab.

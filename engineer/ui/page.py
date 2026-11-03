@@ -91,7 +91,8 @@ button { font: inherit; color: inherit; }
   padding: 2px 8px; font-size: 12px; cursor: pointer; }
 .fb button:hover { color: var(--ink); border-color: #444862; }
 /* segmented tempo */
-.seg { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.seg { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.seg.two { grid-template-columns: repeat(2, 1fr); }
 .opt { text-align: left; background: var(--panel-2); border: 1px solid var(--line);
   border-radius: 10px; padding: 12px; cursor: pointer; }
 .opt:hover { border-color: #444862; }
@@ -223,6 +224,10 @@ ul.good li::before { content: "\2713"; position: absolute; left: 0; top: 1px; wi
       <div id="ctrlSettings"></div></div>
     <div class="card" style="margin-bottom:16px"><h3>Engineer tempo (default)</h3>
       <div class="seg" id="tempoSettings"></div><div class="tip" id="tempoTipSettings"></div></div>
+    <div class="card" style="margin-bottom:16px"><h3>Corner advice</h3>
+      <div class="seg two" id="detailSettings"></div>
+      <div class="tip">Say <span class="say">“give me the numbers”</span> or
+        <span class="say">“keep it simple”</span> to switch mid-race.</div></div>
     <div class="card"><h3>Game telemetry</h3><div class="small" id="telemetry"></div></div>
   </section>
 </div>
@@ -236,6 +241,11 @@ const TEMPOS = [
   ["terse", "Quiet", "Essentials only: lap times, box calls, warnings. Short and sparse."],
   ["normal", "Normal", "Lap times, tyres, strategy, corners and battles. The default."],
   ["chatty", "Chatty", "Everything, with more detail: reasons, praise, gaps, extra context."],
+  ["coaching", "Coaching", "Where to find speed each lap against the fastest car on track. Less race chatter."],
+];
+const DETAILS = [
+  ["plain", "Plain", "“Brake slightly later, then carry a bit more speed through the corner.”"],
+  ["specific", "Specific", "“Braking fifteen metres earlier, minimum speed eight k p h down.”"],
 ];
 // Repaint only when the HTML changes, so buttons aren't replaced under the mouse every second.
 function paint(el, html) { if (el._html === html) return false; el._html = html; el.innerHTML = html; return true; }
@@ -269,7 +279,8 @@ function tempoTip() {
   const how = b ? `hold <span class="btnkey">${esc(b)}</span> and say` : "say (with push to talk on)";
   return `<b>Tip:</b> change it mid-race by voice: ${how} <span class="say">“talk more”</span>,
     <span class="say">“keep it short”</span> or <span class="say">“back to normal”</span>.
-    <span class="say">“Be quiet”</span> goes silent except box calls and answers.`;
+    <span class="say">“Be quiet”</span> goes silent except box calls and answers;
+    <span class="say">“coaching mode”</span> for where the time is each lap.`;
 }
 
 function tempoButtons(el, current, onPick) {
@@ -455,8 +466,14 @@ function renderReportHead() {
 }
 
 /* ---- settings ---- */
+async function setDetail(d) { S = await post("/api/settings", {detail: d}); render(); }
+
 function renderSettings() {
   controllerButtons($("#ctrlSettings"), S.controller.type, setController, S.console_player);
+  const del = $("#detailSettings");
+  if (paint(del, DETAILS.map(([k, n, d]) => `<button class="opt" data-k="${k}"
+    aria-pressed="${k === S.detail}"><b>${n}</b><span>${d}</span></button>`).join("")))
+    del.querySelectorAll(".opt").forEach(b => b.onclick = () => setDetail(b.dataset.k));
   tempoButtons($("#tempoSettings"), S.default_tempo, setTempo);
   $("#tempoTipSettings").innerHTML = tempoTip();
   $("#telemetry").innerHTML = S.console_player

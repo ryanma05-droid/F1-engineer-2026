@@ -155,6 +155,10 @@ QUIET_TOPICS = {"box", "safety_car", "answer"}
 # The "Quiet" tempo (verbosity terse) also leaves out the low-priority extras (routine tyre status,
 # one-off corner tips, race-craft chatter), but still says these low-priority calls:
 TERSE_KEEPS = {"strategy_plan", "tyre_warning"}
+# Coaching mode keeps the radio about driving: the coaching call after each lap carries the lap
+# time and the gap to the fastest car, so these are left out. Strategy, box calls, safety car,
+# tyre warnings, the start/finish and your answers stay.
+COACHING_DROPS = {"lap_delta", "racecraft_pass", "racecraft_attack", "racecraft_defend"}
 
 
 class RadioDirector:
@@ -162,7 +166,8 @@ class RadioDirector:
                  cooldowns_s: dict[str, float] | None = None):
         self.bus = bus
         self.quiet = False
-        self.tempo = "normal"           # "terse": low-priority extras are left out
+        self.tempo = "normal"           # "terse": low-priority extras left out; "coaching": see
+                                        # COACHING_DROPS
         self.state = state
         self.cooldowns_s = cooldowns_s or {}
         self.zones = QuietZones()
@@ -181,6 +186,9 @@ class RadioDirector:
             return
         if self.tempo == "terse" and call.priority <= Priority.LOW \
                 and call.topic not in TERSE_KEEPS:
+            self._drop(call, "tempo")
+            return
+        if self.tempo == "coaching" and call.topic in COACHING_DROPS:
             self._drop(call, "tempo")
             return
         t = self._now()

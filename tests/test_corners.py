@@ -83,16 +83,26 @@ def test_corner_delta_finds_early_braking():
 
 
 def test_phrases():
+    # Plain wording (the default): what to do, not the measurement.
     assert phrases.corner_phrase(0.21, "turn three", "ahead", ("brake_early", 10)) == \
+        "Turn three, losing two tenths to the car ahead. Brake slightly later."
+    assert phrases.corner_phrase(0.21, "turn three", "ahead", ("brake_early", 15),
+                                 reasons={"brake_early": 15, "min_speed": 9}) == (
+        "Turn three, losing two tenths to the car ahead. Brake slightly later, then carry a bit "
+        "more speed through the corner.")
+    assert phrases.corner_phrase(0.5, "turn one", "behind", ("throttle_late", 42)) == \
+        "Turn one, losing five tenths to the car behind. Get on the power a bit earlier."
+    # Specific (radio.detail: specific): the numbers.
+    assert phrases.corner_phrase(0.21, "turn three", "ahead", ("brake_early", 10),
+                                 detail="specific") == \
         "Turn three, losing two tenths to the car ahead, braking ten metres earlier."
-    assert phrases.corner_phrase(0.3, "turn four", "best", ("min_speed", 8.2)) == \
+    assert phrases.corner_phrase(0.3, "turn four", "best", ("min_speed", 8.2),
+                                 detail="specific") == \
         "Turn four, three tenths off your best, minimum speed eight k p h down."
     assert phrases.corner_phrase(0.3, "turn four", "best", ("min_speed", 8), "terse") == \
         "Turn four, three tenths off your best."
     assert phrases.corner_phrase(-0.12, "turn nine", "ahead") == \
         "Gaining a tenth on the car ahead through turn nine."
-    assert phrases.corner_phrase(0.5, "turn one", "behind", ("throttle_late", 42)) == \
-        "Turn one, losing five tenths to the car behind, full throttle forty metres later."
     assert phrases.corner_phrase(0.4, "turn four", "best", None, again=True) == \
         "Turn four again, four tenths off your best."
 
@@ -173,7 +183,7 @@ def test_a_corner_lost_on_consecutive_laps_gets_priority_and_says_so(tmp_path):
 
 def test_streak_phrase():
     assert phrases.corner_phrase(0.2, "turn four", "best", ("brake_early", 10.0), streak=3) == \
-        "Turn four, third lap running, two tenths off your best, braking ten metres earlier."
+        "Turn four, third lap running, two tenths off your best. Brake slightly later."
     assert phrases.corner_phrase(0.2, "turn four", "ahead", streak=7) == \
         "Turn four, lap after lap, losing two tenths to the car ahead."
 
@@ -246,3 +256,49 @@ def test_detect_corners_with_laps_of_slightly_different_length():
     corners = detect_corners([trace(s, b, t), trace(s2, b2, t2)],
                              track_length_m=400 * BIN_SIZE_M)
     assert [c.name for c in corners] == ["turn one", "turn two"]
+
+
+def test_coaching_compares_with_the_fastest_car_on_track(tmp_path):
+    # Player P2, 5 s behind car 1 (no fight), slower every lap. Coaching: each lap against the
+    # fastest other car's lap, with the lap time and the gap first.
+    race = FakeRace({0: [31000, 31000, 31000, 32000], 1: [30000] * 4}, corners=CORNERS,
+                    positions={0: 2, 1: 1}, gap_ahead_ms={0: 5000}, names=["PLAYER", "NORRIS"],
+                    extra_packets=False)
+    eng, radio = run(race, tmp_path, verbosity="coaching")
+    assert eng.tempo == "coaching" and eng.corners.coaching
+    calls = [c for c in radio if "off Norris" in c]
+    assert len(calls) >= 2 and all(re.match(r"Thirty \w+ \w+, [\w ]+ off Norris\.", c)
+                                   for c in calls)
+    assert not any(c.startswith("(dropped") for c in calls)
+    assert any("Most of it's turn" in c or "Spread around the lap" in c for c in calls)
+    assert eng.corners.bench.car == 1 and eng.corners.last_against == "fastest"
+    # The lap-time call and race-craft chatter are left out in coaching mode.
+    assert not any(c.startswith("Lap") for c in radio)
+
+
+def test_coaching_phrases():
+    item = ("turn two", 300, ("brake_early", 15), {"brake_early": 15, "min_speed": 9}, 0)
+    assert phrases.coaching_phrase(83400, 700, "Verstappen", [item, ("turn six", 200,
+                                   ("throttle_late", 40), {"throttle_late": 40}, 0)]) == (
+        "One twenty three four, seven tenths off Verstappen. Most of it's turn two, three tenths. "
+        "Brake slightly later, then carry a bit more speed through the corner. Turn six, get on "
+        "the power a bit earlier.")
+    assert phrases.coaching_phrase(69100, -200, "Albon", [item]) == (
+        "One oh nine one, fastest lap on track. Albon still quicker through turn two. Brake "
+        "slightly later, then carry a bit more speed through the corner.")
+    streak = ("turn two", 300, ("brake_early", 15), {"brake_early": 15}, 3)
+    assert phrases.coaching_phrase(83400, 700, "Verstappen", [streak], better="turn four",
+                                   detail="specific") == (
+        "Better into turn four, keep doing that. One twenty three four, seven tenths off "
+        "Verstappen. Still turn two, three tenths. Braking fifteen metres earlier.")
+
+
+def test_tempo_and_detail_switch_live(tmp_path):
+    eng, _ = run(FakeRace({0: [30000]}, corners=CORNERS, extra_packets=False), tmp_path,
+                 duration_ms=1000)
+    eng.set_tempo("coaching")
+    assert eng.director.tempo == "coaching" and eng.lap_delta.verbosity == "normal"
+    eng.set_tempo("chatty")
+    assert not eng.corners.coaching and eng.corners.verbosity == "chatty"
+    eng.set_detail("specific")
+    assert eng.corners.detail == "specific" and eng.answers.detail == "specific"

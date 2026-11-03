@@ -187,6 +187,7 @@ class AppWindow:
             "recording": self._recording(), "radio": list(self.radio),
             "questions": list(self.questions),
             "tempo": self.engine.tempo, "default_tempo": self.engine.default_tempo,
+            "detail": self.engine.corners.detail,
             "quiet": self.engine.director.quiet,
             "controller": {"type": v.controller_type if v.enabled else "off",
                            "button": button_label(v.controller_type, v.button), **ptt},
@@ -237,6 +238,13 @@ class AppWindow:
             self.engine.default_tempo = tempo
             self.cfg.radio.verbosity = tempo
             save["radio"] = {"verbosity": tempo}
+        detail = body.get("detail")
+        if detail is not None:
+            if detail not in ("plain", "specific"):
+                return Response(400, {"error": "detail must be plain or specific"})
+            self.engine.set_detail(detail)
+            self.cfg.radio.detail = detail
+            save.setdefault("radio", {})["detail"] = detail
         controller = body.get("controller")
         if controller is not None:
             if controller not in ("xbox", "playstation", "off"):

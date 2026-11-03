@@ -75,6 +75,12 @@ uv run python -m engineer.report                     # driver report PDF (data/r
 - Closing the loop: a habit corner that stops losing (your own corner time 0.1 s+ quicker than
   when called) gets "Turn four better" once. After 3 calls in a streak, every other lap unless
   worse. Within `battle_gap_s` (1 s) of a car, only calls vs the car ahead are said.
+- Coaching mode (`CornerAnalyzer._coach`): each clean lap vs the fastest clean lap of any OTHER
+  car this session (`bench`, replaced as it's beaten; traces can land after LapCompleted, so
+  candidates wait in `_bench_todo`). One call, topic "coaching" (no cooldown): lap time, gap,
+  up to two corners (habits first) with plain advice, "Better into ..." when a habit is fixed,
+  "fastest lap on track, X still quicker through ..." when you're quickest. In a fight: one
+  corner, not silence.
 - `data/tracks/<track>.json` is committed and hand-editable (official turn numbers). Without a
   file the map is learned from the first 2 clean laps and saved. The golden test uses
   `data/tracks/austria.json`.
@@ -119,9 +125,15 @@ uv run python -m engineer.report                     # driver report PDF (data/r
   `cli._run`; `--no-ui` turns it off. It only reads the race, never writes state.
 - First open asks the controller (Xbox LB / PlayStation L1 / none) and the tempo
   (`ui.setup_done`); the one-time welcome waits for it so it names the right button.
-- Tempo = `radio.verbosity` (terse shown as "Quiet", normal, chatty). `Engine.set_tempo` changes
-  it live (also by voice: "talk more", "keep it short", "back to normal"); terse also drops
-  LOW-priority calls except `TERSE_KEEPS`. "Be quiet" is separate: radio silence.
+- Tempo = `radio.verbosity` (terse shown as "Quiet", normal, chatty, coaching). `Engine.set_tempo`
+  changes it live (also by voice: "talk more", "keep it short", "back to normal", "coaching
+  mode"); terse also drops LOW-priority calls except `TERSE_KEEPS`; coaching runs the analyzers
+  at normal, drops `COACHING_DROPS` (lap delta, passes, attack/defend) and turns on the corner
+  analyzer's coaching call. "Be quiet" is separate: radio silence.
+- `radio.detail`: "plain" (default; "brake slightly later, then carry a bit more speed through the
+  corner", phrases.advice: size words from the measurement vs REASON_THRESHOLDS, causes in
+  driving order, late throttle covers a slow exit) or "specific" (the metres/kph).
+  `Engine.set_detail`, Settings tab, or "give me the numbers" / "keep it simple".
 - PlayStation push-to-talk: winmm joystick API (`PlayStationButton`, L1 = button 5), plus the
   Xbox LB through XInput for Steam Input. Not yet tried on a real DualSense.
 

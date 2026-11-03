@@ -61,7 +61,7 @@ class QuestionLog:
 class QuestionAnswerer:
     def __init__(self, bus: ev.EventBus, engine, log_path: Path | str | None = None,
                  verbosity: str = "normal", max_answer_delay_s: float = 10.0,
-                 feedback: FeedbackLog | None = None):
+                 feedback: FeedbackLog | None = None, detail: str = "plain"):
         """engine: the app's Engine (state, director and the analyzers whose numbers we read).
         max_answer_delay_s: if speech recognition took longer than this, the answer would be
         stale (a gap from 40 s ago), so it isn't said; the question is still logged.
@@ -71,6 +71,7 @@ class QuestionAnswerer:
         self.state = engine.pipeline.state
         self.director = engine.director
         self.verbosity = verbosity
+        self.detail = detail                            # corner causes: "plain" or "specific"
         self.log = QuestionLog(log_path)
         self.answered: list[tuple[str, str]] = []      # (intent, answer), for tests and display
         self.heard = ""                                 # the question being answered
@@ -271,6 +272,44 @@ class QuestionAnswerer:
         self.engine.set_tempo("chatty")
         return phrases._sentence("copy, I'll keep you posted on everything")
 
+    def _a_detail_specific(self) -> str:
+        self.engine.set_detail("specific")
+        return phrases._sentence("copy, I'll give you the numbers")
+
+    def _a_detail_plain(self) -> str:
+        self.engine.set_detail("plain")
+        return phrases._sentence("copy, keeping it simple")
+
+    def _a_tempo_coaching(self) -> str:
+        self.engine.set_tempo("coaching")
+        return phrases._sentence("copy, coaching. I'll tell you where the time is against the "
+                                 "fastest lap each lap")
+
+    def _a_gap_fastest(self) -> str:
+        """"How far off the fastest car?" / "Where's the time?": your last lap against the
+        fastest lap on track, and the corner it comes from most."""
+        corners, p = self.engine.corners, self._player()
+        bench = corners.bench
+        if bench is None or p is None:
+            return phrases._sentence("no clean laps on track to compare with yet")
+        mine = [r for r in self.engine.history.for_car(p) if r.clean and r.lap_time_ms]
+        if not mine:
+            return phrases._sentence("give me a clean lap first")
+        if bench.car == p:
+            return phrases._sentence("you've got the fastest lap on track")
+        best = min(r.lap_time_ms for r in mine)
+        who = f"{corners._name(bench.car)}'s best"
+        text = phrases._sentence(f"your best is {phrases.say_gap(best - bench.lap_time_ms)} off "
+                                 f"{who}")
+        if corners.last_against == "fastest":
+            losing = sorted((d for d in corners.last if d.delta_s > 0), key=lambda d: -d.delta_s)
+            if losing:
+                d = losing[0]
+                text += " " + phrases.corner_phrase(d.delta_s, d.corner.name, "fastest",
+                                                    d.reason(), "chatty", detail=self.detail,
+                                                    reasons=d.reasons())
+        return text
+
     def _a_tempo_terse(self) -> str:
         self.engine.set_tempo("terse")
         return phrases._sentence("copy, essentials only")
@@ -420,11 +459,13 @@ class QuestionAnswerer:
             return self._where(True)
         against = corners.last_against or "best"
         first = phrases.corner_phrase(losing[0].delta_s, losing[0].corner.name, against,
-                                      losing[0].reason(), "chatty")
+                                      losing[0].reason(), "chatty", detail=self.detail,
+                                      reasons=losing[0].reasons())
         if len(losing) < 2:
             return first
         second = phrases.corner_phrase(losing[1].delta_s, losing[1].corner.name, against,
-                                       losing[1].reason(), "chatty")
+                                       losing[1].reason(), "chatty", detail=self.detail,
+                                       reasons=losing[1].reasons())
         return f"{first} Then {second[0].lower()}{second[1:]}"
 
     def _a_status(self) -> str:
@@ -600,7 +641,8 @@ class QuestionAnswerer:
         if deltas:
             d = max(deltas, key=lambda d: abs(d.delta_s))
             return phrases.corner_phrase(d.delta_s, d.corner.name, corners.last_against or "best",
-                                         d.reason(), "chatty")
+                                         d.reason(), "chatty", detail=self.detail,
+                                         reasons=d.reasons())
         # No corner comparison yet (a new track's corner map is learned from 2 clean laps):
         # say it by sector instead.
         sectors, against = self._sector_deltas()
@@ -682,7 +724,8 @@ class QuestionAnswerer:
         d = CornerDelta(corner, corner_stats(trace, corner), corner_stats(ref, corner))
         if abs(d.delta_s) < 0.05:
             return phrases._sentence(f"{corner.name}, right on your pace")
-        return phrases.corner_phrase(d.delta_s, corner.name, "pace", d.reason(), "chatty")
+        return phrases.corner_phrase(d.delta_s, corner.name, "pace", d.reason(), "chatty",
+                                     detail=self.detail, reasons=d.reasons())
 
     # -- other drivers ---------------------------------------------------------------------------
 

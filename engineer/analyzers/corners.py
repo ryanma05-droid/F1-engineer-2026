@@ -30,6 +30,19 @@ quiet: you're busy, and racing lines and dirty air make it unfair. The laps stil
 streaks. (On the 5-lap Austria race a car was within 0.5 s behind on every lap: the calls vs the
 car ahead still come.)
 
+Coaching mode (tempo "coaching"): every clean lap is compared with the fastest clean lap any
+other car has done this session (`bench`, kept as it's beaten), and one call says the lap, the
+gap and the one or two corners it comes from, with what to do about them ("Most of it's turn
+two, three tenths. Brake slightly later, then carry a bit more speed through the corner.").
+Quicker than everyone? "Fastest lap on track", then where that car is still quicker (Austria
+fixture: the player set the fastest lap from lap 2). Habits work as above: a corner that keeps
+losing comes first ("Still turn two"), and "Better into turn two, keep doing that" when it's
+fixed. In a fight it isn't silenced (you chose coaching; Melbourne, 2 Nov, had a car within a
+second on nine of fifteen laps), just cut to one corner.
+
+Wording (radio.detail): "plain" says what to do ("brake slightly later"), "specific" says the
+measurement ("braking fifteen metres earlier").
+
 The corner map comes from data/tracks/<track>.json; with no file, it's learned from your first two
 clean laps and saved.
 """
@@ -47,7 +60,7 @@ from engineer.config import Corners
 from engineer.features.lap_features import LapFeatureBuilder
 from engineer.features.laps import LapHistory, LapRecord
 from engineer.radio.director import Priority, RadioCall, RadioDirector
-from engineer.radio.phrases import corner_better_phrase, corner_phrase
+from engineer.radio.phrases import coaching_phrase, corner_better_phrase, corner_phrase
 from engineer.state.race_state import RaceState
 from engineer.state.track_maps import TrackMap, TrackMaps, detect_corners
 from engineer.state.traces import LapTrace, TraceRecorder
@@ -57,6 +70,15 @@ log = logging.getLogger(__name__)
 
 WAIT_FOR_CAR_BEHIND_S = 5.0
 LEARN_FROM_LAPS = 2
+
+
+@dataclass
+class _Bench:
+    """The fastest clean lap on track this session (coaching mode compares with it)."""
+    car: int
+    lap: int
+    lap_time_ms: int
+    trace: LapTrace
 
 
 @dataclass
@@ -71,7 +93,7 @@ class CornerAnalyzer:
     def __init__(self, bus: ev.EventBus, state: RaceState, history: LapHistory,
                  traces: TraceRecorder, maps: TrackMaps, director: RadioDirector,
                  settings: Corners | None = None, verbosity: str = "normal",
-                 features: LapFeatureBuilder | None = None):
+                 features: LapFeatureBuilder | None = None, detail: str = "plain"):
         self.state = state
         self.history = history
         self.traces = traces
@@ -79,6 +101,10 @@ class CornerAnalyzer:
         self.director = director
         self.cfg = settings or Corners()
         self.verbosity = verbosity
+        self.detail = detail                       # "plain" or "specific" causes
+        self.coaching = False                      # tempo "coaching" (Engine.set_tempo)
+        self.bench: _Bench | None = None
+        self._bench_todo: list[tuple[int, int, int]] = []   # (car, lap, ms): trace not ready
         self.features = features                   # tyre wear per lap (for the reference lap)
         self.track_map: TrackMap | None = None
         self.pending: _Pending | None = None
@@ -97,6 +123,8 @@ class CornerAnalyzer:
 
     def _on_session_started(self, e: ev.SessionStarted) -> None:
         self.pending = None
+        self.bench = None
+        self._bench_todo = []
         self.last = []
         self.called_on = {}
         self.compared_laps = []
@@ -185,9 +213,34 @@ class CornerAnalyzer:
 
     # -- laps ------------------------------------------------------------------------------------
 
+    def _update_bench(self, e: ev.LapCompleted) -> None:
+        """Keep the fastest clean lap on track. A lap's trace can finish a moment after its
+        LapCompleted, so faster laps wait in _bench_todo until their trace is there."""
+        if e.car_idx == self.state.player_index:
+            return                                 # the reference is the fastest OTHER car
+        rec = next((r for r in self.history.for_car(e.car_idx) if r.lap == e.lap), None)
+        if rec is not None and rec.clean and rec.lap_time_ms \
+                and (self.bench is None or rec.lap_time_ms < self.bench.lap_time_ms):
+            self._bench_todo.append((e.car_idx, e.lap, rec.lap_time_ms))
+        keep = []
+        for car, lap, ms in self._bench_todo:
+            if self.bench is not None and ms >= self.bench.lap_time_ms:
+                continue
+            tr = self._clean_trace(car, lap)
+            if tr is not None:
+                self.bench = _Bench(car, lap, ms, tr)
+            elif lap >= self._last_lap(car) - 1:  # give it until the car's next lap
+                keep.append((car, lap, ms))
+        self._bench_todo = keep
+
+    def _last_lap(self, car: int) -> int:
+        laps = self.history.for_car(car)
+        return laps[-1].lap if laps else 0
+
     def on_lap(self, e: ev.LapCompleted) -> None:
         if not self.cfg.enabled:
             return
+        self._update_bench(e)
         me = self.state.player_index
         if self.pending and e.car_idx == self.pending.behind_car and e.lap == self.pending.lap:
             p, self.pending = self.pending, None
@@ -204,6 +257,9 @@ class CornerAnalyzer:
             self._learn_map()
             if self.track_map is None:
                 return
+        if self.coaching and self.bench is not None:
+            self._coach(trace, e)
+            return
         gap_ms = self.cfg.nearby_gap_s * 1000
         c = self.state.cars
         pos = c.position[me]
@@ -272,6 +328,45 @@ class CornerAnalyzer:
         self.director.submit(RadioCall(topic="corner", text=text, priority=priority,
                                        max_wait_s=self.cfg.max_wait_s))
 
+    def _coach(self, trace: LapTrace, e: ev.LapCompleted) -> None:
+        """Coaching mode: this lap against the fastest lap on track."""
+        bench, me = self.bench, self.state.player_index
+        rec = next((r for r in self.history.for_car(me) if r.lap == e.lap), None)
+        lap_ms = rec.lap_time_ms if rec is not None else None
+        deltas = corner_deltas(trace, bench.trace, self.track_map)
+        self.last, self.last_against = deltas, "fastest"
+        if not deltas:
+            return
+        losses = self._record(e.lap, deltas)
+        most = 1 if self._in_a_fight() else 2
+        found = self._improved(deltas, e.lap)
+        better = None
+        if found is not None:
+            self.praised[found[0].corner.number] = e.lap
+            better = found[0].corner.name
+        # Habits first (longest streak), then the biggest losses.
+        order = sorted(losses, key=lambda d: (-min(self.streak(d.corner.number),
+                                                   self.cfg.focus_after_laps), -d.delta_s))
+        items = []
+        for d in order[:most]:
+            n = d.corner.number
+            streak = self.streak(n)
+            streak = streak if streak >= self.cfg.focus_after_laps else 0
+            self.called_on[n] = e.lap
+            self.calls.setdefault(n, []).append((e.lap, d.delta_s, d.mine.time_s, streak))
+            reason = self._habit_reason(d, e.lap, streak) if streak else d.reason()
+            items.append((d.corner.name, int(round(d.delta_s * 1000)), reason, d.reasons(),
+                          streak))
+        gap_ms = (lap_ms - bench.lap_time_ms) if lap_ms else 0
+        text = coaching_phrase(lap_ms, gap_ms, self._name(bench.car), items, better, self.detail)
+        # Its own topic: once a lap, and not held back by the corner calls' cooldown.
+        self.director.submit(RadioCall(topic="coaching", text=text, priority=Priority.NORMAL,
+                                       max_wait_s=self.cfg.max_wait_s))
+
+    def _name(self, car: int) -> str:
+        n = self.state.cars.names[car] if car < len(self.state.cars.names) else None
+        return n.title() if n else "the fastest car"
+
     def _loss_call(self, d: CornerDelta, lap: int, against: str, streak: int) -> str:
         n = d.corner.number
         again = not streak and n in self.called_on and lap - self.called_on[n] <= 3
@@ -279,7 +374,8 @@ class CornerAnalyzer:
         self.calls.setdefault(n, []).append((lap, d.delta_s, d.mine.time_s, streak))
         reason = self._habit_reason(d, lap, streak) if streak else d.reason()
         return corner_phrase(d.delta_s, d.corner.name, against, reason, self.verbosity,
-                             again=again, streak=streak)
+                             again=again, streak=streak, detail=self.detail,
+                             reasons=d.reasons())
 
     def _backed_off(self, d: CornerDelta, lap: int) -> bool:
         """Once a corner has been called back_off_after times in its current streak, it's said

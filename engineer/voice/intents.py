@@ -52,6 +52,12 @@ RULES: list[tuple[str, list[str]]] = [
                 r"\bwhat did you (just )?say\b", r"\bdidn't (catch|hear) that\b"]),
     ("quiet", [r"\b(be )?quiet\b", r"\bstop talking\b", r"\bshut up\b", r"\bsilence\b",
                r"\bleave me alone\b", r"\bno more (calls|talking)\b"]),
+    ("detail_specific", [r"\bgive me (the )?(numbers|specifics|exact numbers)\b",
+                         r"\bbe (more )?specific\b", r"\b(more|exact) (numbers|specifics)\b"]),
+    ("detail_plain", [r"\bkeep it simple\b", r"\b(no|fewer|less) numbers\b", r"\bplain (english|words)\b"]),
+    # The mode needs saying as a mode: "give me some coaching" / "coach me" ask for a tip now.
+    ("tempo_coaching", [r"\bcoaching mode\b", r"\b(switch|go|change|put me) (in)?to coaching\b",
+                        r"\bwork on my driving\b"]),
     ("tempo_chatty", [r"\b(talk|say) more\b", r"\btalk to me more\b",
                       r"\b(give me )?(some |more )?chatter\b", r"\bmore (chatty|talk|info|information|detail)\b",
                       r"\bbe (more )?chatty\b", r"\bchattier\b", r"\bmore often\b"]),
@@ -61,6 +67,9 @@ RULES: list[tuple[str, list[str]]] = [
     # "Talk to me about tyre wear" is a tyre question (29 Oct), not "talk to me".
     ("talk", [r"\btalk to me\b(?! about| more)", r"\bkeep me (posted|updated|informed)\b",
               r"\bback to normal\b", r"\bresume\b", r"\byou can talk\b"]),
+    # Coaching: "how far off the fastest car?", "where's the time?"
+    ("gap_fastest", [r"\b(how far|gap|how much)\b.*\b(off|to|from|behind) (the )?(fastest|quickest)\b",
+                     r"\bwhere('s| is) the time\b"]),
     # 3 Nov: "Where am I going to come out?" (if I box now)
     ("rejoin", [r"\bwhere (am i|are we) (going to|gonna) come out\b",
                 r"\bwhere (would|will|do|does|should) (i|we) come out\b",

@@ -110,6 +110,13 @@ from tests.test_strategy import SETS, model, situation
     ("How are the tyres looking? Relative to the strategy?", "tyres"),
     ("Be definitive with the strategy. What should I do?", "plan"),
     ("Be definitive.", "plan"),
+    # Coaching mode and the wording switch
+    ("Coaching mode.", "tempo_coaching"),
+    ("Switch to coaching.", "tempo_coaching"),
+    ("Give me the numbers.", "detail_specific"),
+    ("Keep it simple.", "detail_plain"),
+    ("How far off the fastest car am I?", "gap_fastest"),
+    ("Where's the time?", "gap_fastest"),
 ])
 def test_intents(said, intent):
     assert match(said).name == intent

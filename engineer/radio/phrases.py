@@ -206,6 +206,61 @@ _REASONS = {
     "exit_speed": lambda v: f"exit speed {say_kph(v)} down",
 }
 
+# Plain wording (radio.detail: plain, the default): what to do, not the measurement. The size
+# is in words, from how far past its threshold the measurement is (queries.REASON_THRESHOLDS):
+# under 2x "slightly", under 4x "a bit", else "a lot".
+_ADVICE = {
+    "brake_early": ("brake slightly later", "brake a bit later", "brake a lot later"),
+    "min_speed": ("carry a touch more speed through the corner",
+                  "carry a bit more speed through the corner",
+                  "carry a lot more speed through the corner"),
+    "throttle_late": ("get on the power a touch earlier", "get on the power a bit earlier",
+                      "get on the power much earlier"),
+    "exit_speed": ("get it turned a touch earlier for the exit",
+                   "get it turned earlier for a better exit",
+                   "get it turned much earlier for the exit"),
+}
+_DRIVING_ORDER = ("brake_early", "min_speed", "exit_speed", "throttle_late")
+
+
+def _size(kind: str, value: float) -> int:
+    from engineer.tools.queries import REASON_THRESHOLDS
+    r = value / REASON_THRESHOLDS[kind]
+    return 0 if r < 2 else 1 if r < 4 else 2
+
+
+def advice(reason: tuple[str, float] | None, reasons: dict[str, float] | None = None,
+           most: int = 2) -> str:
+    """'brake slightly later, then carry a bit more speed through the corner'. The main cause
+    first in the order you drive the corner, plus one more cause if there is one."""
+    if reason is None:
+        return ""
+    picked = {reason[0]: reason[1]}
+    for k, v in sorted((reasons or {}).items(), key=lambda kv: -kv[1] / _threshold(kv[0])):
+        if len(picked) >= most:
+            break
+        # A slow exit and late throttle go together (the throttle is the cause): one of them.
+        if {k, *picked} >= {"exit_speed", "throttle_late"}:
+            continue
+        picked.setdefault(k, v)
+    steps = [_ADVICE[k][_size(k, picked[k])] for k in _DRIVING_ORDER if k in picked]
+    return ", then ".join(steps)
+
+
+def _threshold(kind: str) -> float:
+    from engineer.tools.queries import REASON_THRESHOLDS
+    return REASON_THRESHOLDS[kind]
+
+
+def reason_words(reason: tuple[str, float] | None, reasons: dict[str, float] | None = None,
+                 detail: str = "plain") -> str:
+    """The why of a corner call: plain advice, or the measurement (detail "specific")."""
+    if reason is None:
+        return ""
+    if detail == "specific":
+        return _REASONS[reason[0]](reason[1])
+    return advice(reason, reasons)
+
 
 _STREAK = {2: "second lap running", 3: "third lap running", 4: "fourth lap running",
            5: "fifth lap running"}
@@ -220,7 +275,8 @@ def corner_better_phrase(corner_name: str, gained_s: float | None = None) -> str
 
 def corner_phrase(delta_s: float, corner_name: str, against: str,
                   reason: tuple[str, float] | None = None, verbosity: str = "normal",
-                  again: bool = False, streak: int = 0) -> str:
+                  again: bool = False, streak: int = 0, detail: str = "plain",
+                  reasons: dict[str, float] | None = None) -> str:
     """against: "ahead", "behind", "best" or "pace" (your best lap on similar tyre wear).
     'Turn three, losing two tenths to the car ahead, braking ten metres earlier.'
     'Turn four, three tenths off your best, minimum speed eight k p h down.'
@@ -228,18 +284,72 @@ def corner_phrase(delta_s: float, corner_name: str, against: str,
     again=True (same corner as the last call): 'Turn four again, ...'
     streak=3 (lost time there 3 laps in a row): 'Turn four, third lap running, ...'"""
     gap = say_gap(int(round(delta_s * 1000)))
+    if against == "fastest":                       # coaching: the fastest lap on track
+        if delta_s < 0:
+            return _sentence(f"{corner_name}, {gap} up on the fastest lap")
+        why = "" if verbosity == "terse" else reason_words(reason, reasons, detail)
+        head = _sentence(corner_name, f"{gap} off the fastest lap")
+        return f"{head} {_sentence(why)}" if why else head
     if delta_s < 0:
         if against in ("best", "pace"):
             return _sentence(f"{corner_name}, {gap} up on your {against}")
         return _sentence(f"gaining {gap} on the car {against} through {corner_name}")
     loss = f"{gap} off your {against}" if against in ("best", "pace") \
         else f"losing {gap} to the car {against}"
-    why = "" if reason is None or verbosity == "terse" else _REASONS[reason[0]](reason[1])
+    why = "" if verbosity == "terse" else reason_words(reason, reasons, detail)
     if streak >= 2:
         head = f"{corner_name}, {_STREAK.get(streak, 'lap after lap')}"
     else:
         head = f"{corner_name} again" if again else corner_name
+    if detail == "plain" and why:                  # the advice as its own sentence
+        return f"{_sentence(head, loss)} {_sentence(why)}"
     return _sentence(head, loss, why)
+
+
+def coaching_phrase(lap_ms: int | None, gap_ms: int, who: str,
+                    items: list[tuple[str, int, tuple[str, float] | None, dict, int]],
+                    better: str | None = None, detail: str = "plain") -> str:
+    """Coaching mode, after a lap: the lap, the gap to the fastest lap on track (who: the car
+    that set it) and where it is. items: (corner, loss ms, main cause, all causes, streak),
+    biggest first, at most two.
+    'One twenty three four, seven tenths off Verstappen. Most of it's turn two, three tenths.
+    Brake slightly later, then carry a bit more speed through the corner. Turn six, get on the
+    power a bit earlier.'
+    Quicker than everyone (gap_ms < 0): 'One oh nine one, fastest lap on track. Albon still
+    quicker through turn four. Brake slightly later.'"""
+    out = []
+    if better:
+        out.append(_sentence(f"better into {better}", "keep doing that"))
+    lap = say_lap_time(lap_ms) if lap_ms else ""
+    fastest = gap_ms < 0
+    if fastest:
+        out.append(_sentence(lap, "fastest lap on track"))
+    elif gap_ms <= 50:
+        out.append(_sentence(lap, f"matching {who}"))
+    else:
+        out.append(_sentence(lap, f"{say_gap(gap_ms)} off {who}"))
+    if not items:
+        if not fastest and gap_ms > 50:
+            out.append(_sentence("spread around the lap, no one corner"))
+        return " ".join(out)
+    for i, (name, loss_ms, reason, reasons, streak) in enumerate(items[:2]):
+        if detail == "specific":
+            why = _REASONS[reason[0]](reason[1]) if reason else ""
+        else:
+            why = advice(reason, reasons, most=2 if i == 0 else 1)
+        if i == 0:
+            if fastest:
+                where = f"{who} still quicker through {name}"
+            elif streak >= 2:
+                where = f"still {name}, {say_gap(loss_ms)}"
+            else:
+                where = f"most of it's {name}, {say_gap(loss_ms)}"
+            out.append(_sentence(where))
+            if why:
+                out.append(_sentence(why))
+        else:
+            out.append(_sentence(name, why or say_gap(loss_ms)))
+    return " ".join(out)
 
 
 # -- strategy (Phase 5) ------------------------------------------------------------------------
