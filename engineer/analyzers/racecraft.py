@@ -6,7 +6,12 @@ Races only. Each call is said once per situation, with its own rules so it isn't
 - Passes: the game reports every position swap (472 in the 18-lap Austria race, six between you
   and one car in 12 s of lap 1), so a pass is only called once it has stuck for `pass_hold_s`
   (4 s), from lap 2, not under the safety car or when the other car is in the pits. Several
-  in one go are said together. A lost place is said the same way, with encouragement.
+  in one go are said together. A lost place is said the same way, with encouragement, but
+  waits `lost_hold_s` (8 s): you often fight back at the next corner. Taking a place back
+  within `fight_window_s` (20 s) is praised as a fight ("Good fight, Hamilton couldn't make it
+  stick"), not called as a lost place followed by a pass (Shanghai, 3 Nov). Places lost
+  around your pit stop (pit entry to the end of the out lap) aren't called, and a lost place
+  re-sent after a flashback isn't said twice.
 - Defending: the car behind is inside `defend_gap_s` (1 s) and closer than on the previous lap.
   Again only after it drops back past `clear_gap_s` (2 s), which gets "Good defending".
 - Attacking: the car ahead is within `attack_gap_s` (4 s), you've closed at least
@@ -50,11 +55,17 @@ SC_IN_REPEAT_S = 30.0
 PASS_GROUP_S = 8.0
 
 
+LOST_REPEAT_S = 60.0         # the same lost place isn't said again this soon (flashbacks)
+EXCHANGE_S = 5.0             # a car re-passing you this soon after YOUR move is your overtake
+                             # still going on (Austria lap 2, Piastri), not a fight you defended
+
+
 @dataclass
 class _Swap:
     other: int
     gained: bool
     due: float                  # session time to check it stuck
+    at: float = 0.0             # session time of the swap
 
 
 class RaceCraftAnalyzer:
@@ -68,6 +79,8 @@ class RaceCraftAnalyzer:
         bus.subscribe(ev.GameEvent, self.on_game_event)
         bus.subscribe(ev.SessionStarted, lambda e: self._reset())
         bus.subscribe(ev.Flashback, lambda e: self._on_flashback())
+        bus.subscribe(ev.PitEntry, self._on_pit_entry)
+        bus.subscribe(ev.RadioMessage, self._on_radio)
 
     def _reset(self) -> None:
         self.swaps: list[_Swap] = []
@@ -83,10 +96,30 @@ class RaceCraftAnalyzer:
         self.sc_in_said = -math.inf
         self.last_pass_call = -math.inf
         self.passes_said = 0
+        self.passed_by: dict[int, float] = {}               # car -> when it last passed you
+        self.passed: dict[int, float] = {}                  # car -> when you last passed it
+        self.lost_said: dict[int, float] = {}               # car -> when "lost to" was said
+        self.lost_pending: dict[str, list[int]] = {}        # lost call text -> its cars
+        self.lost_calls = 0                                  # wording rotation
+        self.fights_said = 0
+        self.pit_laps = 0                                    # in lap + out lap: no lost calls
 
     def _on_flashback(self) -> None:
         self.swaps.clear()
         self.contact_due = None
+
+    def _on_radio(self, e: ev.RadioMessage) -> None:
+        # A lost place counts as said once it's actually on the radio: a flashback can drop
+        # the call unsaid, and the game then sends the pass again (Melbourne, 2 Nov, last lap).
+        for car in self.lost_pending.pop(e.text, []) if e.topic == "racecraft_pass" else []:
+            self.lost_said[car] = e.session_time
+
+    def _on_pit_entry(self, e: ev.PitEntry) -> None:
+        if e.car_idx == self.state.player_index:
+            # Cars going by while you stop aren't overtakes (Melbourne, 2 Nov: ten "lost"
+            # places around the stop). Covers the in lap and the out lap.
+            self.pit_laps = 2
+            self.swaps = [x for x in self.swaps if x.gained]
 
     # -- helpers ---------------------------------------------------------------------------------
 
@@ -124,6 +157,8 @@ class RaceCraftAnalyzer:
         if e.car_idx != me:
             self._behind_lap(e)
             return
+        if self.pit_laps:
+            self.pit_laps -= 1
         total = s.session.total_laps or 0
         if e.lap == 1 and self.cfg.start:
             grid = c.grid_position[me]
@@ -234,8 +269,17 @@ class RaceCraftAnalyzer:
             other = b if a == me else a
             if c.pit_status[other] > 0 or c.pit_status[me] > 0:
                 return
+            gained = a == me
+            if gained:
+                self.passed[other] = e.session_time
+            else:
+                if self.pit_laps:
+                    return
+                if e.session_time - self.passed.get(other, -math.inf) > EXCHANGE_S:
+                    self.passed_by[other] = e.session_time
+            hold = self.cfg.pass_hold_s if gained else self.cfg.lost_hold_s
             self.swaps = [x for x in self.swaps if x.other != other]
-            self.swaps.append(_Swap(other, a == me, e.session_time + self.cfg.pass_hold_s))
+            self.swaps.append(_Swap(other, gained, e.session_time + hold, e.session_time))
         elif e.code == "FTLP" and self.cfg.fastest_lap:
             holder, before = d["vehicleIdx"], self.fastest_holder
             self.fastest_holder = holder
@@ -284,15 +328,35 @@ class RaceCraftAnalyzer:
         gained = [x for x in due if x.gained and c.position[me] < c.position[x.other]]
         lost = [x for x in due if not x.gained and c.position[me] > c.position[x.other]]
         pos = int(c.position[me])
-        if len(gained) > len(lost):
+        # Retaken from a car that passed you moments before: that's a fight, not a pass.
+        fights = [x for x in gained
+                  if x.at - self.passed_by.get(x.other, -math.inf) <= self.cfg.fight_window_s]
+        if fights:
+            x = fights[-1]
+            heard = x.at - self.lost_said.get(x.other, -math.inf) <= self.cfg.fight_window_s
+            self.last_pass_call = t
+            self._say("racecraft_pass", phrases.fight_back_phrase(
+                self._name(x.other), pos, heard, self.fights_said), max_wait_s=8.0)
+            self.fights_said += 1
+            for f_ in fights:
+                self.passed_by.pop(f_.other, None)
+        elif len(gained) > len(lost):
             self.last_pass_call = t
             self._say("racecraft_pass", phrases.pass_phrase(
                 [self._name(x.other) for x in gained], pos, self.passes_said), max_wait_s=8.0)
             self.passes_said += 1
         elif lost and not gained:
+            # Already said (the game re-sends a pass after a flashback): not again.
+            lost = [x for x in lost if t - self.lost_said.get(x.other, -math.inf) > LOST_REPEAT_S]
+            if not lost:
+                return
             self.last_pass_call = t
-            self._say("racecraft_pass", phrases.lost_place_phrase(self._name(lost[-1].other),
-                                                                  pos), max_wait_s=8.0)
+            names = [self._name(x.other) for x in lost]
+            text = phrases.lost_place_phrase(names[0], pos, self.lost_calls) if len(lost) == 1 \
+                else phrases.lost_places_phrase(len(lost), pos)
+            self.lost_pending[text] = [x.other for x in lost]
+            self._say("racecraft_pass", text, max_wait_s=8.0)
+            self.lost_calls += 1
 
     def _contact_damage(self) -> None:
         dmg, me = self.state.cars.damage, self.state.player_index

@@ -83,7 +83,11 @@ uv run python -m engineer.report                     # driver report PDF (data/r
 
 - `engineer/analyzers/racecraft.py` (settings `racecraft:`): start summary, passes (from the
   game's OVTK event, only once they've stuck 4 s, grouped when close together, wording rotates
-  in a fixed order), defending / attacking (only if you'd realistically catch them), countdown,
+  in a fixed order), lost places (held `lost_hold_s` 8 s; not around your own stop; counted as
+  said only once on the radio, so a flashback doesn't repeat or swallow one), fights (a car
+  that passed you retaken within `fight_window_s`: "Good fight, ... couldn't make it stick" /
+  "Straight back past ..."; a re-pass within 5 s of YOUR move is your overtake, not a fight),
+  defending / attacking (only if you'd realistically catch them), countdown,
   finish, fastest lap (when taken from someone else), your penalties (IDs from the PDF spec),
   safety car in, damage after contact.
 - Game events reach analyzers as `ev.GameEvent` (`detectors.PASSED_THROUGH`).
@@ -139,7 +143,9 @@ uv run python -m engineer.report                     # driver report PDF (data/r
   `gamble_take_s` quicker. Wording: one lap and one tyre ("box end of lap nine for softs").
 - The call is committed: box calls follow `StrategyAnalyzer.announced`, not the latest best. It
   only changes for a gain of `window_s` (two laps running) or `change_gain_s` within
-  `commit_laps`; at once if you stayed out past it, the tyres won't make it, or it's impossible.
+  `commit_laps`, never for time once the stop is this lap or next (`freeze_laps`); at once if
+  you stayed out past it, the tyres won't make it, or it's impossible. Plan wording is one lap,
+  never a range, at every tempo.
   After a stop: "Copy, softs." + the rest of the race, at pit exit. Plan calls are NORMAL
   priority and are re-announced if they expire or a flashback drops them unsaid.
 
@@ -148,7 +154,12 @@ uv run python -m engineer.report                     # driver report PDF (data/r
 - Hold LB (XInput) or L1 (PlayStation, winmm), shared with the game -> speech process (faster-whisper, own process, default
   Windows mic) -> `QuestionAsked` event -> `QuestionAnswerer` (wired in `build_engine`, so tests
   and replays answer the same way) -> director topic "answer" (HIGH, said even in quiet mode).
-- Answers come from the same query functions/analyzer state as the proactive calls.
+- Answers come from the same query functions/analyzer state as the proactive calls. Beyond the
+  basics: rejoin ("where do I come out", same `_rejoin` as the box call, using your gap from
+  before pit entry when asked in the pit lane), true_position (cars ahead that haven't stopped
+  in a dry race drop a pit loss; cars behind that have, gain on your remaining stop),
+  tyre_tips (limiting tyre, the wear you can afford to the stop/flag, hottest sector, axle
+  advice), speed_tips (the two costliest corners last lap and why), "repeat the strategy".
 - Speech runs on the CPU by default (small.en, 4 threads, beam 1): in a race F1 25 keeps the GPU
   busy and a question waited 41 s for it (real race, 27 Oct). Answers whose recognition took
   longer than `voice.max_answer_delay_s` (10 s) are logged but not said.

@@ -10,7 +10,8 @@ latest laps and every plan is simulated again (engineer/strategy). What you hear
   limit.
 - The call is committed (29 Oct races: the best lap crept a lap later every lap and the box call
   never came). It only changes when the new best beats keeping it by `window_s` (confirmed on two
-  laps), or by `change_gain_s` once the stop is within `commit_laps`; at once if the tyres won't
+  laps), or by `change_gain_s` once the stop is within `commit_laps` (never for time once it is
+  this lap or next, `freeze_laps`); at once if the tyres won't
   make the planned lap, or you stayed out past it. A change says why: "Change, box lap eight
   instead of nine, tyres wearing faster than expected."
 - After each of your stops: "Copy, softs." and the plan for the rest of the race.
@@ -104,6 +105,8 @@ class StrategyAnalyzer:
             # call it again (Melbourne, 28 Oct).
             self.announced = self.decision = None
         self.latest = None
+        self.gap_to_leader_ms: float | None = None      # yours, from before any pit entry
+        self.position_before_pit: int | None = None     # ... and your position then
         self.pending_change = None
         self.box_lap = None
         self.half_said = False
@@ -297,6 +300,14 @@ class StrategyAnalyzer:
             self._safety_car_check()
         elif packet_id == f.PacketId.LAP_DATA:
             self._box_check()
+            # In the pit lane the game sends a gap of 0: keep the last real one for "where do I
+            # come out" (3 Nov Melbourne: asked at pit entry, answered "P twenty one").
+            c, p = self.state.cars, self.state.player_index
+            if p is not None and c.pit_status[p] == 0:
+                g = 0.0 if c.position[p] == 1 else float(c.delta_to_leader_ms[p])
+                if not np.isnan(g) and (g > 0 or c.position[p] == 1):   # 0 = not a real gap
+                    self.gap_to_leader_ms = g
+                    self.position_before_pit = int(c.position[p])
 
     # -- results ---------------------------------------------------------------------------------
 
@@ -390,6 +401,9 @@ class StrategyAnalyzer:
             self._announce(res, dec, f"these won't make lap {phrases.number_words(stop.lap)}",
                            held)
             return
+        if stop is not None and stop.lap - lap_now < self.cfg.freeze_laps:
+            self.pending_change = None                   # too close to the stop to change it
+            return
         gain = keep.cost_s - pick.cost_s
         locked = stop is not None and stop.lap - lap_now < self.cfg.commit_laps
         if gain < (self.cfg.change_gain_s if locked else self.cfg.window_s):
@@ -473,6 +487,8 @@ class StrategyAnalyzer:
             return None
         loss_ms = (model.pit_loss_sc if sc else model.pit_loss).value * 1000
         mine = 0.0 if c.position[p] == 1 else c.delta_to_leader_ms[p]
+        if c.pit_status[p] > 0 and self.gap_to_leader_ms is not None:
+            mine = self.gap_to_leader_ms             # in the pit lane the game says 0
         after = mine + loss_ms
         others = [(0.0 if c.position[j] == 1 else float(c.delta_to_leader_ms[j]), j)
                   for j in np.flatnonzero(c.active) if j != p and c.pit_status[j] == 0

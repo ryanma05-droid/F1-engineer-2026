@@ -75,6 +75,7 @@ class QuestionAnswerer:
         self.answered: list[tuple[str, str]] = []      # (intent, answer), for tests and display
         self.heard = ""                                 # the question being answered
         self.last_radio: str | None = None              # for "repeat that"
+        self.last_strategy: str | None = None           # for "repeat the strategy call"
         self.feedback = feedback or FeedbackLog(None)
         self.recent_radio: deque[str] = deque(maxlen=3)  # kept with a flagged question
         self._prev: dict | None = None                  # the last question, for "log that"
@@ -88,6 +89,8 @@ class QuestionAnswerer:
             self.last_radio = e.text
         if e.topic != "answer":
             self.recent_radio.append(e.text)
+        if e.topic in ("strategy_plan", "box", "safety_car"):
+            self.last_strategy = e.text
 
     # -- entry point -----------------------------------------------------------------------------
 
@@ -329,7 +332,100 @@ class QuestionAnswerer:
         return None
 
     def _a_repeat(self) -> str:
+        # 2 Nov: "Repeat the call and strategy" got the last radio call (a pass), not the plan.
+        if re.search(r"\b(strategy|plan|pit|box|call)\b", self.heard.lower()) \
+                and self.last_strategy:
+            return self.last_strategy
         return self.last_radio or phrases._sentence("nothing to repeat yet")
+
+    def _a_rejoin(self) -> str:
+        """"Where am I going to come out?": if you boxed this lap (3 Nov, logged)."""
+        sa, c, p = self.engine.strategy, self.state.cars, self._player()
+        if p is None or np.isnan(c.position[p]):
+            return phrases._sentence("no timing yet")
+        r = sa._rejoin(self.state.session.safety_car_status in (1, 2)) \
+            if sa.latest is not None else None
+        if r is None:
+            return phrases._sentence("can't work that out yet, give me a lap")
+        before = sa.position_before_pit if c.pit_status[p] > 0 else None
+        pos = (before or int(c.position[p])) + r.positions_lost
+        return phrases.rejoin_answer_phrase(pos, r)
+
+    def _a_true_position(self) -> str:
+        """"Where's my track position?": where you are once the stops shake out (2 Nov, logged:
+        "give accurate track position"). In a dry race every car has to stop at least once, so
+        a car ahead that hasn't stopped will lose a stop's time; if you still have a stop to
+        make, cars behind that have made theirs gain it."""
+        c, p, sa = self.state.cars, self._player(), self.engine.strategy
+        if p is None or np.isnan(c.position[p]) or np.isnan(c.num_pit_stops[p]):
+            return phrases._sentence("no timing yet")
+        pos = int(c.position[p])
+        model = sa.latest.model if sa.latest is not None else None
+        loss = (model.pit_loss.value if model is not None else sa.cfg.pit_loss_s) * 1000
+
+        def t(j):
+            return 0.0 if c.position[j] == 1 else float(c.delta_to_leader_ms[j])
+        if np.isnan(t(p)):
+            return phrases.position_phrase(pos, self._laps_to_go())
+        plan = sa.committed()
+        mine_done = int(c.num_pit_stops[p])
+        mine_left = len(plan.stops) if plan is not None else (0 if mine_done else 1)
+        to_stop, passing = [], []
+        for j in np.flatnonzero(c.active):
+            if j == p or c.pit_status[j] > 0 or np.isnan(c.num_pit_stops[j]) or np.isnan(t(j)):
+                continue
+            done = int(c.num_pit_stops[j])
+            if c.position[j] < pos and done == 0 and mine_done >= 1 and t(j) + loss > t(p):
+                to_stop.append(int(j))               # still has to stop, will drop behind
+            elif c.position[j] > pos and mine_left and done > mine_done \
+                    and t(j) < t(p) + loss:
+                passing.append(int(j))               # has stopped; you'll drop behind them
+        real = pos - len(to_stop) + len(passing)
+        return phrases.true_position_phrase(pos, real, [self._name(j) for j in to_stop],
+                                            [self._name(j) for j in passing])
+
+    def _a_tyre_tips(self) -> str:
+        """"Any tips for managing the tyres? Where am I over-working them?" (2 Nov, logged):
+        the tyre that limits you, the wear you can afford to reach the stop or the flag, where
+        it runs hottest, and what to change for that axle."""
+        st, p = self.engine.tyres.status(), self._player()
+        if st is None or st.worst_wheel is None or p is None:
+            return phrases._sentence("no tyre numbers yet, give me a lap")
+        w = st.limiting_wheel if st.limiting_wheel is not None else st.worst_wheel
+        rate = float(st.wear_rate[w])
+        plan = self.engine.strategy.committed()
+        lap = self._lap()
+        target = None
+        if lap is not None:
+            stop = plan.next_stop if plan is not None else None
+            end = stop.lap if stop is not None else self.state.session.total_laps
+            if end and end >= lap:
+                laps = end - lap + 1
+                target = ((st.limit_pct - float(st.wear[w])) / laps, stop.lap if stop else None)
+        hot = None
+        laps_f = self.engine.features.for_car(p)
+        temps = laps_f[-1].temps if laps_f else None
+        if temps is not None:
+            k = int(np.argmax([temps.hot_frac[i][w] for i in range(3)]))
+            if temps.hot_frac[k][w] >= 0.3:
+                hot = k + 1
+        return phrases.tyre_tips_phrase(w, None if np.isnan(rate) else rate, target, hot)
+
+    def _a_speed_tips(self) -> str:
+        """"Give me tips on how to speed up" (3 Nov, logged): the two corners costing the most
+        on the last lap and why, from the same comparison as the corner calls."""
+        corners = self.engine.corners
+        losing = sorted((d for d in corners.last if d.delta_s > 0), key=lambda d: -d.delta_s)
+        if not losing:
+            return self._where(True)
+        against = corners.last_against or "best"
+        first = phrases.corner_phrase(losing[0].delta_s, losing[0].corner.name, against,
+                                      losing[0].reason(), "chatty")
+        if len(losing) < 2:
+            return first
+        second = phrases.corner_phrase(losing[1].delta_s, losing[1].corner.name, against,
+                                       losing[1].reason(), "chatty")
+        return f"{first} Then {second[0].lower()}{second[1:]}"
 
     def _a_status(self) -> str:
         """"How are we looking?": position, the gap ahead, the tyres and the next stop."""

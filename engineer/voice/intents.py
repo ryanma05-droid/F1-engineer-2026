@@ -61,10 +61,30 @@ RULES: list[tuple[str, list[str]]] = [
     # "Talk to me about tyre wear" is a tyre question (29 Oct), not "talk to me".
     ("talk", [r"\btalk to me\b(?! about| more)", r"\bkeep me (posted|updated|informed)\b",
               r"\bback to normal\b", r"\bresume\b", r"\byou can talk\b"]),
+    # 3 Nov: "Where am I going to come out?" (if I box now)
+    ("rejoin", [r"\bwhere (am i|are we) (going to|gonna) come out\b",
+                r"\bwhere (would|will|do|does|should) (i|we) come out\b",
+                r"\bwhere (would|will|do) (i|we) rejoin\b", r"\bcome out (where|behind who)\b"]),
+    # 2 Nov: "Where's my track position?" meaning once the stops shake out (logged: "give
+    # accurate track position").
+    ("true_position", [r"\btrack position\b",
+                       r"\b(real|true|actual|accurate|virtual) (track )?position\b",
+                       r"\bposition (after|once) .*\b(stops?|pit|pitted|stopped)\b",
+                       r"\bwhere (will|would) (i|we) be (after|once)\b"]),
+    # 2 Nov: "Any tips for managing the tyres? Where am I over exerting them?"
+    ("tyre_tips", [r"\b(tips?|advice|help)\b.*\b(manag\w*|sav\w*|look after)\b.*\btyres?\b",
+                   r"\bhow (do|can|should) (i|we) (manage|save|look after) (the |my |these )?tyres?\b",
+                   r"\bover ?(exert|work|heat|us)\w*\b", r"\b(killing|cooking|hurting) (the |my )?tyres?\b"]),
+    # 3 Nov: "Give me tips on how to speed up."
+    ("speed_tips", [r"\b(tips?|advice)\b.*\b(speed up|faster|quicker|pace|lap time)\b",
+                    r"\bhow (do|can|could) (i|we) (speed up|go faster|get faster|be quicker|"
+                    r"find time|find pace)\b", r"\bwhere (can|could) (i|we) find time\b"]),
     # 29 Oct: "How does this current tyre hold up to the end of the race?", "Will I get over 45%?"
+    # 2 Nov: "Are these tyres going to make it?"
     ("tyres_to_end", [r"\b(hold up|last|make it|get) (to|until|till) the (end|finish|flag)\b",
                       r"\bmake the (end|finish|flag)\b", r"\bget over \d+",
-                      r"\bwill (these|the|my) tyres? (last|make it|hold)\b"]),
+                      r"\bwill (these|the|my) tyres? (last|make it|hold)\b",
+                      r"\b(are|is) (these|the|my) tyres? (going to|gonna) (last|make it|hold)\b"]),
     # 29 Oct: "How are we looking right now?"
     ("status", [r"\bhow (are|is) (we|it|things|everything) (looking|going)\b",
                 r"\bhow('s| is) (it|everything) (looking|going)\b", r"\bstatus( update)?\b",
@@ -90,7 +110,10 @@ RULES: list[tuple[str, list[str]]] = [
                  r"\b(run|do) (the |a )?(simulation|sim|numbers)\b.*\b(hards?|mediums?|softs?|now)\b",
                  r"\b(pit|box|stop) for (the )?(hards?|mediums?|softs?)\b",r"\bwhat if i (box|pit|stop)\b", r"\b(box|pit|stop)(ping)? (now|this lap)\b",
                  r"\bshould i (box|pit|stop)\b", r"\bif i (box|pit|stop) now\b"]),
-    ("plan", [r"\bplan\b", r"\bstrategy\b", r"\bwhen (do|should|will) (i|we) (box|pit|stop)\b",
+    # 2 Nov: "How are the tyres looking? Relative to the strategy?" is about the tyres.
+    ("tyres", [r"^how (are|is) (the|my|these) tyres?\b"]),
+    # 2 Nov: "Be definitive with the strategy. What should I do?"
+    ("plan", [r"\bplan\b", r"\bstrategy\b", r"\bbe definitive\b", r"\bwhat should (i|we) do\b", r"\bwhen (do|should|will) (i|we) (box|pit|stop)\b",
               r"\bwhen('s| is) (the|my|our) (stop|pit ?stop|box)\b", r"\bhow many stops\b",
               r"\bpit window\b", r"\bwhich tyres? next\b"]),
     # A named driver: "where am I gaining on Lando?", "gap to Norris?" (27 Oct race)

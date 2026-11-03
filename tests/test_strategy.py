@@ -453,8 +453,9 @@ def test_call_phrases():
     one = Plan((Stop(9, 16, 0.0),), 100.0, (8, 10))
     safe = Assessed(one, (Stint(17, 2, 9, 40, 44), Stint(16, 9, 20, 50, 53)), True)
     assert phrases.call_phrase(Decision(safe), 20) == "Plan is one stop, box end of lap nine for softs."
-    assert phrases.call_phrase(Decision(safe), 20, "chatty").startswith(
-        "Plan is one stop, box end of lap nine for softs (anywhere from lap eight to ten works)")
+    # One lap at every tempo, never a range (2 Nov: "Be definitive").
+    assert phrases.call_phrase(Decision(safe), 20, "chatty") == \
+        "Plan is one stop, box end of lap nine for softs."
     hards = Assessed(Plan((Stop(9, 18, 0.0),), 103.0), (Stint(17, 2, 9, 40, 44),
                                                        Stint(18, 9, 20, 35, 38)), True)
     risky = Assessed(one, (Stint(17, 2, 9, 40, 44), Stint(16, 9, 20, 58, 62)), False)
@@ -505,5 +506,10 @@ def test_the_call_holds_its_lap_while_the_best_lap_creeps():
     for lap_done, best_lap in ((3, 9), (4, 9), (5, 10), (6, 10)):
         sa._on_plan(result(lap_done, best_lap, 100.0, 100.4))    # 0.4 s: noise, keep lap 8
     assert sa.committed().stops[0].lap == 8 and len(said) == 1
-    sa._on_plan(result(6, 9, 100.0, 102.0))                       # locked, 2 s: worth moving
+    sa._on_plan(result(5, 9, 100.0, 102.0))                       # locked, 2 s: worth moving
     assert sa.committed().stops[0].lap == 9 and said[-1].startswith("Change, box lap nine")
+    # 2 Nov Melbourne: "box lap ten instead of seven" on lap seven. With the stop this lap or
+    # next, no gain moves it; only the tyres not making it would.
+    n = len(said)
+    sa._on_plan(result(7, 11, 100.0, 110.0))
+    assert sa.committed().stops[0].lap == 9 and len(said) == n

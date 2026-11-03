@@ -10,15 +10,19 @@ from engineer.strategy.runner import InlineRunner
 from tests.synth import FakeRace
 
 
-def run(race, events=None, duration_ms=None):
-    """Feed the race; events: {game time s: (code, details)} published as GameEvents."""
+def run(race, events=None, duration_ms=None, moves=None):
+    """Feed the race; events: {game time s: (code, details)} published as GameEvents;
+    moves: {game time s: positions} changes the running order from then on."""
     cfg = Config(data_dir="/nonexistent-test-dir")
     out = io.StringIO()
     eng = build_engine(cfg, out=out, priors=WearPriors(), strategy_runner=InlineRunner(None))
     todo = sorted((events or {}).items())
+    order = sorted((moves or {}).items())
     st = eng.pipeline.state
     for t_ns, raw in race.frames(duration_ms=duration_ms):
         eng.pipeline.feed(raw, t_ns)
+        while order and (st.session_time or 0) >= order[0][0]:
+            race.positions = order.pop(0)[1]
         while todo and (st.session_time or 0) >= todo[0][0]:
             _, (code, details) = todo.pop(0)
             eng.pipeline.bus.publish(ev.GameEvent(st.session_uid, st.session_time,
@@ -103,3 +107,33 @@ def test_important_calls_are_said_when_the_session_ends():
     d.submit(RadioCall("corner", "Turn four.", Priority.LOW, max_wait_s=20))
     eng.pipeline.bus.publish(ev.SessionEnded(0, 5.0, reason="SEND"))
     assert said == ["Chequered flag."]
+
+
+def _duel():
+    return FakeRace({0: [30000] * 4, 1: [30500] * 4}, positions={0: 1, 1: 2},
+                    names=["PLAYER", "NORRIS"], extra_packets=False)
+
+
+def test_a_lost_place_waits_longer_and_a_quick_fight_back_is_praised():
+    # Norris gets by and stays ahead: called, but only after lost_hold_s (8 s), not 4 s.
+    eng, radio = run(_duel(), {35: ovtk(1, 0)}, duration_ms=60000,
+                     moves={35: {0: 2, 1: 1}})
+    assert "Lost P one to Norris. Stay with Norris." in radio
+    # Gone for 3 s, then back past before the lost call: a good defence, not a lost place.
+    _, radio = run(_duel(), {35: ovtk(1, 0), 38: ovtk(0, 1)}, duration_ms=60000,
+                   moves={35: {0: 2, 1: 1}, 38: {0: 1, 1: 2}})
+    assert "Good fight, Norris couldn't make it stick, P one." in radio
+    assert not any(r.startswith("Lost") for r in radio)
+    # Lost (and told), then straight back past: "great response", not a plain pass.
+    _, radio = run(_duel(), {35: ovtk(1, 0), 47: ovtk(0, 1)}, duration_ms=65000,
+                   moves={35: {0: 2, 1: 1}, 47: {0: 1, 1: 2}})
+    assert "Lost P one to Norris. Stay with Norris." in radio
+    assert "Straight back past Norris, P one. Great response." in radio
+
+
+def test_lost_place_wording():
+    assert phrases.lost_place_phrase("Hamilton", 6, 1) == \
+        "Hamilton got by, P six. Stay close, the move back is on."
+    assert phrases.lost_places_phrase(3, 9) == "Lost three places, P nine. Heads down, keep at it."
+    assert phrases.fight_back_phrase("Hamilton", 5, False, 1) == \
+        "Nicely defended, back ahead of Hamilton, P five."

@@ -100,6 +100,16 @@ from tests.test_strategy import SETS, model, situation
     ("What's my best lap?", "best_lap"),
     ("Is it going to rain?", "weather"),
     ("What lap is it?", "laps_left"),
+    # 2-3 Nov races (the questions you logged, and ones that went to the wrong answer)
+    ("Where am I going to come out?", "rejoin"),
+    ("Where's my track position?", "true_position"),
+    ("We should figure out a way to give accurate track position.", "true_position"),
+    ("Are these tyres going to make it?", "tyres_to_end"),
+    ("Any tips for managing these tyres? Where am I over exerting them?", "tyre_tips"),
+    ("Give me tips on how to speed up.", "speed_tips"),
+    ("How are the tyres looking? Relative to the strategy?", "tyres"),
+    ("Be definitive with the strategy. What should I do?", "plan"),
+    ("Be definitive.", "plan"),
 ])
 def test_intents(said, intent):
     assert match(said).name == intent
@@ -462,3 +472,29 @@ def test_shift_in_a_question():
     assert _shift_in("What if I go a lap later?") == 1
     assert _shift_in("What about two laps earlier?") == -2
     assert _shift_in("What if we extend?") == 1
+
+
+def test_answers_to_the_questions_logged_on_2_3_nov(tmp_path):
+    race = race12(positions={0: 2, 1: 1}, gap_ahead_ms={0: 1200}, names=["PLAYER", "NORRIS"])
+    eng, radio = run_and_ask(race, {
+        70: "Where am I going to come out?", 74: "Where's my track position?",
+        78: "Any tips for managing the tyres?", 82: "Give me tips on how to speed up.",
+        86: "Repeat the strategy call.",
+    }, tmp_path, duration_ms=95000)
+    got = dict(eng.answers.answered)
+    assert got["rejoin"].startswith("Box now and you come out P ")
+    # Nobody has stopped yet and neither have you: the order is real.
+    assert got["true_position"].startswith("P two, and that's real")
+    assert " is your limiting tyre" in got["tyre_tips"]
+    assert got["speed_tips"] != "Say again."
+    assert got["repeat"].startswith("Plan is one stop")       # the strategy call, not the last
+    assert "Say again." not in got.values()
+
+
+def test_true_position_phrase():
+    assert phrases.true_position_phrase(7, 5, ["Norris", "Leclerc"], []) == (
+        "P seven on the road. Norris and Leclerc ahead still have to stop. About P five once it "
+        "all shakes out.")
+    assert phrases.true_position_phrase(7, 8, [], ["Sainz"]) == (
+        "P seven on the road. After your stop Sainz will be ahead. About P eight once it all "
+        "shakes out.")

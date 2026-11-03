@@ -70,6 +70,8 @@ racecraft:              # the human side: battles, passes, start/finish, penalti
   safety_car: true      # "Safety car in this lap, get the tyres ready."
   damage: true          # wing/floor damage after contact
   pass_hold_s: 4        # a pass is only called once it has stuck this long
+  lost_hold_s: 8        # a lost place waits longer: you often fight back at the next corner
+  fight_window_s: 20    # retaking a place this soon after losing it: "Good fight" instead
   defend_gap_s: 1.0     # car behind inside this and closing: "Defend."
   clear_gap_s: 2.0      # ... until it drops back past this: "Good defending."
   attack_gap_s: 4.0     # car ahead within this, and
@@ -101,6 +103,7 @@ strategy:               # pit strategy (Phase 5): the plan, box calls, safety ca
   max_wait_s: 20
   commit_laps: 3        # within 3 laps of the stop the pit lap is locked...
   change_gain_s: 1.5    # ...and only moves for a gain this big (or tyres that won't make it, or SC)
+  freeze_laps: 2        # stop this lap or next: only moves if the tyres won't make it
   margin_pct: 5         # a safe plan ends every stint this far under tyres.limit_pct
   rate_sd_one_lap: 0.3  # how unsure a wear rate from one lap is (shrinks as laps add up)
   gamble_min_s: 1.0     # a riskier plan quicker by this much is named as "the gamble"

@@ -288,25 +288,22 @@ def plan_phrase(plan, alternative=None, verbosity: str = "normal", change: bool 
 
 
 def _stops_body(plan, verbosity: str, after_stop: bool) -> str:
-    """'one stop, box end of lap nine for softs' / 'no more stops'. The window (laps that cost
-    about the same) only on chatty: the call is one lap."""
+    """'one stop, box end of lap nine for softs' / 'no more stops'. One lap, never a range,
+    at any tempo ("Be definitive", 2 Nov: a range sounds like the call isn't made)."""
     stops = plan.stops
     if not stops:
         return "no more stops" if after_stop else "no stop"
     first = stops[0]
-    window = ""
-    if verbosity == "chatty" and plan.window and plan.window[0] != plan.window[1]:
-        window = f" (anywhere from {_laps_range(plan.window, first.lap)} works)"
     if len(stops) == 1:
         return (f"one {'more ' if after_stop else ''}stop, box end of lap "
-                f"{number_words(first.lap)} for {say_compound(first.compound)}{window}")
+                f"{number_words(first.lap)} for {say_compound(first.compound)}")
     rest = ", then ".join(f"lap {number_words(s.lap)} for {say_compound(s.compound)}"
                           for s in stops[1:])
     count = _STOP_WORDS[len(stops)]
     if after_stop:
         count = count.replace(" stops", " more stops")
     return (f"{count}: box lap "
-            f"{number_words(first.lap)} for {say_compound(first.compound)}{window}, then {rest}")
+            f"{number_words(first.lap)} for {say_compound(first.compound)}, then {rest}")
 
 
 def _where_wear(stint, total_laps: int) -> str:
@@ -436,6 +433,63 @@ def rejoin_phrase(rejoin) -> str:
     if rejoin.ahead_of_name is not None:
         return _sentence(f"you'll come out just ahead of {rejoin.ahead_of_name}")
     return _sentence("you'll come out in clear air")
+
+
+def rejoin_answer_phrase(position: int, rejoin) -> str:
+    """'Box now and you'd come out P eleven. You'll come out behind Sainz, about two seconds
+    back.'"""
+    return f"{_sentence(f'box now and you come out {say_position(position)}')} " \
+           f"{rejoin_phrase(rejoin)}".strip()
+
+
+def _names(names: list[str | None]) -> str:
+    names = [n or "a car" for n in names]
+    return names[0] if len(names) == 1 else ", ".join(names[:-1]) + " and " + names[-1]
+
+
+def true_position_phrase(on_road: int, real: int, to_stop: list, passing: list) -> str:
+    """'P seven on the road. Norris and Leclerc ahead still have to stop: about P five once
+    they do.' / 'P seven, and that's real: the cars around you have stopped the same.'"""
+    if real == on_road and not to_stop and not passing:
+        return _sentence(f"{say_position(on_road)}, and that's real",
+                         "the cars around you have stopped the same")
+    bits = [_sentence(f"{say_position(on_road)} on the road")]
+    if to_stop:
+        verb = "still has" if len(to_stop) == 1 else "still have"
+        bits.append(_sentence(f"{_names(to_stop)} ahead {verb} to stop"))
+    if passing:
+        bits.append(_sentence(f"after your stop {_names(passing)} will be ahead"))
+    bits.append(_sentence(f"about {say_position(real)} once it all shakes out"))
+    return " ".join(bits)
+
+
+_AXLE_TIPS = {
+    "front": "brake a touch earlier and straighter, less steering lock mid-corner, and let the "
+             "car rotate before you pick up the throttle",
+    "rear": "be smoother on the throttle out of the slow corners, short-shift, and don't let the "
+            "rear step out",
+}
+
+
+def tyre_tips_phrase(wheel: int, rate: float | None, target, hot_sector: int | None) -> str:
+    """'Front left is your limiting tyre, using five percent a lap. You can afford four to make
+    lap nine. It runs hottest in sector two. Brake a touch earlier ...'
+    target: (affordable % a lap, stop lap or None for the flag) or None."""
+    name = WHEEL_NAMES[wheel]
+    bits = [_sentence(f"{name} is your limiting tyre" +
+                      (f", using {say_percent(rate)} a lap" if rate is not None else ""))]
+    if target is not None and rate is not None:
+        can, lap = target
+        where = f"lap {number_words(lap)}" if lap else "the flag"
+        if can >= rate:
+            bits.append(_sentence(f"you're fine to {where} at that rate"))
+        else:
+            bits.append(_sentence(f"you can afford {say_percent(max(can, 0))} a lap to make {where}"))
+    if hot_sector is not None:
+        bits.append(_sentence(f"it runs hottest in sector {number_words(hot_sector)}"))
+    axle = "front" if wheel >= 2 else "rear"
+    bits.append(_sentence(_AXLE_TIPS[axle]))
+    return " ".join(bits)
 
 
 def box_phrase(compound: int, rejoin=None, verbosity: str = "normal") -> str:
@@ -640,12 +694,38 @@ def pass_phrase(names: list[str | None], position: int, n: int = 0) -> str:
     return _sentence(f"{number_words(len(names))} cars in one go", say_position(position))
 
 
-def lost_place_phrase(name: str | None, position: int) -> str:
-    """'Lost P three to Leclerc. Stay with Leclerc.'"""
+def lost_place_phrase(name: str | None, position: int, n: int = 0) -> str:
+    """'Lost P three to Leclerc. Stay with Leclerc.' The wording rotates with n (how many lost
+    places were called), in order, so replays stay the same."""
     if not name:
         return _sentence(f"lost {say_position(position - 1)}", "stay with them")
-    return f"{_sentence(f'lost {say_position(position - 1)} to {name}')} " \
-           f"{_sentence(f'stay with {name}')}"
+    lost = say_position(position - 1)
+    now = say_position(position)
+    return [f"{_sentence(f'lost {lost} to {name}')} {_sentence(f'stay with {name}')}",
+            f"{_sentence(f'{name} got by, {now}')} {_sentence('stay close, the move back is on')}",
+            f"{_sentence(f'{name} is through, {now}')} {_sentence('keep the pressure on')}",
+            ][n % 3]
+
+
+def lost_places_phrase(count: int, position: int) -> str:
+    """'Lost two places, P eight. Heads down, plenty of race left.'"""
+    return f"{_sentence(f'lost {number_words(count)} places, {say_position(position)}')} " \
+           f"{_sentence('heads down, keep at it')}"
+
+
+def fight_back_phrase(name: str | None, position: int, heard_lost: bool, n: int = 0) -> str:
+    """Retaking a place moments after losing it. heard_lost: the lost place was already called
+    ('Straight back past Hamilton, P five. Great response.'); otherwise the place was only gone
+    briefly and it's a good defence ('Good fight, Hamilton couldn't make it stick, P five.')."""
+    who = name or "them"
+    pos = say_position(position)
+    if heard_lost:
+        return [f"{_sentence(f'straight back past {who}, {pos}')} Great response.",
+                f"{_sentence(f'got it back from {who}, {pos}')} That's how you answer.",
+                f"{_sentence(f'back ahead of {who}, {pos}')} Good fight."][n % 3]
+    return [_sentence(f"good fight, {who} couldn't make it stick, {pos}"),
+            _sentence(f"nicely defended, back ahead of {who}, {pos}"),
+            _sentence(f"great racing with {who}, you kept the place, {pos}")][n % 3]
 
 
 def defend_phrase(name: str | None, gap_ms: float) -> str:

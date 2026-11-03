@@ -486,3 +486,18 @@ You choose which unanswered questions get worked on, by flagging them on the rad
   does it by hand. Never overwrites, safe to repeat; the old folder is untouched.
 - `upload.repo`: the installed app pushes recordings through that clone, so auto-upload (and the
   feedback loop) keeps working.
+
+## From the 2-3 Nov races (Melbourne, Shanghai)
+
+- Strategy: Melbourne said "Change, box lap ten instead of seven" on lap seven for a 2.3 s gain.
+  Now a stop due this lap or next only moves for safety (`freeze_laps: 2`); replayed, lap seven
+  holds and the box call comes. Plan wording is one lap at every tempo (no "anywhere from").
+- Race craft, both ways: a lost place waits 8 s (`lost_hold_s`); taking it back within 20 s is
+  praised ("Good fight, Hamilton couldn't make it stick" / "Straight back past Hamilton, great
+  response"); places lost around your stop aren't called (ten were in Melbourne); a flashback
+  no longer repeats a lost-place call or swallows one. Golden calls updated and checked.
+- Questions: rejoin, true track position (got Melbourne lap 9 right: "P seven on the road ...
+  about P three", P3 a lap later), tyre management tips, speed tips, "are these tyres going to
+  make it", "be definitive", "repeat the strategy", tyres-vs-strategy phrasing.
+- Open: the pit loss estimate looks high at Melbourne (26 s from two measured stops); the rejoin
+  answer in the pit lane leans on it.

@@ -91,6 +91,8 @@ class RaceCraft(BaseModel):
     safety_car: bool = True          # "safety car in this lap"
     damage: bool = True              # damage after contact
     pass_hold_s: float = Field(default=4.0, ge=0)      # a pass must stick this long
+    lost_hold_s: float = Field(default=8.0, ge=0)      # a lost place too (the fight goes on)
+    fight_window_s: float = Field(default=20.0, ge=0)  # taking it back this soon = a good fight
     defend_gap_s: float = Field(default=1.0, gt=0)     # car behind inside this and closing
     clear_gap_s: float = Field(default=2.0, gt=0)      # ... until it drops back past this
     attack_gap_s: float = Field(default=4.0, gt=0)     # car ahead within this ...
@@ -124,6 +126,10 @@ class Strategy(BaseModel):
     # change_gain_s quicker (or the tyres won't make it, or a safety car).
     commit_laps: int = Field(default=3, ge=0)
     change_gain_s: float = Field(default=1.5, ge=0)
+    # The stop is this lap or the next: no change for time at all, only for safety (tyres
+    # won't make it, stayed out, plan impossible). Melbourne, 2 Nov: "box lap ten instead of
+    # seven" on lap seven, for 2.3 s, inside the model's own error.
+    freeze_laps: int = Field(default=2, ge=0)
     # Safe call vs gamble (strategy/decision.py): a safe plan ends every stint margin_pct under
     # the wear limit, allowing for how sure the wear rate is.
     margin_pct: float = Field(default=5.0, ge=0)
