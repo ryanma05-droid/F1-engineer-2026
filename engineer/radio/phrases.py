@@ -416,6 +416,61 @@ def _stops_body(plan, verbosity: str, after_stop: bool) -> str:
             f"{number_words(first.lap)} for {say_compound(first.compound)}, then {rest}")
 
 
+def say_track(track_id: int | None) -> str:
+    """'Sakhir (Bahrain)' -> 'Bahrain', 'Baku (Azerbaijan)' -> 'Baku', 'Austria (Reverse)' ->
+    'Austria reverse'."""
+    from engineer.ingest.formats.f1_2025 import TRACKS
+    name = TRACKS.get(track_id, "this track") if track_id is not None else "this track"
+    if "(" not in name:
+        return name
+    head, inner = name.split(" (", 1)
+    inner = inner.rstrip(")")
+    if inner == "Reverse":
+        return f"{head} reverse"
+    return inner if head == "Sakhir" else head
+
+
+_LAPS_HOW = {"last race here": "same as your last race here",
+             "usual distance": "your usual race distance"}
+
+
+def prerace_phrase(pre, verbosity: str = "normal", limit_pct: float = 60.0,
+                   margin_pct: float = 5.0) -> str:
+    """The pre-race plan (strategy.prerace.PreRacePlan):
+    'Melbourne, fifteen laps, same as your last race here. Start on mediums, one stop, box end of
+    lap eight for hards. Starting on softs is two seconds slower.'
+    On the grid (the tyres are fitted): 'On these mediums: one stop, box end of lap eight for
+    hards.'"""
+    track = say_track(pre.track_id)
+    best = pre.best
+    if best is None:
+        return _sentence(f"no tyre numbers for {track} yet",
+                         "I'll call the plan a couple of laps in")
+    plan, total = best.decision.call.plan, pre.laps.laps if pre.laps else 0
+    body = _stops_body(plan, verbosity, False)
+    if not plan.stops:
+        body += f", about {say_percent(best.decision.call.last.end_wear)} at the flag"
+    tight = best.decision.taken_gamble
+    note = "tight on the tyres, look after them" if tight else ""
+    if pre.grid:
+        return _sentence(f"on these {say_compound(best.compound)}: {body}", note)
+    out = [_sentence(f"{track}, {number_words(total)} laps",
+                     _LAPS_HOW.get(pre.laps.how if pre.laps else "", "")),
+           _sentence(f"start on {say_compound(best.compound)}", body, note)]
+    if verbosity != "terse":
+        gamble = pre.gamble
+        if gamble is not None:
+            gain = int((best.cost_s - gamble.cost_s) * 1000)
+            out.append(_sentence(f"starting on {say_compound(gamble.compound)} is "
+                                 f"{say_gap(gain)} quicker", "but tight on the tyres"))
+        elif len(pre.starts) > 1:
+            nxt = pre.starts[1]
+            gap = int((nxt.cost_s - best.cost_s) * 1000)
+            out.append(_sentence(f"starting on {say_compound(nxt.compound)} is "
+                                 + ("about the same" if gap < 500 else f"{say_gap(gap)} slower")))
+    return " ".join(out)
+
+
 def _where_wear(stint, total_laps: int) -> str:
     """'at the flag' / 'by lap nineteen'."""
     return "at the flag" if stint.end_lap >= total_laps else f"by lap {number_words(stint.end_lap)}"

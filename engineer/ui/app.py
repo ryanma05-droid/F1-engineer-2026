@@ -77,7 +77,9 @@ class AppWindow:
             ("POST", "/api/settings"): self._api_settings,
             ("POST", "/api/report/build"): self._api_build,
             ("POST", "/api/feedback/dismiss"): self._api_dismiss,
+            ("POST", "/api/prerace"): self._api_prerace,
         })
+        self._prerace_busy = False
 
     # -- lifecycle ----------------------------------------------------------------------------
 
@@ -182,6 +184,12 @@ class AppWindow:
         corners = self.engine.corners
         return card(corners.coach_laps, corners.cfg.focus_after_laps, corners.cfg.min_loss_s)
 
+    def _prerace(self) -> dict:
+        sa = self.engine.strategy
+        return {"racing": sa.racing(), "grid": sa.on_grid(), "busy": self._prerace_busy,
+                "defaults": sa.prerace_defaults(),
+                "plan": prerace_dict(sa.prerace, sa) if sa.prerace is not None else None}
+
     def snapshot(self) -> dict:
         from engineer.voice.controller import button_label
         v = self.cfg.voice
@@ -199,6 +207,7 @@ class AppWindow:
             "setup_done": self.cfg.ui.setup_done, "report": self._report_status(),
             "feedback": self._feedback_status(),
             "coaching": self._coaching(),
+            "prerace": self._prerace(),
             "console_player": self.cfg.platform == "console",
         }
 
@@ -232,6 +241,32 @@ class AppWindow:
         if not await asyncio.to_thread(fb.dismiss, entry_id):
             return Response(404, {"error": "no such question"})
         fb.write_markdown_in_background()
+        return Response(200, self.snapshot())
+
+    async def _api_prerace(self, body: dict) -> Response:
+        """Work out the pre-race plan for the track and laps picked in the window."""
+        track, laps = body.get("track_id"), body.get("laps")
+        if track is not None and (not isinstance(track, int) or track not in f.TRACKS):
+            return Response(400, {"error": "unknown track"})
+        if laps is not None and (not isinstance(laps, int) or not 1 <= laps <= 99):
+            return Response(400, {"error": "laps must be 1 to 99"})
+        loop = asyncio.get_running_loop()
+        done: asyncio.Future = loop.create_future()
+
+        def got(plan) -> None:
+            if not done.done():
+                done.set_result(plan)
+        why = self.engine.strategy.ask_prerace(got, track, laps)
+        if why is not None:
+            return Response(409, {"error": why, **self.snapshot()})
+        self._prerace_busy = True
+        try:
+            # Answered by the strategy worker; picked up on the next packet or the idle tick.
+            await asyncio.wait_for(done, timeout=20)
+        except asyncio.TimeoutError:
+            return Response(504, {"error": "the strategy worker didn't answer"})
+        finally:
+            self._prerace_busy = False
         return Response(200, self.snapshot())
 
     async def _api_settings(self, body: dict) -> Response:
@@ -273,6 +308,28 @@ class AppWindow:
             except OSError as exc:
                 log.warning("could not save settings (%s)", exc)
         return Response(200, self.snapshot())
+
+
+def prerace_dict(plan, sa) -> dict:
+    """The pre-race plan for the app window: each start tyre's stints, time and wear."""
+    from engineer.radio import phrases
+    names = {16: "Soft", 17: "Medium", 18: "Hard"}
+    best = plan.best
+    out = {"track": phrases.say_track(plan.track_id), "track_id": plan.track_id,
+           "laps": plan.laps.laps if plan.laps else None,
+           "how": plan.laps.how if plan.laps else None, "grid": plan.grid, "error": plan.error,
+           "said": phrases.prerace_phrase(plan, "normal", sa.tyres.limit_pct, sa.cfg.margin_pct)
+           if plan.error is None else None, "starts": []}
+    for st in plan.starts:
+        call = st.decision.call
+        out["starts"].append({
+            "compound": names.get(st.compound, "?"), "key": st.compound,
+            "best": st is best, "delta_s": round(st.cost_s - best.cost_s, 1),
+            "safe": bool(call.safe), "tight": bool(st.decision.taken_gamble or not call.safe),
+            "stints": [{"compound": names.get(t.compound, "?"), "from": t.start_lap,
+                        "to": t.end_lap, "wear": round(t.end_wear)
+                        if t.end_wear < 1000 else None} for t in call.stints]})
+    return out
 
 
 def report_insights(cfg: Config) -> dict:

@@ -36,6 +36,21 @@ _DRIVER = r"\b(" + "|".join(sorted(set(FIRST_NAMES) | SURNAMES, key=len, reverse
 _TURN = (r"\bturn (\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|"
          r"thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty)\b")
 
+# Tracks as they're said ("strategy for Suzuka", "the race in Spain"): word -> game track id.
+TRACK_WORDS = {
+    "melbourne": 0, "australia": 0, "albert park": 0, "shanghai": 2, "china": 2,
+    "bahrain": 3, "sakhir": 3, "barcelona": 4, "catalunya": 4, "spain": 4, "monaco": 5,
+    "montreal": 6, "canada": 6, "silverstone": 7, "britain": 7, "british": 7,
+    "hungaroring": 9, "hungary": 9, "budapest": 9, "spa": 10, "belgium": 10, "monza": 11,
+    "italy": 11, "singapore": 12, "suzuka": 13, "japan": 13, "abu dhabi": 14, "yas marina": 14,
+    "texas": 15, "austin": 15, "cota": 15, "brazil": 16, "interlagos": 16, "sao paulo": 16,
+    "austria": 17, "red bull ring": 17, "spielberg": 17, "mexico": 19, "baku": 20,
+    "azerbaijan": 20, "zandvoort": 26, "netherlands": 26, "dutch": 26, "imola": 27,
+    "jeddah": 29, "saudi": 29, "miami": 30, "vegas": 31, "las vegas": 31, "qatar": 32,
+    "losail": 32,
+}
+_TRACK = r"(" + "|".join(sorted(TRACK_WORDS, key=len, reverse=True)) + r")"
+
 # (intent, patterns). A pattern is a regex searched in the normalised text. Order matters: the
 # first intent with a matching pattern wins, so specific questions come before general ones.
 RULES: list[tuple[str, list[str]]] = [
@@ -58,6 +73,14 @@ RULES: list[tuple[str, list[str]]] = [
     # The mode needs saying as a mode: "give me some coaching" / "coach me" ask for a tip now.
     ("tempo_coaching", [r"\bcoaching mode\b", r"\b(switch|go|change|put me) (in)?to coaching\b",
                         r"\bwork on my driving\b"]),
+    # Before the race (car and tyre setup): "what tyres should I start on?", "strategy for
+    # Suzuka", "plan for twenty laps". Any plain "what's the plan?" asked before the lights go
+    # out gets the same answer (answers.py).
+    ("prerace_plan", [r"\b(start|starting) (the race )?on\b", r"\bstart(ing)? (tyres?|compound)\b",
+                      r"\bpre ?race\b",
+                      r"\b(strategy|plan) for (the race|\d+ laps?|" + _TRACK + r")\b",
+                      r"\b(strategy|plan)\b.*\b\d+ laps?\b", r"\b(strategy|plan) for\b.*\blaps?\b",
+                      r"\btyres? for the race\b"]),
     ("tempo_chatty", [r"\b(talk|say) more\b", r"\btalk to me more\b",
                       r"\b(give me )?(some |more )?chatter\b", r"\bmore (chatty|talk|info|information|detail)\b",
                       r"\bbe (more )?chatty\b", r"\bchattier\b", r"\bmore often\b"]),
@@ -209,6 +232,34 @@ def log_text(text: str) -> str:
     rest = _LOG_TRIGGER.sub("", text, count=1).strip()
     rest = re.sub(r"^(please|thanks|thank you)\W*$", "", rest, flags=re.I).strip()
     return rest if len(re.findall(r"[a-z0-9']+", rest, re.I)) >= 3 else ""
+
+
+def track_in(text: str) -> int | None:
+    """'strategy for Suzuka' -> 13 (the game's track id)."""
+    m = re.search(r"\b" + _TRACK + r"\b", normalise(text))
+    return TRACK_WORDS[m.group(1)] if m else None
+
+
+_NUMBER_WORDS = {w: n for n, w in enumerate(
+    "zero one two three four five six seven eight nine ten eleven twelve thirteen fourteen "
+    "fifteen sixteen seventeen eighteen nineteen".split())}
+_TENS_WORDS = {"twenty": 20, "thirty": 30, "forty": 40, "fifty": 50, "sixty": 60, "seventy": 70,
+               "eighty": 80}
+
+
+def laps_in(text: str) -> int | None:
+    """'plan for 20 laps' / 'twenty two laps' -> the race length said, if any."""
+    t = normalise(text)
+    m = re.search(r"\b(\d+) laps?\b", t)
+    if m:
+        n = int(m.group(1))
+        return n if 1 <= n <= 99 else None
+    m = re.search(r"\b(?:(" + "|".join(_TENS_WORDS) + r")[ -]?)?(" + "|".join(_NUMBER_WORDS)
+                  + r")? laps?\b", t)
+    if m and (m.group(1) or m.group(2)):
+        n = _TENS_WORDS.get(m.group(1) or "", 0) + _NUMBER_WORDS.get(m.group(2) or "", 0)
+        return n or None
+    return None
 
 
 def driver_in(text: str, names: list[str | None]) -> int | None:

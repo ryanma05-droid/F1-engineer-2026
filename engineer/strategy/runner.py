@@ -16,7 +16,13 @@ import queue
 from dataclasses import dataclass, replace
 from pathlib import Path
 
-from engineer.strategy.model import (GameTyreInfo, ModelSettings, StrategyModel, build_model)
+from engineer.strategy.model import (
+    GameTyreInfo,
+    ModelSettings,
+    StrategyModel,
+    build_model,
+)
+from engineer.strategy.prerace import RaceLength, race_length, start_situations
 from engineer.strategy.sim import Plan, RaceSituation, SimResult, plan_cost, simulate
 
 log = logging.getLogger(__name__)
@@ -24,7 +30,7 @@ log = logging.getLogger(__name__)
 HISTORY_COLUMNS = ("session_uid", "track_id", "car_idx", "is_player", "lap", "stint", "stint_lap",
                    "lap_time_ms", "clean", "safety_car", "invalid", "pit_in_lap", "pit_out_lap",
                    "race_start_lap", "visual_compound", "fuel_kg", "wear_rl", "wear_rr",
-                   "wear_fl", "wear_fr")
+                   "wear_fl", "wear_fr", "session_type")
 
 
 @dataclass(frozen=True)
@@ -44,6 +50,12 @@ class StrategyRequest:
     hold_lap: int | None = None          # the committed plan's first stop: what it costs now
     hold_compound: int | None = None
     safe_limits: tuple[float, ...] = ()  # also plan with these (lower) wear limits: safe options
+    # The pre-race plan (strategy/prerace.py): solve once per start compound. situation.total_laps
+    # 0 = not known (the worker works it out from the history).
+    starts: tuple[int, ...] = ()
+    laps_how: str = "game"               # where situation.total_laps came from
+    recent_race: tuple[int, int] | None = None   # (track, laps) of a race seen live this run
+    two_compound: tuple[str, int] = ("auto", 10)  # strategy.two_compound_rule, ..._min_laps
 
 
 @dataclass
@@ -60,6 +72,8 @@ class StrategyResult:
     situation: RaceSituation | None = None   # what was solved (wear, sets, laps) after the model
     options: tuple = ()                  # candidate plans: each stop count, each next tyre
     hold: Plan | None = None             # hold_lap: the best plan keeping the committed stop
+    starts: tuple = ()                   # pre-race: (start compound, StrategyResult), each
+    race_length: RaceLength | None = None    # pre-race: the laps planned for, and why
 
 
 def load_history(features_dir: Path | str | None) -> list[dict]:
@@ -79,8 +93,31 @@ def load_history(features_dir: Path | str | None) -> list[dict]:
         return []
 
 
+def solve_prerace(req: StrategyRequest, history: list[dict]) -> StrategyResult:
+    """Every start compound from lap 0 (strategy/prerace.py)."""
+    sit = req.situation
+    length = RaceLength(sit.total_laps, req.laps_how) if sit.total_laps \
+        else race_length(req.track_id, history, req.recent_race)
+    if length is None:
+        return StrategyResult(req.seq, req.reason, 0, None, SimResult(None), error="no_laps")
+    rule, min_laps = req.two_compound
+    base = replace(sit, total_laps=length.laps,
+                   require_two=rule == "on" or (rule == "auto" and length.laps >= min_laps))
+    found = []
+    for c, s in start_situations(base, req.starts):
+        r = solve(replace(req, starts=(), situation=s), history)
+        if r.error is None and r.sim.best is not None:
+            found.append((c, r))
+    best = min((r.sim.best for _, r in found), key=lambda p: p.cost_s, default=None)
+    return StrategyResult(req.seq, req.reason, 0, found[0][1].model if found else None,
+                          SimResult(best), situation=base, starts=tuple(found),
+                          race_length=length)
+
+
 def solve(req: StrategyRequest, history: list[dict]) -> StrategyResult:
     try:
+        if req.starts:
+            return solve_prerace(req, history)
         # This session might also be in the history table (a replay of a built recording).
         past = [r for r in history if r.get("session_uid") != req.session_uid]
         all_rows = past + list(req.session_rows)

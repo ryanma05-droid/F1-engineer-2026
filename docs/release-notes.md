@@ -22,6 +22,10 @@ folder and offers to bring your recordings, history, reports and settings over (
 
 ### New in this version
 
+- Pre-race tyre plan: before the race ask "what tyres should I start on?" (or "strategy for
+  Suzuka, fifteen laps"), or use the Pre-race card on the Live tab. It's also said when
+  qualifying ends.
+
 - Strategy: one committed call ("box end of lap nine for softs"), the safe call vs a named
   gamble, "Copy, softs." after a stop, and "what if I go a lap later?" on the radio.
 - "Log that" on the radio flags a question you didn't get a good answer to; the Live tab lists

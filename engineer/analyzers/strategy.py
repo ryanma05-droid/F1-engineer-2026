@@ -26,6 +26,11 @@ latest laps and every plan is simulated again (engineer/strategy). What you hear
   pitted, watch the undercut."
 
 Only in races of `min_race_laps` or more, in the dry, on slicks. Wet strategy is not covered yet.
+
+Pre-race (strategy/prerace.py): before the lights go out, "what tyres should I start on?" (or
+the app window's Pre-race card) gets the start tyre and the stops that go with it, for the track
+and laps you name or the ones the engineer remembers. Said by itself when a qualifying session
+ends (you go to car and tyre setup next).
 """
 
 from __future__ import annotations
@@ -44,7 +49,20 @@ from engineer.radio import phrases
 from engineer.radio.director import Priority, RadioCall, RadioDirector
 from engineer.state.race_state import RaceState
 from engineer.strategy.decision import Decision, DecisionSettings, decide, wear_at
-from engineer.strategy.model import DRY, GameTyreInfo, ModelSettings, TyreSet, game_tyre_info
+from engineer.strategy.model import (
+    DRY,
+    GameTyreInfo,
+    ModelSettings,
+    TyreSet,
+    game_tyre_info,
+)
+from engineer.strategy.prerace import (
+    PreRacePlan,
+    PreRaceStart,
+    laps_at,
+    order_starts,
+    usual_share,
+)
 from engineer.strategy.runner import HISTORY_COLUMNS, StrategyRequest, StrategyResult
 from engineer.strategy.sim import Plan, RaceSituation
 
@@ -52,6 +70,7 @@ log = logging.getLogger(__name__)
 
 SC_LATE_IN_LAP = 0.85        # SC out after 85% of the lap: too late for this lap's pit entry
 RAIN = 3                     # session weather: 3 light rain and above
+QUALIFYING = set(range(5, 10))   # Q1, Q2, Q3, short and one-shot qualifying
 
 
 @dataclass(frozen=True)
@@ -76,6 +95,14 @@ class StrategyAnalyzer:
         self._rows: dict[int, tuple[LapFeatures, dict]] = {}
         self._callbacks: dict[int, object] = {}     # request seq -> push-to-talk answer
         self._seq = 0
+        # Kept across sessions, for the pre-race plan (the race menus send nothing).
+        self.last_track: int | None = None          # the newest session's track
+        self.last_session_type: int | None = None
+        self.recent_race: tuple[int, int] | None = None   # (track, laps) of a race seen this run
+        self._sets_seen: tuple[int, object] | None = None  # (track, Tyre Sets) last received
+        self.prerace: PreRacePlan | None = None     # the latest pre-race plan (app window)
+        self.prerace_auto = True                    # say it when qualifying ends
+        self._prerace_auto_done: int | None = None  # ... once per session
         self._reset()
         bus.subscribe(ev.LapCompleted, self.on_lap)
         bus.subscribe(ev.PitEntry, self.on_pit_entry)
@@ -84,6 +111,8 @@ class StrategyAnalyzer:
         bus.subscribe(ev.RadioMessage, self._on_said)
         bus.subscribe(ev.SessionStarted, lambda e: (self._reset(), self._rows.clear()))
         bus.subscribe(ev.Flashback, self._on_flashback)
+        bus.subscribe(ev.SessionStarted, self._remember_session)
+        bus.subscribe(ev.SessionEnded, self._on_session_ended)
 
     def _reset(self) -> None:
         self.latest: StrategyResult | None = None
@@ -226,11 +255,7 @@ class StrategyAnalyzer:
             seq=self._seq, reason=reason, track_id=s.session.track_id,
             session_uid=f"{s.session_uid or 0:016x}", session_rows=rows,
             current_stint=stint_rows, game=game, situation=sit,
-            settings=ModelSettings(
-                fuel_s_per_kg=self.tyres.fuel_s_per_kg, ai_weight=self.cfg.ai_weight,
-                game_prior_laps=self.cfg.game_prior_laps, game_deg_sd=self.cfg.game_deg_sd,
-                fallback_deg_s_per_pct=self.cfg.fallback_deg_s_per_pct,
-                pit_loss_s=self.cfg.pit_loss_s, sc_pit_loss_factor=self.cfg.sc_pit_loss_factor),
+            settings=self._model_settings(),
             sc_compare=sc_compare, what_if_box_lap=what_if_box_lap,
             what_if_compound=what_if_compound,
             hold_lap=hold.lap if hold is not None else None,
@@ -298,6 +323,14 @@ class StrategyAnalyzer:
         self._drain()
         if packet_id == f.PacketId.SESSION:
             self._safety_car_check()
+            ses = self.state.session
+            if ses.is_race and ses.track_id is not None and (ses.total_laps or 0) > 0:
+                self.recent_race = (ses.track_id, int(ses.total_laps))
+        elif packet_id == f.PacketId.TYRE_SETS:
+            p, track = self.state.player_index, self.state.session.track_id
+            raw = self.state.cars.tyre_sets[p] if p is not None else None
+            if raw is not None and track is not None:
+                self._sets_seen = (track, raw)
         elif packet_id == f.PacketId.LAP_DATA:
             self._box_check()
             # In the pit lane the game sends a gap of 0: keep the last real one for "where do I
@@ -315,7 +348,8 @@ class StrategyAnalyzer:
         for res in self.runner.poll():
             callback = self._callbacks.pop(res.seq, None)
             if callback is not None:             # a question: answer it, the plan is untouched
-                callback(None if res.error else res)
+                # The pre-race plan reads the error itself ("no_laps": ask for the laps).
+                callback(res if res.reason == "prerace" or not res.error else None)
                 continue
             if res.seq <= self.applied_seq or res.error or res.sim.best is None:
                 continue
@@ -568,6 +602,134 @@ class StrategyAnalyzer:
         if np.isnan(gap) or gap > self.cfg.undercut_gap_s * 1000:
             return
         self._say("undercut", phrases.undercut_phrase(_name(c.names[car])), Priority.NORMAL)
+
+    # -- pre-race --------------------------------------------------------------------------------
+
+    def _remember_session(self, e: ev.SessionStarted) -> None:
+        if e.track_id is not None:
+            self.last_track, self.last_session_type = e.track_id, e.session_type
+
+    def _on_session_ended(self, e: ev.SessionEnded) -> None:
+        """Qualifying done: car and tyre setup for the race comes next, so say the plan now."""
+        if not self.prerace_auto or self.last_session_type not in QUALIFYING \
+                or self._prerace_auto_done == e.session_uid or not self.cfg.enabled:
+            return
+        self._prerace_auto_done = e.session_uid
+
+        def said(plan: PreRacePlan) -> None:
+            if plan.starts:          # nothing to say without tyre numbers here
+                self._say("prerace", phrases.prerace_phrase(
+                    plan, self.verbosity, self.tyres.limit_pct, self.cfg.margin_pct),
+                    Priority.HIGH, max_wait_s=60.0, wait_for_straight=False)
+        self.ask_prerace(said, track_id=self.last_track)
+
+    def racing(self) -> bool:
+        """The race is on (lights out): the race calls apply, not the pre-race plan."""
+        return self.state.session.is_race and (self.state.session_time or 0.0) > 0.0
+
+    def on_grid(self) -> bool:
+        s = self.state.session
+        return s.is_race and s.track_id is not None and (s.total_laps or 0) > 0 \
+            and not self.racing() and self.state.player_index is not None
+
+    def prerace_defaults(self) -> dict:
+        """The track and laps a pre-race plan would use with nothing said (app window)."""
+        if self.on_grid():
+            s = self.state.session
+            return {"track_id": s.track_id, "laps": int(s.total_laps), "how": "game"}
+        track = self.state.session.track_id if self.state.session.track_id is not None \
+            else self.last_track
+        if self.prerace is not None:          # the last plan asked for (window or radio)
+            return {"track_id": self.prerace.track_id,
+                    "laps": self.prerace.laps.laps if self.prerace.laps else None,
+                    "how": self.prerace.laps.how if self.prerace.laps else None}
+        laps = None
+        if track is not None and self.recent_race is not None:
+            if self.recent_race[0] == track:
+                laps = self.recent_race[1]
+            else:
+                share = usual_share(*self.recent_race)
+                laps = laps_at(track, share) if share else None
+        return {"track_id": track, "laps": laps, "how": None}
+
+    def ask_prerace(self, callback, track_id: int | None = None,
+                    laps: int | None = None) -> str | None:
+        """The pre-race plan: callback(PreRacePlan) when it's worked out. Returns None when
+        asked, else why it can't be: "racing" (lights are out) or "no_track"."""
+        if self.racing():
+            return "racing"
+        s, p = self.state, self.state.player_index
+        grid = self.on_grid() and track_id in (None, s.session.track_id) and laps is None
+        if grid:
+            track, total, how = s.session.track_id, int(s.session.total_laps), "game"
+            raw = s.cars.tyre_sets[p]
+            fitted = s.cars.visual_compound[p]
+            starts = (int(fitted),) if fitted in DRY else DRY
+        else:
+            track = track_id if track_id is not None else (
+                s.session.track_id if s.session.track_id is not None else self.last_track)
+            if track is None:
+                return "no_track"
+            total, how = (laps, "said") if laps else (0, "")
+            raw = self._sets_seen[1] if self._sets_seen and self._sets_seen[0] == track else None
+            starts = DRY
+        sets, info = self._all_sets(raw)
+        sit = RaceSituation(
+            lap_done=0, total_laps=total, compound=starts[0], wear=0.0, sets=sets,
+            used=frozenset(), require_two=False, limit_pct=self.tyres.limit_pct,
+            pit_loss_s=self.cfg.pit_loss_s, max_stops=self.cfg.max_stops,
+            window_s=self.cfg.window_s, over_limit_s_per_pct=self.cfg.over_limit_s_per_pct,
+            min_gain_s=self.cfg.min_gain_s)
+        self._seq += 1
+        req = StrategyRequest(
+            seq=self._seq, reason="prerace", track_id=track, session_uid="prerace",
+            session_rows=(), current_stint=(), game=game_tyre_info(info) if info else None,
+            situation=sit, settings=self._model_settings(),
+            safe_limits=(self.tyres.limit_pct - self.cfg.margin_pct,
+                         self.tyres.limit_pct - 2 * self.cfg.margin_pct),
+            starts=tuple(starts), laps_how=how, recent_race=self.recent_race,
+            two_compound=(self.cfg.two_compound_rule, self.cfg.two_compound_min_laps))
+
+        def done(res: StrategyResult | None) -> None:
+            plan = self._prerace_plan(res, track, grid)
+            self.prerace = plan
+            callback(plan)
+        self._callbacks[self._seq] = done
+        self.runner.submit(req)
+        self._drain()
+        return None
+
+    def _all_sets(self, raw) -> tuple[dict[int, list[float]], list[TyreSet]]:
+        """Every dry set you could run in the race, the fitted one included."""
+        if raw is None:
+            n = self.cfg.assume_sets_per_compound
+            return {c: [0.0] * n for c in DRY}, []
+        sets, info = {}, []
+        for k, t in enumerate(raw["m_tyreSetData"]):
+            c = int(t["m_visualTyreCompound"])
+            fitted = bool(t["m_fitted"]) or k == int(raw["m_fittedIdx"])
+            info.append(TyreSet(c, float(t["m_wear"]), int(t["m_usableLife"]) or None,
+                                int(t["m_lapDeltaTime"]) / 1000.0, fitted))
+            if (t["m_available"] or fitted) and c in DRY:
+                sets.setdefault(c, []).append(float(t["m_wear"]))
+        return sets, info
+
+    def _prerace_plan(self, res: StrategyResult | None, track: int, grid: bool) -> PreRacePlan:
+        if res is None or res.error:
+            return PreRacePlan(track, None, (), grid, res.error if res else "failed")
+        starts = []
+        for c, r in res.starts:
+            dec = self._decide(r)
+            if dec is not None:
+                starts.append(PreRaceStart(c, dec, r.situation))
+        return PreRacePlan(track, res.race_length, tuple(order_starts(starts)), grid)
+
+    def _model_settings(self) -> ModelSettings:
+        return ModelSettings(
+            fuel_s_per_kg=self.tyres.fuel_s_per_kg, ai_weight=self.cfg.ai_weight,
+            game_prior_laps=self.cfg.game_prior_laps, game_deg_sd=self.cfg.game_deg_sd,
+            fallback_deg_s_per_pct=self.cfg.fallback_deg_s_per_pct,
+            pit_loss_s=self.cfg.pit_loss_s, sc_pit_loss_factor=self.cfg.sc_pit_loss_factor)
 
     # -- output ----------------------------------------------------------------------------------
 

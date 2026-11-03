@@ -104,6 +104,26 @@ button { font: inherit; color: inherit; }
 .fb button { background: none; border: 1px solid var(--line); border-radius: 6px; color: var(--ink-3);
   padding: 2px 8px; font-size: 12px; cursor: pointer; }
 .fb button:hover { color: var(--ink); border-color: #444862; }
+/* pre-race tyre plan */
+.pre-form { display: grid; grid-template-columns: 1fr 76px auto; gap: 8px; align-items: end; }
+.pre-form label { display: block; font-size: 11px; color: var(--ink-3); text-transform: uppercase;
+  letter-spacing: .1em; margin-bottom: 4px; }
+.pre-form select, .pre-form input { width: 100%; background: var(--panel-2); color: var(--ink);
+  border: 1px solid var(--line); border-radius: 8px; padding: 8px; font: inherit; font-size: 13px; }
+.pre-head { margin-top: 14px; font-size: 12px; color: var(--ink-3); }
+.pre-said { margin-top: 4px; font-size: 13.5px; }
+.pre-rows { display: grid; grid-template-columns: 74px 1fr 52px; gap: 8px 10px; align-items: center;
+  margin-top: 12px; }
+.pre-rows .n { font-weight: 600; font-size: 13px; }
+.pre-rows .v { text-align: right; font-size: 12.5px; font-weight: 600; color: var(--ink-2); }
+.pre-rows .dim { opacity: .72; }
+.stints { display: flex; gap: 2px; height: 22px; border-radius: 6px; overflow: hidden; }
+.stints i { display: flex; align-items: center; justify-content: center; font-style: normal;
+  font-size: 11px; font-weight: 700; color: #15161f; white-space: nowrap; overflow: hidden; }
+.stints .Soft { background: #e8453c; color: #fff; } .stints .Medium { background: #f2c94c; }
+.stints .Hard { background: #e9e9ee; }
+.badge.pick { background: rgba(225,6,0,.18); color: var(--red-2); }
+.badge.tight { background: rgba(242,201,76,.16); color: #f2c94c; }
 /* segmented tempo */
 .seg { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
 .seg.two { grid-template-columns: repeat(2, 1fr); }
@@ -216,6 +236,11 @@ ul.good li::before { content: "\2713"; position: absolute; left: 0; top: 1px; wi
           <div id="coach"></div></div>
       </div>
       <div style="display:grid;gap:16px;align-content:start">
+        <div class="card"><h3><span class="grow">Pre-race tyre plan</span><span class="muted small" id="preNote"></span></h3>
+          <div class="pre-form"><div><label for="preTrack">Track</label><select id="preTrack"></select></div>
+            <div><label for="preLaps">Laps</label><input id="preLaps" type="number" min="1" max="99" inputmode="numeric"></div>
+            <button class="btn primary" id="preGo">Plan it</button></div>
+          <div id="prerace"></div></div>
         <div class="card"><h3>Push to talk</h3><div id="ptt"></div></div>
         <div class="card"><h3>Engineer tempo</h3><div class="seg" id="tempoLive"></div>
           <div class="tip" id="tempoTipLive"></div></div>
@@ -259,6 +284,7 @@ const TEMPOS = [
   ["chatty", "Chatty", "Everything, with more detail: reasons, praise, gaps, extra context."],
   ["coaching", "Coaching", "Where to find speed each lap against the fastest car on track. Less race chatter."],
 ];
+const TRACKS = __TRACKS__;
 const DETAILS = [
   ["plain", "Plain", "“Brake slightly later, then carry a bit more speed through the corner.”"],
   ["specific", "Specific", "“Braking fifteen metres earlier, minimum speed eight k p h down.”"],
@@ -418,6 +444,58 @@ function renderCoach() {
       <span><i style="background:var(--gain)"></i>quicker</span><span>line: last ${Math.min(6, c.laps)} laps</span></div>` + hint);
 }
 
+const LAPS_HOW = {"last race here": "same as your last race here", "usual distance": "your usual race distance",
+  "game": "from the game", "said": ""};
+let preTouched = false;
+function initPre() {
+  $("#preTrack").innerHTML = `<option value="">Pick a track</option>` +
+    TRACKS.map(t => `<option value="${t[0]}">${esc(t[1])}</option>`).join("");
+  $("#preTrack").onchange = () => { preTouched = true; };
+  $("#preLaps").oninput = () => { preTouched = true; };
+  $("#preGo").onclick = planPre;
+}
+async function planPre() {
+  const t = $("#preTrack").value, l = $("#preLaps").value, go = $("#preGo");
+  go.disabled = true; go.textContent = "Working…"; $("#preNote").textContent = "";
+  try {
+    const r = await post("/api/prerace", {track_id: t === "" ? null : +t, laps: l === "" ? null : +l});
+    if (r.prerace) { S = r; preTouched = false; }
+    if (r.error) $("#preNote").textContent = {no_track: "pick a track", racing: "the race is on"}[r.error] || r.error;
+  } finally { go.disabled = false; go.textContent = "Plan it"; render(); }
+}
+function stintBar(st, laps) {
+  return `<div class="stints">${st.stints.map(x => `<i class="${x.compound}" style="flex:${Math.max(1, x.to - x.from)}"
+    title="${x.compound}: laps ${x.from + 1}–${x.to}${x.wear != null ? `, about ${x.wear}% worn at the end` : ""}">${x.to < laps ?
+    "L" + x.to : ""}${x.wear != null ? ` · ${x.wear}%` : ""}</i>`).join("")}</div>`;
+}
+function renderPre() {
+  const p = S.prerace, d = p.defaults, el = $("#prerace");
+  if (!preTouched && document.activeElement !== $("#preTrack") && document.activeElement !== $("#preLaps")) {
+    $("#preTrack").value = d.track_id ?? ""; $("#preLaps").value = d.laps ?? "";
+  }
+  $("#preGo").disabled = p.racing || p.busy;
+  const ask = S.controller.type !== "off" ? `hold <span class="btnkey">${esc(S.controller.button)}</span> and ask` : "ask";
+  const how = `<div class="tip">Before the race, ${ask} <span class="say">“what tyres should I start on?”</span> or
+    <span class="say">“strategy for Suzuka, fifteen laps”</span>. Said by itself when qualifying ends.</div>`;
+  const pl = p.plan;
+  let body = "";
+  if (p.racing) body = `<p class="muted" style="margin:12px 0 0">The race is on: the plan comes on the radio from lap two.</p>`;
+  else if (!pl) body = `<p class="muted" style="margin:12px 0 0">The game sends nothing in the setup menus, so this uses
+    your history: pick the track and laps (or leave them as guessed) and press Plan it.</p>` + how;
+  else if (pl.error === "no_laps") body = `<p class="muted" style="margin:12px 0 0">How many laps? Enter the race length.</p>`;
+  else if (pl.error) body = `<p class="muted" style="margin:12px 0 0">Couldn't work that out.</p>`;
+  else {
+    const why = LAPS_HOW[pl.how] ? ` · ${LAPS_HOW[pl.how]}` : "";
+    body = `<div class="pre-head">${esc(pl.track)} · ${pl.laps} laps${esc(why)}${pl.grid ? " · on the grid" : ""}</div>
+      <div class="pre-said">${esc(pl.said)}</div>` + (pl.starts.length ? `<div class="pre-rows">${pl.starts.map(st =>
+      `<span class="n${st.best ? "" : " dim"}">${st.compound}${st.best ? '<span class="badge pick">pick</span>' :
+      st.tight ? '<span class="badge tight">tight</span>' : ""}</span><div class="${st.best ? "" : "dim"}">${stintBar(st, pl.laps)}</div>
+      <span class="v num">${st.best ? "" : Math.abs(st.delta_s) < 0.05 ? "same" : signed(st.delta_s, "s", 1)}</span>`).join("")}</div>
+      <div class="legend"><span>bar: the race, one block per set · L = box at the end of that lap · % = wear when it comes off</span></div>` : "") + how;
+  }
+  paint(el, body);
+}
+
 function renderFeedback() {
   const f = S.feedback, el = $("#feedback");
   $("#fbCount").textContent = f.count ? `${f.count} open` : "";
@@ -574,7 +652,7 @@ function renderWizard() {
 
 function render() {
   if (!S) return;
-  renderTop(); renderSession(); renderFeed(); renderCoach(); renderPtt(); renderFeedback();
+  renderTop(); renderSession(); renderFeed(); renderCoach(); renderPre(); renderPtt(); renderFeedback();
   renderReportHead();
   tempoButtons($("#tempoLive"), S.tempo, setTempo);
   $("#tempoTipLive").innerHTML = tempoTip();
@@ -594,7 +672,17 @@ document.querySelectorAll(".tab").forEach(t => t.onclick = () => {
 });
 $("#build").onclick = async () => { await post("/api/report/build"); tick(); };
 $("#openPdf").onclick = () => window.open("/report/latest.pdf", "_blank");
-tick(); setInterval(tick, 1000);
+initPre(); tick(); setInterval(tick, 1000);
 </script>
 </body></html>
 """
+
+
+def _tracks_json() -> str:
+    import json
+    from engineer.ingest.formats.f1_2025 import TRACKS
+    from engineer.radio.phrases import say_track
+    return json.dumps(sorted(([k, say_track(k)] for k in TRACKS), key=lambda t: t[1]))
+
+
+PAGE = PAGE.replace("__TRACKS__", _tracks_json())

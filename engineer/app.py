@@ -61,6 +61,11 @@ class Engine:
         self.director.tempo = tempo
         self.director.quiet = False
 
+    def idle_tick(self) -> None:
+        """Live, while no packets come (menus, car setup): pick up strategy answers from the
+        worker (normally done after each packet), e.g. the pre-race plan."""
+        self.strategy._drain()
+
     def set_detail(self, detail: str) -> None:
         """How corner causes are said: "plain" ("brake slightly later") or "specific"
         ("braking fifteen metres earlier"). Live, from the app window or by voice."""

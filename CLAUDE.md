@@ -167,6 +167,18 @@ uv run python -m engineer.report                     # driver report PDF (data/r
   never a range, at every tempo.
   After a stop: "Copy, softs." + the rest of the race, at pit exit. Plan calls are NORMAL
   priority and are re-announced if they expire or a flashback drops them unsaid.
+- Pre-race plan (strategy/prerace.py): the game sends nothing in the race setup menus (real
+  recordings: only BUTN events until ~7 s before lights out; UID-0 menu packets carry no
+  session), so the track is the one said / picked in the window / the last session's, and the
+  laps are the ones said, else your last race here, else your usual distance (laps / full race
+  laps, snapped to 25/35/50/100 %, ceil like the game). History laps are the most any car
+  completed, so snapping also fixes races left early. Each dry start is solved from lap 0 in the
+  worker (`StrategyRequest.starts`); the pick is the quickest safe start. No history at a track =
+  no plan. On the grid it uses the game's laps and fitted tyre. Said by itself when qualifying
+  ends; "what's the plan?" before lights out gets it too.
+- Menus: `RadioDirector.idle_after_s` (cli only) says calls at once when no packet has come for
+  1 s (game time is frozen there, nothing would release the queue); `cli._idle_loop` calls
+  `Engine.idle_tick` to pick up worker answers. Replays/tests keep the queued behaviour.
 
 ## Push-to-talk (Phase 6)
 

@@ -524,3 +524,22 @@ You choose which unanswered questions get worked on, by flagging them on the rad
   in the driver report; Coaching card on the Live tab (gap to the fastest lap, each corner's
   loss with its trend, up to two focus corners with their advice, "fixed" badges).
 - Still next: choosing focus corners from the driver report's habits.
+
+## Pre-race tyre plan (3 Nov)
+
+- Before the race, during car and tyre setup: "what tyres should I start on?", "strategy for
+  Suzuka, fifteen laps", or a plain "what's the plan?" before lights out. "Melbourne, fifteen
+  laps, same as your last race here. Start on mediums, one stop, box end of lap eight for
+  hards. Starting on hards is about the same." Also said by itself when qualifying ends, and on
+  the Live tab's Pre-race tyre plan card (pick a track and laps, each start tyre as a stint bar
+  with box laps and wear).
+- The game sends nothing in the setup menus (checked on the 2 Nov recordings: only button
+  presses until seven seconds before the start), so it uses your history: the track you name or
+  last drove, your last race length there or your usual race distance.
+- Checked on your uploaded races: Melbourne, Austria, Shanghai: start mediums, one stop for
+  hards; Imola: hards then softs; Abu Dhabi (29 laps): two stops. No history at a track (e.g.
+  Suzuka) = "no tyre numbers yet", never a guess.
+- Fixed on the way: questions asked in the menus were only answered once (game time stands still
+  there, so the radio queue never moved on); "what if I go a lap later?" also said "Say again."
+  before its answer.
+

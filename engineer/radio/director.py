@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import logging
 import math
+import time
 from dataclasses import dataclass, field
 
 from engineer.bus import events as ev
@@ -174,6 +175,10 @@ class RadioDirector:
         self.queue: list[RadioCall] = []
         self.speaking_until = -math.inf
         self.last_said: dict[str, float] = {}
+        # Live only (cli): with no packet for this long (menus, car setup, after the flag) the
+        # game time stands still, so nothing would release a call: say it at once instead.
+        self.idle_after_s: float | None = None
+        self._last_packet = -math.inf               # time.monotonic() of the last packet
         bus.subscribe(ev.SessionStarted, self._on_session_started)
         bus.subscribe(ev.SessionEnded, self._on_session_ended)
         bus.subscribe(ev.Flashback, self._on_flashback)
@@ -198,11 +203,24 @@ class RadioDirector:
             self._drop(call, "cooldown")
             return
         call.queued_at = t
+        if self.idle():
+            self.last_said[call.topic] = t
+            self.bus.publish(ev.RadioMessage(
+                self.state.session_uid or 0, t, topic=call.topic, text=call.text,
+                priority=call.priority, queued_at=t, origin_t_ns=call.origin_t_ns))
+            return
         self.queue.append(call)
         self.after_packet(None)   # try straight away: no need to wait for the next packet
 
+    def idle(self) -> bool:
+        """No packets coming (live only, see idle_after_s)."""
+        return self.idle_after_s is not None \
+            and time.monotonic() - self._last_packet > self.idle_after_s
+
     def after_packet(self, packet_id: int | None) -> None:
         """Hooked into Pipeline.after_packet: learn the quiet-zone map and maybe speak."""
+        if packet_id is not None:
+            self._last_packet = time.monotonic()
         if packet_id == f.PacketId.CAR_TELEMETRY:
             self.zones.observe(self.state)
         if not self.queue:

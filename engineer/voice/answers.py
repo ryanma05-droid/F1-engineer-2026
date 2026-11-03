@@ -28,7 +28,7 @@ from engineer.tools.queries import lap_delta
 from engineer.state.track_maps import turn_name
 from engineer.strategy.decision import wear_at
 from engineer.voice.feedback import FeedbackLog
-from engineer.voice.intents import driver_in, log_text, match, turn_in
+from engineer.voice.intents import driver_in, laps_in, log_text, match, track_in, turn_in
 
 # Damage parts reported by "any damage?" (state key -> spoken name), from 10 %.
 DAMAGE_PARTS = {"front_left_wing": "front left wing", "front_right_wing": "front right wing",
@@ -114,12 +114,15 @@ class QuestionAnswerer:
             return
         handler = getattr(self, f"_a_{intent.name}", None)
         self.heard = e.text
+        failed = False
         try:
             text = handler() if handler else None
         except Exception:
             log.exception("answering %r failed", e.text)
-            text = None
-        if text is None and intent.name == "box_now":
+            text, failed = None, True
+        # None from a handler = the strategy worker is on it and the answer follows (box_now,
+        # box_shift, the pre-race plan).
+        if text is None and handler is not None and not failed:
             entry["answer"] = "(pending: strategy is working it out)"
         else:
             text = text or phrases._sentence("say again")
@@ -326,8 +329,35 @@ class QuestionAnswerer:
             return phrases.live_tyres_phrase(w, float(wear[w]))
         return phrases.tyre_status_phrase(st, "chatty", laps_left_from_pct=0)
 
-    def _a_plan(self) -> str:
+    def _a_prerace_plan(self) -> str | None:
+        """Before the race: the start tyre and the stops (strategy/prerace.py), for the track
+        and laps said, else the ones remembered. Once the lights are out: the race plan."""
         sa = self.engine.strategy
+        if sa.racing():
+            return self._a_plan()
+
+        def answer(plan) -> None:
+            if plan.error == "no_laps":
+                text = phrases._sentence("how many laps is the race",
+                                         "say strategy for, then the laps")
+            elif plan.error:
+                text = phrases._sentence("can't work that out right now")
+            else:
+                text = phrases.prerace_phrase(plan, self.verbosity, sa.tyres.limit_pct,
+                                              sa.cfg.margin_pct)
+                self.last_strategy = text
+            self._say("prerace_plan", text)
+
+        why = sa.ask_prerace(answer, track_in(self.heard), laps_in(self.heard))
+        if why == "no_track":
+            return phrases._sentence("which track", "say strategy for, then the track")
+        return None
+
+    def _a_plan(self) -> str | None:
+        sa = self.engine.strategy
+        if not sa.racing() and self.engine.strategy.cfg.enabled:
+            # Before the lights go out (menus, car setup, the grid): the pre-race plan.
+            return self._a_prerace_plan()
         if self._lap() is None or not self.state.session.total_laps:
             # Before the start the game hasn't sent the race yet (28 Oct Melbourne: asked on the
             # grid, answered "no strategy calls in this race", which wasn't true).

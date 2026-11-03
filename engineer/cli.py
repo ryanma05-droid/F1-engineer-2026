@@ -22,6 +22,7 @@ from engineer.radio.tts import AudioProcess, AudioSettings, voice_model_path
 log = logging.getLogger("engineer")
 
 STATUS_INTERVAL_S = 10
+IDLE_AFTER_S = 1.0          # no packet for this long: the game is in a menu
 
 
 def start_voice(cfg: Config, engine) -> AudioProcess:
@@ -157,6 +158,14 @@ async def _ptt_loop(engine, ptt, speech) -> None:
         await asyncio.sleep(0.02)
 
 
+async def _idle_loop(engine) -> None:
+    """While the game sends nothing (menus, car setup), still pick up strategy answers."""
+    while True:
+        await asyncio.sleep(0.1)
+        if engine.director.idle():
+            engine.idle_tick()
+
+
 async def _run(cfg: Config, record: bool | None, voice: bool, ptt_on: bool = True,
                config_path: Path | None = None, ui: bool = True) -> None:
     if record is not None:
@@ -166,6 +175,7 @@ async def _run(cfg: Config, record: bool | None, voice: bool, ptt_on: bool = Tru
     strategy_runner = WorkerRunner(cfg.features_path)     # strategy sims in their own process
     engine = build_engine(cfg, strategy_runner=strategy_runner)
     engine.coaching.save_dir = cfg.data_path / "coaching"   # live only: replays don't write
+    engine.director.idle_after_s = IDLE_AFTER_S              # menus: say answers at once
     pipeline = engine.pipeline
     audio = start_voice(cfg, engine) if voice else None
     if audio:
@@ -185,6 +195,7 @@ async def _run(cfg: Config, record: bool | None, voice: bool, ptt_on: bool = Tru
     listener.subscribe(pipeline.feed)
 
     await listener.start()
+    idle = asyncio.create_task(_idle_loop(engine))
     window = None
     if ui and cfg.ui.enabled:
         from engineer.ui.app import AppWindow, open_window
@@ -213,6 +224,7 @@ async def _run(cfg: Config, record: bool | None, voice: bool, ptt_on: bool = Tru
                          STATUS_INTERVAL_S)
             last = listener.packets_received
     finally:
+        idle.cancel()
         listener.close()
         if window:
             window.close()
