@@ -586,10 +586,12 @@ You choose which unanswered questions get worked on, by flagging them on the rad
 
 Uploaded: a 5-lap Melbourne race (01:19 UTC) and one file with three one-shot qualifying laps
 (Melbourne, Shanghai, Texas, ~40 min apart, same session UID). The three races between the
-qualifying sessions were not uploaded (see 1).
+qualifying sessions were not uploaded (see 1); uploaded by hand on 4 Nov: one file
+(20261104T014307Z, 525 MB) holds all three 20-lap races under one UID: Melbourne P2 from 19th,
+Shanghai P1, Texas P3, with 47 push-to-talk questions.
 
 Fixes, not built yet:
-1. Recordings lost at upload: both uploads were pushed 22 s apart at 03:47 UTC, i.e. at the
+1. Recordings lost at upload (confirmed: the races were on the PC, in one file): both uploads were pushed 22 s apart at 03:47 UTC, i.e. at the
    end of one app run that covered the whole evening, and they are exactly the first two in
    the run's upload order (race, qualifying file, then the three races). The races were most
    likely recorded but the upload was cut short when the app was closed (Ctrl+C again /
@@ -613,4 +615,36 @@ Fixes, not built yet:
 6. Practice/qualifying corner calls compared with "the car ahead" ("Turn eight, losing one
    point nine seconds to the car ahead" after a one-shot lap): use your own best / the session's
    fastest lap outside races.
+7. Questions that got "Say again" or the wrong answer (20-lap races, 3 Nov):
+   - "Has Albon pitted?" (who_pitted with a name) -> unknown.
+   - "What is the overall fastest lap? Not just mine." / "What's the fastest lap right now?"
+     -> answered your own best; should be the session's fastest (who, time, your gap).
+   - "How will they be at the end of the second stint?" / "What will they be by the end?"
+     -> unknown (tyres_to_end).
+   - "Will hards make it to the end?" -> answered about the fitted tyres; should answer for a
+     new set of hards from now.
+   - "If I box at lap 10 for hards, how am I looking?" / "What does the strategy look like if I
+     change for hards at lap seven?" -> unknown / the generic plan; should be a what-if with
+     that lap and that tyre (ask_what_if takes both).
+   - "Why not hard(s)?" -> unknown; say what hards cost or why they don't work.
+   - "Should I pit later for hards?" -> box_shift ignores the tyre named; its follow-up isn't
+     logged.
+   - "If I'm six seconds up, should I go hards?", "Can I catch the leader?" -> unknown.
+   - Sectors: "How did sector one look relative to Lewis?", "What was the sector two
+     differential to my best?", "How was that last couple turns?" -> unknown.
+   - "You say off or up?" -> unknown (clarify the last call).
+   - "How should I be thinking about this damage?" -> only the number; add whether to stop.
+   - Logged notes: "re-evaluate the pit crew", "driver pin".
+8. Lap times with a round ten seconds are ambiguous: 1:40.4 is said "one forty four" (heard as
+   1:44). Say "one forty point four".
+9. Risk when leading: Shanghai, the call was softs at lap 11 ("tight, sixty percent"); you went
+   hards at lap 10 from a lead and won with them at 35 %. With a lead bigger than the gamble's
+   gain, the safe call should be the call.
+10. Pre-race laps: the game gave 20 laps at 35 % for Melbourne (58 x 0.35 = 20.3), so it rounds
+    to nearest, not up (Shanghai 19.6 -> 20, Austria 25 % 17.75 -> 18, Melbourne 25 % 14.5 -> 15).
+11. Coaching against a hidden online player says "nine tenths off Player" (same fix as 5).
+
+Measured in these races (pit lane timer): Melbourne 16.8 s (17 stops, quicker than the 19.0 s
+offline), Shanghai 23.4 s (21), Texas 18.7 s (19). 35 % races wear like 25 % ones (Melbourne
+softs ~7 %/lap); only the 5-lap race is the outlier.
 
