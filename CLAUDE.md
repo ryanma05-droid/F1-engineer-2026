@@ -329,6 +329,16 @@ uv run python -m engineer.report                     # driver report PDF (data/r
   (never overwriting) and merges its config.local.yaml, setting `upload.repo` to the clone so
   uploads keep going through it. Offered on first run (`launcher.offer_import` finds clones in
   home/Documents/Desktop) or `RaceEngineer.exe --import "<folder>"`.
+- Updates (`engineer/updates.py`, installed app only: `engineer/version.py` is "0.0.0-dev" in a
+  clone and the release workflow writes the real version before bundling): `Updater` asks GitHub
+  Releases (`updates.repo`) 5 s after start and every 6 h, in a thread. Newer -> banner in the app
+  window (`/api/update`: download, install, dismiss = `updates.skip_version`, check, auto).
+  Windows: the setup .exe goes to data/updates/ (size + GitHub's sha256 checked); "Install and
+  restart" stops the app normally (cli `stopping` event; uploads/history/report as usual), then
+  as its last step `run_installer` starts it silently ~4 s later via cmd/ping, and installer.iss
+  restarts the app after a silent install (`skipifnotsilent`). `updates.auto_download` fetches
+  it ahead whenever no session is live; installing is always a click. Mac: a link to the .dmg.
+  v0.1.4 and earlier have no updater: the first version with it has to be installed by hand.
 - The installed app adds each run's recordings to `laps`/`stints` when it closes
   (`features_auto_add`), so the tyre/strategy history grows without a manual build.
 

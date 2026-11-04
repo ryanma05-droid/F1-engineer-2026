@@ -209,6 +209,14 @@ ul.good li::before { content: "\2713"; position: absolute; left: 0; top: 1px; wi
 .legend { display: flex; gap: 14px; font-size: 12px; color: var(--ink-3); margin-top: 10px; }
 .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px;
   vertical-align: -1px; }
+/* update banner */
+.upd { display: none; align-items: center; gap: 12px; flex-wrap: wrap; margin: 0 0 14px; padding: 12px 14px;
+  border: 1px solid rgba(225,6,0,.45); background: rgba(225,6,0,.10); border-radius: 12px; font-size: 14px; }
+.upd.on { display: flex; }
+.upd .grow { flex: 1; min-width: 200px; }
+.upd a { color: var(--ink); }
+.upd .bar { height: 4px; background: var(--line); border-radius: 2px; margin-top: 6px; overflow: hidden; }
+.upd .bar i { display: block; height: 100%; background: var(--red); }
 /* welcome */
 .overlay { position: fixed; inset: 0; background: rgba(5,6,10,.82); display: none;
   align-items: center; justify-content: center; padding: 20px; z-index: 10; }
@@ -234,6 +242,7 @@ ul.good li::before { content: "\2713"; position: absolute; left: 0; top: 1px; wi
     <span class="chip" id="rec"><span class="dot"></span><span>Recording off</span></span>
     <span class="chip" id="tempoChip">Tempo: Normal</span>
   </div>
+  <div class="upd" id="upd" role="status"></div>
   <div class="tabs" role="tablist">
     <button class="tab" role="tab" data-view="live" aria-selected="true">Live</button>
     <button class="tab" role="tab" data-view="report" aria-selected="false">Driver report</button>
@@ -293,6 +302,8 @@ ul.good li::before { content: "\2713"; position: absolute; left: 0; top: 1px; wi
       <div class="seg two" id="detailSettings"></div>
       <div class="tip">Say <span class="say">“give me the numbers”</span> or
         <span class="say">“keep it simple”</span> to switch mid-race.</div></div>
+    <div class="card" style="margin-bottom:16px"><h3><span class="grow">Updates</span><span class="muted small" id="updVer"></span></h3>
+      <div id="updSettings"></div></div>
     <div class="card"><h3>Game telemetry</h3><div class="small" id="telemetry"></div></div>
   </section>
 </div>
@@ -685,6 +696,47 @@ function renderVoice() {
       (cur && cur.joke ? ` <b>${esc(cur.name)}</b> still says every call in full; he just adds to it.` : "");
 }
 
+/* ---- updates ---- */
+async function updateAction(action, extra) { S = await post("/api/update", Object.assign({action}, extra || {})); render(); }
+function renderUpdate() {
+  const u = S.update || {}, el = $("#upd");
+  const show = u.available && (!u.dismissed || u.state === "downloading" || u.state === "ready");
+  el.classList.toggle("on", !!show);
+  if (show) {
+    const link = u.page ? ` <a href="${esc(u.page)}" target="_blank" rel="noopener">What's new</a>` : "";
+    let act = "", sub = "";
+    if (!u.can_install) {
+      act = u.asset ? `<a class="btn" href="${esc(u.asset)}" target="_blank" rel="noopener">Download</a>` : "";
+    } else if (u.state === "downloading") {
+      sub = `<div class="bar"><i style="width:${Math.round(u.progress * 100)}%"></i></div>`;
+      act = `<span class="muted small">Downloading… ${Math.round(u.progress * 100)}%</span>`;
+    } else if (u.state === "ready") {
+      act = `<button class="btn primary" data-a="install">Install and restart</button>`;
+      sub = `<div class="muted small">Closes the engineer (recordings and settings are kept), installs, and starts it again.</div>`;
+    } else {
+      act = `<button class="btn primary" data-a="download">Download and install</button>`;
+      if (u.error) sub = `<div class="small" style="color:var(--loss)">${esc(u.error)}. Try again, or use the link.</div>`;
+    }
+    const later = u.state === "ready" || u.state === "downloading" ? "" : `<button class="btn" data-a="dismiss">Not now</button>`;
+    if (paint(el, `<div class="grow"><b>Race Engineer ${esc(u.latest)} is out</b> <span class="muted">(you have ${esc(u.current)})</span>.${link}${sub}</div>${act}${later}`))
+      el.querySelectorAll("[data-a]").forEach(b => b.onclick = () => updateAction(b.dataset.a));
+  }
+  $("#updVer").textContent = u.current ? "Version " + u.current : "";
+  const box = $("#updSettings");
+  if (!u.enabled) {
+    paint(box, `<p class="muted small" style="margin:0">Running from the project folder: update with <span class="say">git pull</span>. The installed app checks for new versions by itself.</p>`);
+    return;
+  }
+  const state = u.available ? `Version ${esc(u.latest)} is available.` : u.checked ? "You're on the latest version." : "Checking for new versions…";
+  if (paint(box, `<label class="small" style="display:flex;gap:10px;align-items:center;margin-bottom:10px">
+      <input type="checkbox" id="updAuto" ${u.auto_download ? "checked" : ""}> Download new versions automatically
+      <span class="muted">(never during a session; installing is always your click)</span></label>
+      <div class="small">${state} <button class="btn" id="updCheck" style="margin-left:8px">Check now</button></div>`)) {
+    $("#updAuto").onchange = e => updateAction("auto", {auto_download: e.target.checked});
+    $("#updCheck").onclick = () => updateAction("check");
+  }
+}
+
 function renderSettings() {
   controllerButtons($("#ctrlSettings"), S.controller.type, setController, S.console_player);
   const del = $("#detailSettings");
@@ -736,6 +788,7 @@ function render() {
   if (!S) return;
   renderTop(); renderSession(); renderFeed(); renderCoach(); renderPre(); renderPtt(); renderFeedback();
   renderUploads();
+  renderUpdate();
   renderReportHead();
   tempoButtons($("#tempoLive"), S.tempo, setTempo);
   $("#tempoTipLive").innerHTML = tempoTip();

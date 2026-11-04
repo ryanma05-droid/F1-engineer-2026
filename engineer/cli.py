@@ -216,6 +216,13 @@ async def _run(cfg: Config, record: bool | None, voice: bool, ptt_on: bool = Tru
     # the app mid-upload can't lose them (3 Nov: three races never reached GitHub).
     from engineer.ingest.uploader import BackgroundUploader
     uploader = BackgroundUploader(cfg, pipeline, recorder)
+    # New versions (installed app only): a banner in the window; "Install" closes the app, then
+    # the installer runs.
+    from engineer.updates import Updater
+    stopping = asyncio.Event()
+    updater = Updater(cfg, racing=uploader.racing)
+    updater.on_install = stopping.set
+    updater.start()
 
     await listener.start()
     if recorder:
@@ -226,7 +233,8 @@ async def _run(cfg: Config, record: bool | None, voice: bool, ptt_on: bool = Tru
         from engineer.radio.switch import VoiceControl
         from engineer.ui.app import AppWindow, open_window
         window = AppWindow(cfg, engine, listener, recorder, ptt, config_path,
-                           voice=VoiceControl(cfg, engine, audio), uploader=uploader)
+                           voice=VoiceControl(cfg, engine, audio), uploader=uploader,
+                           updater=updater)
         if audio and wait_for_setup:
             window.on_setup_done = lambda: welcome(cfg, audio, ptt.wanted(cfg))
         try:
@@ -244,14 +252,20 @@ async def _run(cfg: Config, record: bool | None, voice: bool, ptt_on: bool = Tru
         print(f"Recording sessions to {cfg.sessions_path}")
     try:
         last = 0
-        while True:
-            await asyncio.sleep(STATUS_INTERVAL_S)
+        while not stopping.is_set():
+            try:
+                await asyncio.wait_for(stopping.wait(), STATUS_INTERVAL_S)
+                print("Closing to install the new version...", flush=True)
+                break
+            except asyncio.TimeoutError:
+                pass
             if listener.packets_received == last:
                 log.info("No packets in the last %ds. Is UDP telemetry on in the game?",
                          STATUS_INTERVAL_S)
             last = listener.packets_received
     finally:
         idle.cancel()
+        updater.close()
         await uploader.close()
         VARIETY.save_in_background()
         listener.close()
@@ -291,6 +305,7 @@ async def _run(cfg: Config, record: bool | None, voice: bool, ptt_on: bool = Tru
             # Once a day, in its own process (closing the window doesn't stop it).
             from engineer.report.daily import start_in_background
             start_in_background(cfg, config_path)
+        updater.run_if_requested()          # last: the installer replaces the app's files
 
 
 def _sessions(config_path: Path | None) -> None:

@@ -680,3 +680,11 @@ on the first track's corners (the 29 Oct file: Imola, Abu Dhabi and Bahrain; the
 Melbourne, Shanghai and Texas). Fixed: one entry per session. With your recordings the report's
 top habits changed from "exit speed onto straights" and "braking too early" to "slow squeeze to
 full throttle" (0.22 s a lap) and "winning the entry, losing the exit" (0.20 s).
+
+4 Nov, updates: the installed app checks GitHub Releases at start-up and every 6 hours. A newer
+version shows a banner in the app window ("Race Engineer 0.1.6 is out ... Download and install /
+Not now", with "What's new"). On Windows one click downloads the installer (checked against
+GitHub's checksum), a second ("Install and restart") closes the engineer normally, installs
+silently and starts the new version. Settings -> Updates: "Download new versions automatically"
+(never during a session; installing is still a click), "Check now", the version. Mac: a download
+link. Not tried on Windows yet (needs a release with it, then the next one to update to).

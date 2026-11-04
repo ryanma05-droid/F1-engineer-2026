@@ -210,6 +210,14 @@ class Upload(BaseModel):
     min_mb: float = Field(default=2.0, ge=0)   # skip tiny recordings (menus, a few seconds)
 
 
+class Updates(BaseModel):
+    """New versions of the installed app (engineer/updates.py)."""
+    check: bool = True              # ask GitHub Releases at start-up and every few hours
+    auto_download: bool = False     # download a new version by itself (never while racing)
+    repo: str = "ryanma05-droid/F1-engineer-2026"
+    skip_version: str | None = None  # "Not now" on this version: no banner until the next one
+
+
 class Config(BaseModel):
     platform: Literal["pc", "console"] = "pc"   # where F1 25 runs (console: telemetry over Wi-Fi)
     listen: Endpoint = Endpoint(host="0.0.0.0", port=20777)
@@ -228,6 +236,7 @@ class Config(BaseModel):
     upload: Upload = Upload()
     report: Report = Report()
     ui: Ui = Ui()
+    updates: Updates = Updates()
 
     @property
     def data_path(self) -> Path:

@@ -40,18 +40,20 @@ jobs:
       - name: Run tests
         run: uv run pytest -q
 
-      - name: Bundle the app (PyInstaller)
-        run: uv run --group build pyinstaller packaging/race_engineer.spec --noconfirm
-
-      - name: Smoke test the bundle
-        run: dist\RaceEngineer\RaceEngineer.exe --check
-
       - name: Version
         id: version
         shell: pwsh
         run: |
           $v = if ($env:RELEASE_VERSION) { $env:RELEASE_VERSION.TrimStart("v") } else { "0.0.0-dev" }
           "value=$v" >> $env:GITHUB_OUTPUT
+          # The app knows its own version (update checks, engineer/updates.py).
+          Set-Content -Path engineer\version.py -Encoding utf8 -Value "VERSION = `"$v`""
+
+      - name: Bundle the app (PyInstaller)
+        run: uv run --group build pyinstaller packaging/race_engineer.spec --noconfirm
+
+      - name: Smoke test the bundle
+        run: dist\RaceEngineer\RaceEngineer.exe --check
 
       - name: Build installer (Inno Setup)
         shell: pwsh
@@ -81,6 +83,11 @@ jobs:
 
       - name: Run tests
         run: uv run pytest -q
+
+      - name: App version
+        run: |
+          if [ -n "$RELEASE_VERSION" ]; then v="${RELEASE_VERSION#v}"; else v="0.0.0-dev"; fi
+          echo "VERSION = \"$v\"" > engineer/version.py
 
       - name: Bundle the app (PyInstaller)
         run: uv run --group build pyinstaller packaging/race_engineer.spec --noconfirm

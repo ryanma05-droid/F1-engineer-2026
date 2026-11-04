@@ -138,6 +138,13 @@ upload:
   remote: origin
   min_mb: 2             # skip tiny recordings (menus, a few seconds)
 
+# New versions of the installed app: a banner in the app window with the download. Install is
+# always a click; auto_download only fetches it ahead (never while a session is live).
+updates:
+  check: true
+  auto_download: false
+  repo: ryanma05-droid/F1-engineer-2026
+
 # Driver report: your strengths and weaknesses from every recorded session, as a PDF in
 # data/reports/. Build one any time: python -m engineer.report
 report:

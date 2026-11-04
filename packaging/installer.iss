@@ -42,3 +42,6 @@ Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription:
 
 [Run]
 Filename: "{app}\RaceEngineer.exe"; Description: "Start Race Engineer now (first-time setup)"; Flags: nowait postinstall skipifsilent
+; An update from the app ("Install and restart", engineer/updates.py) runs this installer silently:
+; start the new version when it's done.
+Filename: "{app}\RaceEngineer.exe"; Flags: nowait postinstall skipifnotsilent

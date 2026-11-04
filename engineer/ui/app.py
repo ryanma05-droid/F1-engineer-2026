@@ -26,6 +26,7 @@ from engineer.config import Config, save_local
 from engineer.ingest.formats import f1_2025 as f
 from engineer.ui.page import PAGE
 from engineer.ui.server import Response, UiServer, file_response
+from engineer.version import VERSION
 
 log = logging.getLogger(__name__)
 
@@ -52,12 +53,13 @@ def _laptime(ms: float | None) -> str | None:
 
 class AppWindow:
     def __init__(self, cfg: Config, engine, listener=None, recorder=None, ptt=None,
-                 config_path: Path | None = None, voice=None, uploader=None):
+                 config_path: Path | None = None, voice=None, uploader=None, updater=None):
         """ptt: the push-to-talk control (cli.PushToTalkControl) or None (replays, tests).
         voice: radio.switch.VoiceControl (picks the engineer); None = personality only."""
         from engineer.radio.switch import VoiceControl
         self.voice = voice or VoiceControl(cfg, engine, None)
         self.uploader = uploader                 # ingest.uploader.BackgroundUploader (live only)
+        self.updater = updater                   # updates.Updater (live only)
         self._voice_task = None
         self.cfg, self.engine, self.listener, self.recorder = cfg, engine, listener, recorder
         self.ptt, self.config_path = ptt, config_path
@@ -84,6 +86,7 @@ class AppWindow:
             ("POST", "/api/feedback/dismiss"): self._api_dismiss,
             ("POST", "/api/prerace"): self._api_prerace,
             ("POST", "/api/upload"): self._api_upload,
+            ("POST", "/api/update"): self._api_update,
         })
         self._prerace_busy = False
 
@@ -218,6 +221,8 @@ class AppWindow:
             "prerace": self._prerace(),
             "voice": self.voice.status(),
             "uploads": self.uploader.status() if self.uploader is not None else None,
+            "update": self.updater.status() if self.updater is not None
+            else {"current": VERSION, "enabled": False, "available": False},
             "console_player": self.cfg.platform == "console",
         }
 
@@ -284,6 +289,41 @@ class AppWindow:
         if self.uploader is None:
             return Response(409, {"error": "uploads are off here"})
         self.uploader.request_now()
+        return Response(200, self.snapshot())
+
+    async def _api_update(self, body: dict) -> Response:
+        """The update banner and the Settings card: download, install, not now, check now, and
+        the auto-download switch."""
+        u = self.updater
+        if u is None or not u.enabled:
+            return Response(409, {"error": "updates are for the installed app"})
+        action = body.get("action")
+        save = None
+        if action == "download":
+            u.request_download()
+        elif action == "install":
+            if not u.install():
+                return Response(409, {"error": "not downloaded yet"})
+        elif action == "dismiss":
+            if u.latest is not None:
+                self.cfg.updates.skip_version = u.latest.version
+                save = {"updates": {"skip_version": u.latest.version}}
+        elif action == "check":
+            await u.check()
+        elif action == "auto":
+            on = body.get("auto_download")
+            if not isinstance(on, bool):
+                return Response(400, {"error": "auto_download must be true or false"})
+            self.cfg.updates.auto_download = on
+            save = {"updates": {"auto_download": on}}
+        else:
+            return Response(400, {"error": "action must be download, install, dismiss, check "
+                                           "or auto"})
+        if save:
+            try:
+                save_local(save, self.config_path)
+            except OSError as exc:
+                log.warning("could not save settings (%s)", exc)
         return Response(200, self.snapshot())
 
     async def _api_settings(self, body: dict) -> Response:
