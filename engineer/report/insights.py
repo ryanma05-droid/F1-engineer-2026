@@ -78,7 +78,7 @@ class CornerAgg:
 
 
 DELTA_FIELDS = ("time_s", "in_s", "out_s", "carry_s", "entry_kph", "brake_m", "brake_end_m",
-                "min_kph", "min_m", "pickup_m", "full_m", "exit_kph", "trail_m", "coast_m")
+                "min_kph", "min_m", "pickup_m", "full_m", "exit_kph", "trail_m", "coast_m", "gear")
 
 
 def _median(vals):
@@ -343,9 +343,25 @@ def _theme_straight_exits(cs):
             "pays all the way down."), costs
 
 
+def _theme_low_gear(cs):
+    from engineer.tools.queries import GEAR_SPEED_KPH
+    sel = [c for c in cs if c.dv("gear") <= -0.5 and c.dv("min_kph") >= -GEAR_SPEED_KPH
+           and c.dv("time_s") >= 0.02]
+    costs = [(c, max(0.0, c.dv("out_s")) + max(0.0, c.dv("carry_s"))) for c in sel]
+    if not sel:
+        return None, costs
+    return ("A gear too low at the apex",
+            f"In {len(sel)} corner{'s' if len(sel) != 1 else ''} you're at about the quickest "
+            f"AI's apex speed but {abs(_avg(sel, lambda c: c.dv('gear'))):.1f} gear lower, and "
+            "lose the time on the way out.",
+            "Take the slowest part a gear higher: the drive out is smoother, with less "
+            "wheelspin, and you can get on the power sooner. (Manual gears only.)"), costs
+
+
 THEMES = {"exit_giveback": _theme_exit_giveback, "slow_throttle": _theme_slow_throttle,
           "early_braking": _theme_early_braking, "over_slowing": _theme_over_slowing,
-          "coasting": _theme_coasting, "straight_exits": _theme_straight_exits}
+          "coasting": _theme_coasting, "straight_exits": _theme_straight_exits,
+          "low_gear": _theme_low_gear}
 
 
 def theme_costs(corners: list[CornerAgg]) -> dict[str, float]:

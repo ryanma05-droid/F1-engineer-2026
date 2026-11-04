@@ -106,6 +106,14 @@ uv run python -m engineer.report                     # driver report PDF (data/r
   and turn two. Work on the throttle: ..." (topic coaching_focus, also the "what should I work
   on?" answer); once per corner when it's level with the fastest lap on track. Live tab Coaching
   card: "From your report" chips.
+- Gears: `CornerStats.apex_gear` (gear at the slowest point); `CornerDelta.reasons()` adds
+  "gear_low" (gears below the other car at the apex, only with your apex speed within
+  `GEAR_SPEED_KPH` 5 kph of theirs, else the gear just follows the speed) when `gears` is on:
+  `corner_deltas(..., gears=state.session.manual_gears)` (Session packet `m_gearboxAssist` 1/2;
+  3 = automatic, unknown = automatic: no gear advice). Plain "take the apex a gear higher",
+  specific "a gear lower at the apex". Report: "gear" in DELTA_FIELDS, theme `low_gear`, your
+  gears dropped from the analysis on automatic (ANALYSIS_VERSION 3). Your recordings so far
+  (Austria, Shanghai, Imola) were all on automatic.
 - `data/tracks/<track>.json` is committed and hand-editable (official turn numbers). Without a
   file the map is learned from the first 2 clean laps and saved. The golden test uses
   `data/tracks/austria.json`.

@@ -334,7 +334,7 @@ class CornerAnalyzer:
     def _compare(self, trace: LapTrace, ref: LapTrace, against: str) -> None:
         if self.track_map is None:
             return
-        deltas = corner_deltas(trace, ref, self.track_map)
+        deltas = corner_deltas(trace, ref, self.track_map, self.state.session.manual_gears)
         self.last, self.last_against = deltas, against
         if not deltas:
             return
@@ -382,7 +382,8 @@ class CornerAnalyzer:
         window's Coaching card and the end-of-session summary (coaching.py) read coach_laps."""
         if self.bench is None or self.track_map is None:
             return None
-        deltas = corner_deltas(trace, self.bench.trace, self.track_map)
+        deltas = corner_deltas(trace, self.bench.trace, self.track_map,
+                               self.state.session.manual_gears)
         rec = next((r for r in self.history.for_car(self.state.player_index)
                     if r.lap == e.lap), None)
         lap_ms = rec.lap_time_ms if rec is not None else 0

@@ -176,7 +176,10 @@ def stint_summary(features: LapFeatureBuilder, car_idx: int) -> list[Stint]:
 BRAKE_ON = 0.2
 FULL_THROTTLE = 0.95
 REASON_THRESHOLDS = {"brake_early": 10.0, "min_speed": 4.0, "throttle_late": 15.0,
-                     "exit_speed": 4.0}          # metres / kph
+                     "exit_speed": 4.0, "gear_low": 1.0}          # metres / kph / gears
+# A lower gear at the apex is only its own cause when your apex speed is close to the other
+# car's: much slower, and the lower gear just follows the speed (min_speed says it).
+GEAR_SPEED_KPH = 5.0
 
 
 @dataclass(frozen=True)
@@ -187,18 +190,22 @@ class CornerStats:
     min_speed_kph: float
     full_throttle_m: float | None # where the car was back on full throttle after the apex
     exit_speed_kph: float
+    apex_gear: int | None = None  # the gear at the slowest point (None: unknown)
 
 
 def corner_stats(trace: LapTrace, corner: Corner) -> CornerStats:
     a, apex, b = trace.index(corner.entry_m), trace.index(corner.apex_m), trace.index(corner.exit_m)
     braking = np.flatnonzero(trace.brake[a:apex + 1] > BRAKE_ON)
     full = np.flatnonzero(trace.throttle[apex:b + 1] >= FULL_THROTTLE)
+    slowest = a + int(np.argmin(trace.speed_kph[a:b + 1]))
+    gear = trace.gear[slowest] if trace.gear is not None and len(trace.gear) > slowest else np.nan
     return CornerStats(
         time_s=trace.time_at(corner.exit_m) - trace.time_at(corner.entry_m),
         brake_m=float(trace.distance_m[a + braking[0]]) if braking.size else None,
         min_speed_kph=float(np.min(trace.speed_kph[a:b + 1])),
         full_throttle_m=float(trace.distance_m[apex + full[0]]) if full.size else None,
-        exit_speed_kph=float(trace.speed_kph[b]))
+        exit_speed_kph=float(trace.speed_kph[b]),
+        apex_gear=int(gear) if np.isfinite(gear) and gear > 0 else None)
 
 
 @dataclass(frozen=True)
@@ -206,6 +213,7 @@ class CornerDelta:
     corner: Corner
     mine: CornerStats
     ref: CornerStats
+    gears: bool = True            # you change gear yourself: a lower gear counts as a cause
 
     @property
     def delta_s(self) -> float:
@@ -214,7 +222,9 @@ class CornerDelta:
 
     def reasons(self) -> dict[str, float]:
         """Every cause of a loss that passes its threshold: kind -> amount. Kinds:
-        "brake_early" (metres), "min_speed" (kph), "throttle_late" (metres), "exit_speed" (kph)."""
+        "brake_early" (metres), "min_speed" (kph), "throttle_late" (metres), "exit_speed" (kph),
+        "gear_low" (gears lower than the other car at the apex, at a similar speed; manual
+        gears only)."""
         m, r = self.mine, self.ref
         found = []
         if m.brake_m is not None and r.brake_m is not None:
@@ -223,6 +233,9 @@ class CornerDelta:
         if m.full_throttle_m is not None and r.full_throttle_m is not None:
             found.append(("throttle_late", m.full_throttle_m - r.full_throttle_m))
         found.append(("exit_speed", r.exit_speed_kph - m.exit_speed_kph))
+        if self.gears and m.apex_gear is not None and r.apex_gear is not None \
+                and m.min_speed_kph >= r.min_speed_kph - GEAR_SPEED_KPH:
+            found.append(("gear_low", float(r.apex_gear - m.apex_gear)))
         return {k: v for k, v in found if v >= REASON_THRESHOLDS[k]}
 
     def reason(self) -> tuple[str, float] | None:
@@ -235,7 +248,9 @@ class CornerDelta:
         return kind, found[kind]
 
 
-def corner_deltas(trace: LapTrace, ref: LapTrace, track_map: TrackMap) -> list[CornerDelta]:
-    """Compare two laps corner by corner (same track, any cars)."""
-    return [CornerDelta(c, corner_stats(trace, c), corner_stats(ref, c))
+def corner_deltas(trace: LapTrace, ref: LapTrace, track_map: TrackMap,
+                  gears: bool = True) -> list[CornerDelta]:
+    """Compare two laps corner by corner (same track, any cars). gears: you change gear
+    yourself (RaceState.session.manual_gears), so the apex gear can be a cause."""
+    return [CornerDelta(c, corner_stats(trace, c), corner_stats(ref, c), gears)
             for c in track_map.corners]

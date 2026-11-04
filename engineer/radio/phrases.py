@@ -223,6 +223,8 @@ _REASONS = {
     "min_speed": lambda v: f"minimum speed {say_kph(v)} down",
     "throttle_late": lambda v: f"full throttle {say_metres(v)} later",
     "exit_speed": lambda v: f"exit speed {say_kph(v)} down",
+    "gear_low": lambda v: ("a gear" if v < 1.5 else f"{number_words(int(v))} gears")
+    + " lower at the apex",
 }
 
 # Plain wording (radio.detail: plain, the default): what to do, not the measurement. The size
@@ -238,8 +240,10 @@ _ADVICE = {
     "exit_speed": ("get it turned a touch earlier for the exit",
                    "get it turned earlier for a better exit",
                    "get it turned much earlier for the exit"),
+    "gear_low": ("take the apex a gear higher", "take the apex a couple of gears higher",
+                 "take the apex a couple of gears higher"),
 }
-_DRIVING_ORDER = ("brake_early", "min_speed", "exit_speed", "throttle_late")
+_DRIVING_ORDER = ("brake_early", "min_speed", "gear_low", "exit_speed", "throttle_late")
 
 
 def _size(kind: str, value: float) -> int:

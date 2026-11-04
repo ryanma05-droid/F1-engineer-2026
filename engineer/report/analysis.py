@@ -14,7 +14,7 @@ from __future__ import annotations
 import json
 import logging
 import re
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from datetime import date, datetime, timezone
 from pathlib import Path
 
@@ -35,7 +35,8 @@ log = logging.getLogger(__name__)
 # 2: one entry per session in a recording (an online lobby or a weekend keeps one file for
 #    several sessions at different tracks; 4 Nov: Imola, Abu Dhabi and Bahrain in one file were
 #    all measured on the Imola corners).
-ANALYSIS_VERSION = 2
+# 3: whether you change gear yourself (the gear at the apex only counts then).
+ANALYSIS_VERSION = 3
 TOP_AI = 5                 # the reference: the quickest AI cars by median clean lap
 MIN_AI_CARS = 3            # fewer AI cars with clean laps (time trial, a short practice): skipped
 TIME_TRIAL = 18
@@ -63,7 +64,7 @@ class CornerRun:
     exit_kph: float
     trail_m: float          # metres braking while steering, before the slowest point
     coast_m: float          # metres with neither pedal
-    gear: int
+    gear: int | None        # at the slowest point; None when the gearbox is automatic
 
 
 def corner_run(tr: LapTrace, c: Corner, next_entry_m: float, lap_m: float) -> CornerRun:
@@ -204,10 +205,12 @@ def _analyze_part(base: dict, rows: list, lap_traces: dict, state, maps: TrackMa
         "top_ai_median_ms": float(np.median([np.median(pace[c]) for c in fast])),
         "field_median_ms": float(np.median([np.median(v) for v in pace.values()])),
         "pace_rank": 1 + sum(np.median(v) < my_median for v in pace.values()),
-        "cars": len(pace) + 1, "corners": []}
+        "cars": len(pace) + 1, "manual_gears": state.session.manual_gears, "corners": []}
     for i, c in enumerate(corners):
         nxt = corners[i + 1].entry_m if i + 1 < len(corners) else lap_m + corners[0].entry_m
         me = [corner_run(tr, c, nxt, lap_m) for tr in good if tr.car_idx == player]
+        if not state.session.manual_gears:
+            me = [replace(r, gear=None) for r in me]   # automatic: your gear isn't your choice
         ref = [corner_run(tr, c, nxt, lap_m) for tr in good if tr.car_idx in fast]
         if not me or not ref:
             continue

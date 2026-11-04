@@ -688,3 +688,9 @@ GitHub's checksum), a second ("Install and restart") closes the engineer normall
 silently and starts the new version. Settings -> Updates: "Download new versions automatically"
 (never during a session; installing is still a click), "Check now", the version. Mac: a download
 link. Not tried on Windows yet (needs a release with it, then the next one to update to).
+
+4 Nov, gear coaching: the engineer reads your gearbox setting from the game. On manual gears
+(with or without the suggested-gear hint), a corner where you're a gear lower than the other car
+at the apex, at about the same speed, gets "take the apex a gear higher", and the report has a
+"A gear too low at the apex" habit. On the automatic gearbox it says nothing about gears (the
+gear isn't your choice). Every recording so far was driven on automatic.

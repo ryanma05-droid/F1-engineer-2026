@@ -44,6 +44,7 @@ REASON_FOR_THEME = {
     "over_slowing": ("min_speed",),
     "coasting": (),
     "straight_exits": ("exit_speed",),
+    "low_gear": ("gear_low",),
 }
 
 # Said on the radio: short, an instruction, not the report's paragraph.
@@ -54,6 +55,7 @@ RADIO_HABIT = {
     "over_slowing": "apex speed: come off the brake earlier and carry more speed",
     "coasting": "the pedals: straight from brake to throttle, no coasting",
     "straight_exits": "exits onto the straights: a clean, early exit",
+    "low_gear": "the gears: take the slow corners a gear higher",
 }
 
 

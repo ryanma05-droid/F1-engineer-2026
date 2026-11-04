@@ -806,7 +806,7 @@ class QuestionAnswerer:
         mt, tt = self.engine.traces.trace_for(p, me.lap), self.engine.traces.trace_for(car, them.lap)
         if tmap is not None and mt is not None and tt is not None and mt.usable and tt.usable:
             from engineer.tools.queries import corner_deltas
-            ds = corner_deltas(mt, tt, tmap)
+            ds = corner_deltas(mt, tt, tmap, self.state.session.manual_gears)
             g = min(ds, key=lambda d: d.delta_s, default=None)
             lo = max(ds, key=lambda d: d.delta_s, default=None)
             gain = (g.corner.name, g.delta_s) if g is not None and g.delta_s <= -0.05 else None

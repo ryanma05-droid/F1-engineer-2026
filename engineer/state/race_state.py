@@ -55,6 +55,13 @@ class SessionInfo:
     sector3_start_m: float | None = None
     network_game: bool | None = None
     formula: int | None = None
+    gearbox_assist: int | None = None      # 1 manual, 2 manual + suggested, 3 auto
+
+    @property
+    def manual_gears(self) -> bool:
+        """You change gear yourself (manual, with or without the suggested-gear hint): gear advice
+        only makes sense then. Unknown counts as automatic (say nothing)."""
+        return self.gearbox_assist in (1, 2)
 
     @property
     def track_name(self) -> str:
@@ -338,6 +345,7 @@ class RaceState:
         s.sector3_start_m = float(r["m_sector3LapDistanceStart"])
         s.network_game = bool(r["m_networkGame"])
         s.formula = int(r["m_formula"])
+        s.gearbox_assist = int(r["m_gearboxAssist"])
 
     def _on_participants(self, r: np.void) -> None:
         c = self.cars
