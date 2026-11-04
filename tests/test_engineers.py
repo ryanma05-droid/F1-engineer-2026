@@ -111,3 +111,27 @@ def test_settings_api_picks_the_engineer(tmp_path):
     assert cfg.radio.engineer == "intern" and win.snapshot()["voice"]["engineer"] == "intern"
     assert "engineer: intern" in (tmp_path / "config.local.yaml").read_text(encoding="utf-8")
     assert asyncio.run(win._api_settings({"engineer": "nobody"})).status == 400
+
+
+def test_volume_slider_changes_the_voice_live_and_is_saved(tmp_path):
+    import yaml
+
+    from engineer.radio.tts import volume_gain
+    from engineer.ui.app import AppWindow
+    cfg = Config(data_dir=tmp_path)
+    assert cfg.radio.volume_pct == 70 and cfg.radio.gain == 1.0
+    eng = build_engine(cfg, out=io.StringIO(), priors=WearPriors())
+    audio = FakeAudio()
+    audio.gains = []
+    audio.set_volume = audio.gains.append
+    win = AppWindow(cfg, eng, config_path=tmp_path / "config.yaml",
+                    voice=VoiceControl(cfg, eng, audio))
+    assert win.snapshot()["voice"]["volume"] == 70
+    r = asyncio.run(win._api_settings({"volume": 100}))
+    assert r.status == 200 and audio.gains == [volume_gain(100)]
+    assert audio.said == ["Radio check. How's that?"]           # hear the new level
+    assert win.snapshot()["voice"]["volume"] == 100
+    saved = yaml.safe_load((tmp_path / "config.local.yaml").read_text())
+    assert saved["radio"]["volume_pct"] == 100
+    assert asyncio.run(win._api_settings({"volume": 101})).status == 400
+    assert asyncio.run(win._api_settings({"volume": "loud"})).status == 400

@@ -29,7 +29,7 @@ def start_voice(cfg: Config, engine) -> AudioProcess:
     """Start the audio process and connect it to the director's radio messages."""
     audio = AudioProcess(AudioSettings(
         voice_model=str(voice_model_path(cfg.voices_path, cfg.radio.voice_name)),
-        radio_effect=cfg.radio.radio_effect, volume=cfg.radio.volume,
+        radio_effect=cfg.radio.radio_effect, volume=cfg.radio.gain,
         output_device=cfg.radio.output_device, length_scale=cfg.radio.length_scale))
     print("Loading the engineer's voice...", flush=True)
     backend = audio.start()

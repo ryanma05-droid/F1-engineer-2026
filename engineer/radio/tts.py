@@ -42,6 +42,38 @@ class AudioSettings:
     length_scale: float = 1.0        # Piper: < 1 talks faster (radio/engineers.py)
 
 
+# The volume slider (app window, 0-100). 70 % is the loudness from before the slider; above it the
+# voice gets up to BOOST_DB louder at 100 % (10 dB: about 3x the level, roughly twice as loud to the
+# ear). The radio clip already peaks at 0.8, so the extra comes from a soft limiter that squeezes
+# the peaks instead of clipping them (it sounds like a harder-driven radio, not a crackle).
+DEFAULT_VOLUME_PCT = 70
+BOOST_DB = 10.0
+LIMIT_KNEE = 0.8          # untouched below this: at 70 % the sound is exactly as before
+LIMIT_CEILING = 0.99
+
+
+def volume_gain(pct: float) -> float:
+    """Slider percent -> amplitude multiplier: 0 silent, 70 = 1.0, 100 = +10 dB."""
+    pct = max(0.0, min(100.0, float(pct)))
+    if pct <= DEFAULT_VOLUME_PCT:
+        return pct / DEFAULT_VOLUME_PCT
+    db = (pct - DEFAULT_VOLUME_PCT) / (100 - DEFAULT_VOLUME_PCT) * BOOST_DB
+    return 10 ** (db / 20)
+
+
+def soft_limit(audio: np.ndarray) -> np.ndarray:
+    """Peaks above the knee are bent smoothly towards the ceiling (slope 1 at the knee, never past
+    the ceiling), so a boosted voice is louder without hard clipping."""
+    a = np.abs(audio)
+    over = a > LIMIT_KNEE
+    if not over.any():
+        return audio
+    span = LIMIT_CEILING - LIMIT_KNEE
+    out = audio.copy()
+    out[over] = np.sign(audio[over]) * (LIMIT_KNEE + span * np.tanh((a[over] - LIMIT_KNEE) / span))
+    return out.astype(np.float32)
+
+
 def list_output_devices() -> list[tuple[int, str, bool]]:
     """(index, name, is_default) for every audio output device."""
     import sounddevice as sd
@@ -102,7 +134,7 @@ class PiperBackend:
             from engineer.radio.effects import radio_effect
             self._seed += 1
             audio = radio_effect(audio, sr, seed=self._seed)
-        return audio * self.settings.volume, sr
+        return soft_limit(audio * self.settings.volume), sr
 
     def speak(self, text: str, on_start) -> None:
         import sounddevice as sd
@@ -120,7 +152,10 @@ class Pyttsx3Backend:
         import pyttsx3
 
         self.engine = pyttsx3.init()
-        self.engine.setProperty("volume", max(0.0, min(1.0, settings.volume)))
+        self.set_volume(settings.volume)
+
+    def set_volume(self, gain: float) -> None:
+        self.engine.setProperty("volume", max(0.0, min(1.0, gain)))
 
     def speak(self, text: str, on_start) -> None:
         on_start()
@@ -171,7 +206,8 @@ def _make_backend(settings: AudioSettings):
 
 
 def audio_main(calls, status, settings: AudioSettings) -> None:
-    """Entry point of the audio process. `calls` receives (text, origin_t_ns) or None to stop.
+    """Entry point of the audio process. `calls` receives (text, origin_t_ns), {"volume": gain}
+    (the slider moved), or None to stop.
     `status` receives ("ready", backend) and ("spoke", text, latency_s) messages."""
     # Ctrl+C reaches every process in the console on Windows. Ignore it here: the main process
     # shuts us down cleanly by sending None.
@@ -183,6 +219,11 @@ def audio_main(calls, status, settings: AudioSettings) -> None:
         item = calls.get()
         if item is None:
             break
+        if isinstance(item, dict):              # the volume slider: from the next call on
+            settings.volume = float(item["volume"])
+            if hasattr(backend, "set_volume"):
+                backend.set_volume(settings.volume)
+            continue
         text, origin_t_ns = item
         latency = {}
 
@@ -248,6 +289,12 @@ class AudioProcess:
         if self._calls is not None:
             self._calls.put((text, origin_t_ns))
 
+    def set_volume(self, gain: float) -> None:
+        """Change the loudness without reloading the voice (the slider)."""
+        self.settings.volume = gain
+        if self._calls is not None:
+            self._calls.put({"volume": gain})
+
     def close(self, timeout_s: float = 5.0) -> None:
         if self._proc is None:
             return
@@ -267,7 +314,7 @@ if __name__ == "__main__":   # quick manual check: python -m engineer.radio.tts 
 
     cfg = load_config()
     ap = AudioProcess(AudioSettings(str(voice_model_path(cfg.voices_path, cfg.radio.voice_name)),
-                                    cfg.radio.radio_effect, cfg.radio.volume))
+                                    cfg.radio.radio_effect, cfg.radio.gain))
     print("voice:", ap.start())
     ap.say(" ".join(sys.argv[1:]) or "Radio check.", time.time_ns())
     ap.close(timeout_s=30)

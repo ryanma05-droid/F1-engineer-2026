@@ -61,3 +61,34 @@ def test_resolve_output_device(monkeypatch):
     assert tts.resolve_output_device(7) == (7, "Headphones (Arctis Nova 7)")
     assert tts.resolve_output_device("7") == (7, "Headphones (Arctis Nova 7)")
     assert tts.resolve_output_device("nope") == (None, "Speakers (Realtek Audio)")
+
+
+def test_volume_slider_70_is_the_old_loudness_and_100_is_louder_without_clipping():
+    """4 Nov: "too low most of the time". 70 % = as before; up to +10 dB at 100 %."""
+    import numpy as np
+    from piper import AudioChunk
+
+    from engineer.radio.tts import AudioSettings, PiperBackend, soft_limit, volume_gain
+    assert volume_gain(70) == 1.0 and volume_gain(0) == 0.0 and volume_gain(35) == 0.5
+    assert abs(volume_gain(100) - 10 ** 0.5) < 1e-9 and volume_gain(85) > 1.0
+    assert volume_gain(150) == volume_gain(100)
+    quiet = np.array([0.5, -0.79], dtype=np.float32)
+    assert np.array_equal(soft_limit(quiet), quiet)            # below the knee: untouched
+    loud = soft_limit(np.array([0.9, -1.1, 1.3], dtype=np.float32))
+    assert np.all(np.abs(loud) <= 0.99) and loud[0] > 0.8 and loud[1] < -0.8
+    assert loud[2] > loud[0]                                   # still in order: no flat clip
+
+    class FakeVoice:
+        def synthesize(self, text):
+            yield AudioChunk(sample_rate=22050, sample_width=2, sample_channels=1,
+                             audio_float_array=np.sin(np.linspace(0, 200, 22050)).astype(
+                                 np.float32), phonemes=[], phoneme_ids=[])
+    b = object.__new__(PiperBackend)
+    b.voice, b._seed = FakeVoice(), 0
+    b.settings = AudioSettings(voice_model=None, radio_effect=True, volume=volume_gain(70))
+    before, _ = b.render("x")
+    b._seed = 0
+    b.settings.volume = volume_gain(100)
+    after, _ = b.render("x")
+    rms = lambda a: float(np.sqrt(np.mean(a ** 2)))
+    assert rms(after) > 1.5 * rms(before) and np.max(np.abs(after)) <= 0.99

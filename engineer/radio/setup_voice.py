@@ -90,7 +90,7 @@ def main(argv: list[str] | None = None) -> int:
     print("Voice ready.")
     if args.test:
         audio = AudioProcess(AudioSettings(str(model), radio_effect=not args.no_effect,
-                                           volume=cfg.radio.volume, show_latency=False,
+                                           volume=cfg.radio.gain, show_latency=False,
                                            output_device=cfg.radio.output_device))
         print("Loading voice...", flush=True)
         backend = audio.start(wait_ready_s=60)

@@ -311,6 +311,12 @@ class AppWindow:
             # shows how it's going.
             self._voice_task = asyncio.ensure_future(self.voice.switch(eng))
             await asyncio.sleep(0)
+        volume = body.get("volume")
+        if volume is not None:
+            if not isinstance(volume, int) or isinstance(volume, bool) or not 0 <= volume <= 100:
+                return Response(400, {"error": "volume must be 0 to 100"})
+            self.voice.set_volume(volume)
+            save.setdefault("radio", {})["volume_pct"] = volume
         controller = body.get("controller")
         if controller is not None:
             if controller not in ("xbox", "playstation", "off"):

@@ -137,6 +137,10 @@ button { font: inherit; color: inherit; }
 .opt[aria-pressed="true"] { border-color: var(--red); background: #26161a; }
 .opt b { display: block; font-size: 15px; margin-bottom: 2px; }
 .opt span { color: var(--ink-3); font-size: 12.5px; }
+.vol { display: flex; align-items: center; gap: 12px; margin-top: 14px; }
+.vol label { font-size: 13px; color: var(--ink-2); min-width: 54px; }
+.vol input[type=range] { flex: 1; min-width: 0; accent-color: var(--red); height: 28px; }
+.vol output { font-variant-numeric: tabular-nums; min-width: 44px; text-align: right; font-weight: 600; }
 .tip { margin-top: 12px; font-size: 13px; color: var(--ink-2); background: var(--panel-2);
   border-left: 3px solid var(--red); padding: 9px 12px; border-radius: 0 8px 8px 0; }
 .tip b { color: var(--ink); }
@@ -271,6 +275,10 @@ ul.good li::before { content: "\2713"; position: absolute; left: 0; top: 1px; wi
       <div id="ctrlSettings"></div></div>
     <div class="card" style="margin-bottom:16px"><h3><span class="grow">Engineer voice</span><span class="muted small" id="voiceNote"></span></h3>
       <div class="seg three" id="voiceSettings"></div>
+      <div class="vol"><label for="volume">Volume</label>
+        <input type="range" id="volume" min="0" max="100" step="5" value="70" aria-describedby="volumeTip">
+        <output id="volumeOut" for="volume">70%</output></div>
+      <div class="muted small" id="volumeTip">70% is how loud it was before. Let go and the engineer says a line at the new volume.</div>
       <div class="tip" id="voiceTip"></div></div>
     <div class="card" style="margin-bottom:16px"><h3>Engineer tempo (default)</h3>
       <div class="seg" id="tempoSettings"></div><div class="tip" id="tempoTipSettings"></div></div>
@@ -635,7 +643,20 @@ async function setDetail(d) { S = await post("/api/settings", {detail: d}); rend
 const VOICE_STATE = {downloading: "downloading the voice…", loading: "loading the voice…",
   failed: "", ready: "", off: "voice is off"};
 async function setEngineer(k) { S = await post("/api/settings", {engineer: k}); render(); }
+let volumeDragging = false;
+async function setVolume(p) { S = await post("/api/settings", {volume: p}); volumeDragging = false; render(); }
+function renderVolume() {
+  const r = $("#volume"), out = $("#volumeOut");
+  if (!r._wired) {
+    r._wired = true;
+    r.oninput = () => { volumeDragging = true; out.textContent = r.value + "%"; };
+    r.onchange = () => setVolume(parseInt(r.value, 10));
+  }
+  const v = S.voice.volume ?? 70;
+  if (!volumeDragging && document.activeElement !== r) { r.value = v; out.textContent = v + "%"; }
+}
 function renderVoice() {
+  renderVolume();
   const v = S.voice, el = $("#voiceSettings");
   if (paint(el, ENGINEERS.map(e => `<button class="opt${e.joke ? " joke" : ""}" data-k="${e.key}"
     aria-pressed="${e.key === v.engineer}"><div class="who"><b>${esc(e.name)}</b><em>${esc(e.accent)}</em></div>

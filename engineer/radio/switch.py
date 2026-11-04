@@ -11,6 +11,8 @@ from engineer.radio.tts import AudioSettings, voice_model_path
 
 log = logging.getLogger(__name__)
 
+VOLUME_CHECK = "Radio check. How's that?"
+
 
 def current_key(cfg) -> str | None:
     """The engineer on the radio: the one picked, else the one whose voice is configured."""
@@ -30,7 +32,15 @@ class VoiceControl:
 
     def status(self) -> dict:
         return {"engineer": current_key(self.cfg), "state": self.state, "error": self.error,
-                "backend": self.audio.backend if self.audio is not None else None}
+                "backend": self.audio.backend if self.audio is not None else None,
+                "volume": self.cfg.radio.volume_pct}
+
+    def set_volume(self, pct: int) -> None:
+        """The slider: louder or quieter from the next call on, with a line to hear it by."""
+        self.cfg.radio.volume_pct = pct
+        if self.audio is not None:
+            self.audio.set_volume(self.cfg.radio.gain)
+            self.audio.say(VOLUME_CHECK)
 
     async def switch(self, key: str, download=None) -> None:
         """Make `key` the engineer. download(voice, folder): the voice downloader (tests)."""
@@ -59,7 +69,7 @@ class VoiceControl:
             self.state = "loading"
             r = self.cfg.radio
             backend = await asyncio.to_thread(self.audio.restart, AudioSettings(
-                voice_model=str(model), radio_effect=r.radio_effect, volume=r.volume,
+                voice_model=str(model), radio_effect=r.radio_effect, volume=r.gain,
                 output_device=r.output_device, length_scale=e.length_scale))
             self.state = "ready" if backend == "piper" else "failed"
             if backend != "piper":

@@ -241,6 +241,13 @@ uv run python -m engineer.report                     # driver report PDF (data/r
 
 ## Engineer voices
 
+- Volume slider (Settings, Engineer voice card): `radio.volume_pct` 0-100, saved to
+  config.local.yaml. 70 = the loudness before the slider (gain 1.0); above 70 up to +10 dB at 100
+  (`tts.volume_gain`), with `tts.soft_limit` bending peaks above 0.8 so it never hard-clips (70 %
+  sounds exactly as before). Changed live (`AudioProcess.set_volume` sends {"volume": gain} to the
+  audio process, no voice reload), then says "Radio check. How's that?". `radio.volume` stays as
+  an extra multiplier in the config file; `cfg.radio.gain` is the product.
+
 - `radio/engineers.py`: six engineers (Settings tab), each a Piper voice + speed; Kevin (work
   experience) also has a personality that wraps calls with panic/apologies, seeded so replays
   repeat. The call text is never changed: `RadioMessage.text` stays the call (racecraft and

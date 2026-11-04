@@ -51,6 +51,12 @@ class Radio(BaseModel):
     engineer: str | None = None
 
     @property
+    def gain(self) -> float:
+        """What the voice is multiplied by: the slider times the config file's volume."""
+        from engineer.radio.tts import volume_gain
+        return volume_gain(self.volume_pct) * self.volume
+
+    @property
     def voice_name(self) -> str:
         from engineer.radio.engineers import BY_KEY
         e = BY_KEY.get(self.engineer or "")
@@ -64,7 +70,11 @@ class Radio(BaseModel):
     radio_effect: bool = True
     # Say calls a few different ways so races don't sound the same (radio/variety.py).
     variety: bool = True
-    volume: float = Field(default=1.0, ge=0.0, le=2.0)
+    # The volume slider in the app window, 0-100. 70 is how loud the engineer was before the
+    # slider (4 Nov: "too low most of the time"); above 70 is louder, up to about 3x at 100
+    # (radio/tts.py:volume_gain).
+    volume_pct: int = Field(default=70, ge=0, le=100)
+    volume: float = Field(default=1.0, ge=0.0, le=2.0)   # extra multiplier (config file only)
     output_device: str | int | None = None   # None = Windows default; part of a name, or index
     lap_delta_max_wait_s: float = Field(default=3.0, gt=0)
     cooldowns_s: dict[str, float] = {"lap_delta": 5.0, "tyre_status": 30.0, "tyre_warning": 10.0,

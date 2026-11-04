@@ -665,3 +665,7 @@ to 15 s.
 button is down, and from the question until the answer is said (8 s at most), the engineer starts
 nothing else; the lap time, tyre and strategy calls that queue up as you cross the line on the main
 straight wait (not dropped) and follow the answer. Box and safety car calls come right after it.
+
+4 Nov, volume slider: Settings -> Engineer voice has a volume slider. 70 % is the old loudness;
+100 % is about three times the level (measured 2.9x on the radio sound) with peaks squeezed by a
+soft limiter instead of clipping. It changes at once and the engineer says a line at the new level.

@@ -20,7 +20,8 @@ radio:
   detail: plain         # plain ("brake slightly later") | specific ("braking fifteen metres earlier")
   voice: en_GB-northern_english_male-medium   # Piper voice in data/voices/
   radio_effect: true    # squelch beeps + band-limited "team radio" sound
-  volume: 1.0
+  volume_pct: 70        # the app window's volume slider, 0-100 (70 = the old loudness, 100 = about 3x)
+  volume: 1.0           # extra multiplier on top of the slider
   output_device: null   # null = Windows default output. Or part of a device name, e.g. "Headphones"
                         # (list them: python -m engineer.radio.setup_voice --devices)
   lap_delta_max_wait_s: 3.0   # wait up to this long for a straight, then drop the call
