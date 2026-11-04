@@ -582,3 +582,35 @@ You choose which unanswered questions get worked on, by flagging them on the rad
 - Run `uv run python -m engineer.features build` once to time the stops in your existing
   recordings; new races are added automatically.
 
+## Session of 3 Nov evening (v0.1.4, online lobby): findings and fixes to build
+
+Uploaded: a 5-lap Melbourne race (01:19 UTC) and one file with three one-shot qualifying laps
+(Melbourne, Shanghai, Texas, ~40 min apart, same session UID). The three races between the
+qualifying sessions were not uploaded (see 1).
+
+Fixes, not built yet:
+1. Recordings lost at upload: both uploads were pushed 22 s apart at 03:47 UTC, i.e. at the
+   end of one app run that covered the whole evening, and they are exactly the first two in
+   the run's upload order (race, qualifying file, then the three races). The races were most
+   likely recorded but the upload was cut short when the app was closed (Ctrl+C again /
+   closing the window during the 3rd upload), and auto-upload only ever sends that run's
+   recordings, so they'd never go later. To build: upload each recording in the background
+   when its session ends (not only at shutdown); auto-upload sends every recording not in
+   uploaded.txt; an upload status + "Upload now" in the app window. To confirm on the PC:
+   %LOCALAPPDATA%\RaceEngineer\data\sessions for files stamped 01:43-03:47 UTC.
+2. Tyre wear depends on race length: the game wears tyres about half as fast in 5-lap races
+   (Melbourne softs: you 3.3 vs 6.2 %/lap, AI 2.3 vs 4.3; your ratio to the AI unchanged;
+   offline Brazil 5-lap matches). The model pools every race at a track, so 5-lap rows make
+   25 % plans optimistic. Key wear by the game's m_sessionLength (5 laps = 3 "short", 25 % = 4
+   "medium") or the race's share of full distance; check how practice wear scales.
+3. The game sends session time = FLT_MAX after a session ends (results screen, ~38 min of
+   packets): the pre-race plan queued at the end of qualifying expired, and a jump from FLT_MAX
+   back to 0 looked like a restart. Ignore those times in RaceState.
+4. Pre-race plan after qualifying: once per (session UID, track), not per UID (one lobby kept
+   the same UID for all three); say "no tyre numbers for Texas yet" instead of silence.
+5. Online lobbies: hidden human names arrive as "Player" ("Good move on Player"); call them by
+   team ("the Ferrari").
+6. Practice/qualifying corner calls compared with "the car ahead" ("Turn eight, losing one
+   point nine seconds to the car ahead" after a one-shot lap): use your own best / the session's
+   fastest lap outside races.
+
