@@ -52,11 +52,12 @@ def _laptime(ms: float | None) -> str | None:
 
 class AppWindow:
     def __init__(self, cfg: Config, engine, listener=None, recorder=None, ptt=None,
-                 config_path: Path | None = None, voice=None):
+                 config_path: Path | None = None, voice=None, uploader=None):
         """ptt: the push-to-talk control (cli.PushToTalkControl) or None (replays, tests).
         voice: radio.switch.VoiceControl (picks the engineer); None = personality only."""
         from engineer.radio.switch import VoiceControl
         self.voice = voice or VoiceControl(cfg, engine, None)
+        self.uploader = uploader                 # ingest.uploader.BackgroundUploader (live only)
         self._voice_task = None
         self.cfg, self.engine, self.listener, self.recorder = cfg, engine, listener, recorder
         self.ptt, self.config_path = ptt, config_path
@@ -82,6 +83,7 @@ class AppWindow:
             ("POST", "/api/report/build"): self._api_build,
             ("POST", "/api/feedback/dismiss"): self._api_dismiss,
             ("POST", "/api/prerace"): self._api_prerace,
+            ("POST", "/api/upload"): self._api_upload,
         })
         self._prerace_busy = False
 
@@ -213,6 +215,7 @@ class AppWindow:
             "coaching": self._coaching(),
             "prerace": self._prerace(),
             "voice": self.voice.status(),
+            "uploads": self.uploader.status() if self.uploader is not None else None,
             "console_player": self.cfg.platform == "console",
         }
 
@@ -272,6 +275,13 @@ class AppWindow:
             return Response(504, {"error": "the strategy worker didn't answer"})
         finally:
             self._prerace_busy = False
+        return Response(200, self.snapshot())
+
+    async def _api_upload(self, _body) -> Response:
+        """"Upload now": every recording waiting, straight away."""
+        if self.uploader is None:
+            return Response(409, {"error": "uploads are off here"})
+        self.uploader.request_now()
         return Response(200, self.snapshot())
 
     async def _api_settings(self, body: dict) -> Response:

@@ -69,3 +69,37 @@ def test_local_config_overrides(tmp_path):
     assert cfg.upload.auto is True and cfg.upload.min_mb == 5
     (tmp_path / "other").mkdir()
     assert load_config(Path(tmp_path / "other" / "missing.yaml")).upload.auto is False
+
+
+def test_a_grown_recording_goes_up_again_and_replaces_its_branch(tmp_path):
+    """3 Nov: an online lobby kept one session UID, so later sessions were added to the same
+    file after it could already have been uploaded."""
+    remote, repo = tmp_path / "remote.git", tmp_path / "repo"
+    git("init", "--bare", str(remote), cwd=tmp_path)
+    git("init", "-b", "main", str(repo), cwd=tmp_path)
+    git("remote", "add", "origin", str(remote), cwd=repo)
+    cfg = Config(data_dir=tmp_path / "data")
+    cfg.sessions_path.mkdir(parents=True)
+    rec = cfg.sessions_path / "20261104T014307Z_d09f42214f768368.zst"
+    rec.write_bytes(b"\x01" * 3_000_000)
+    share_dir = cfg.data_path / "share"
+    assert share.pending(cfg) == [rec]
+    share.upload(rec, share_dir, "origin", repo=repo, progress=lambda m: None)
+    assert share.pending(cfg) == []
+    assert share.uploaded_sizes(share_dir) == {rec.name: 3_000_000}
+    with open(rec, "ab") as fh:                                       # the next session
+        fh.write(b"\x02" * 2_000_000)
+    assert share.pending(cfg) == [rec]
+    share.upload(rec, share_dir, "origin", repo=repo, progress=lambda m: None)
+    blob = subprocess.run(["git", "show", f"recording-20261104t014307z:data/share/{rec.name}.part01"],
+                          cwd=remote, check=True, capture_output=True).stdout
+    assert len(blob) == 5_000_000 and share.pending(cfg) == []
+
+
+def test_old_uploaded_list_without_sizes_still_counts():
+    import tempfile
+
+    from engineer.ingest.share import uploaded_sizes
+    d = Path(tempfile.mkdtemp())
+    (d / "uploaded.txt").write_text("a.zst\nb.zst 1234\n", encoding="utf-8")
+    assert uploaded_sizes(d) == {"a.zst": None, "b.zst": 1234}

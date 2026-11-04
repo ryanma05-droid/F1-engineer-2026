@@ -121,7 +121,8 @@ def upload(path: Path, share_dir: Path, remote: str = "origin", repo: Path = PRO
     """Push one recording (plus the push-to-talk questions asked during it) to its own branch.
     Returns the branch name."""
     branch = branch_name(path)
-    progress(f"Uploading {path.name} ({path.stat().st_size / 1e6:.0f} MB) to branch {branch}...")
+    size = path.stat().st_size
+    progress(f"Uploading {path.name} ({size / 1e6:.0f} MB) to branch {branch}...")
     parts = split(path, share_dir)
     q = session_questions(path, questions_log)
     if q is not None:
@@ -136,30 +137,66 @@ def upload(path: Path, share_dir: Path, remote: str = "origin", repo: Path = PRO
         root_tree = _git(["mktree"], repo, stdin=f"040000 tree {data_tree}\tdata\n")
         commit = _git(["commit-tree", root_tree, "-m", f"Add recording {path.name}"], repo,
                       env=_commit_env(repo))
-        _git(["push", remote, f"{commit}:refs/heads/{branch}"], repo)
+        # "+": a recording uploaded before and grown since (an online lobby keeps one session
+        # UID, so later sessions are added to the same file) replaces its branch.
+        _git(["push", remote, f"+{commit}:refs/heads/{branch}"], repo)
     finally:
         for p in parts:              # the parts now live in git; don't keep a second copy
             p.unlink(missing_ok=True)
     with open(share_dir / UPLOADED_LIST, "a", encoding="utf-8") as f:
-        f.write(path.name + "\n")
+        f.write(f"{path.name} {size}\n")
     progress(f"Uploaded: {branch}")
     return branch
 
 
-def uploaded_names(share_dir: Path) -> set[str]:
+def uploaded_sizes(share_dir: Path) -> dict[str, int | None]:
+    """Uploaded recordings and their size when sent (None: listed before sizes were kept)."""
     p = share_dir / UPLOADED_LIST
-    return set(p.read_text(encoding="utf-8").split()) if p.exists() else set()
+    out: dict[str, int | None] = {}
+    if not p.exists():
+        return out
+    for line in p.read_text(encoding="utf-8").splitlines():
+        bits = line.split()
+        if not bits:
+            continue
+        size = int(bits[1]) if len(bits) > 1 and bits[1].isdigit() else None
+        if bits[0] not in out or (size or 0) > (out[bits[0]] or 0):
+            out[bits[0]] = size
+    return out
+
+
+def uploaded_names(share_dir: Path) -> set[str]:
+    return set(uploaded_sizes(share_dir))
+
+
+GROWN_BYTES = 1_000_000      # a recording this much bigger than when uploaded goes up again
+
+
+def pending(cfg: Config, paths: list[Path] | None = None) -> list[Path]:
+    """Recordings not uploaded yet, or grown since (later sessions under the same UID), at least
+    upload.min_mb, oldest first."""
+    done = uploaded_sizes(cfg.data_path / "share")
+    if paths is None:
+        paths = sorted(cfg.sessions_path.glob("*.zst"))
+    out = []
+    for p in paths:
+        try:
+            size = p.stat().st_size
+        except OSError:
+            continue
+        if size < cfg.upload.min_mb * 1e6:
+            continue
+        sent = done.get(p.name, -1)
+        if sent == -1 or (sent is not None and size > sent + GROWN_BYTES):
+            out.append(p)
+    return out
 
 
 def upload_pending(cfg: Config, paths: list[Path] | None = None, progress=print) -> list[str]:
-    """Upload recordings (default: all in data/sessions/) not uploaded yet and at least
-    upload.min_mb in size. Failures are reported and skipped. Returns the branches pushed."""
+    """Upload recordings (default: all in data/sessions/) not uploaded yet (or grown since) and at
+    least upload.min_mb in size. Failures are reported and skipped. Returns the branches pushed."""
     share_dir = cfg.data_path / "share"
-    done = uploaded_names(share_dir)
-    if paths is None:
-        paths = sorted(cfg.sessions_path.glob("*.zst"))
-    todo = [p for p in paths if p.exists() and p.name not in done
-            and p.stat().st_size >= cfg.upload.min_mb * 1e6]
+    todo = pending(cfg, paths)
     if not todo:
         progress("No new recordings to upload.")
         return []

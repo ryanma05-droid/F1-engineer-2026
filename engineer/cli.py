@@ -200,15 +200,21 @@ async def _run(cfg: Config, record: bool | None, voice: bool, ptt_on: bool = Tru
     if recorder:
         listener.subscribe(recorder)       # recorder first: raw bytes are saved even if parsing fails
     listener.subscribe(pipeline.feed)
+    # Recordings go up in the background whenever no session is live (upload.auto), so closing
+    # the app mid-upload can't lose them (3 Nov: three races never reached GitHub).
+    from engineer.ingest.uploader import BackgroundUploader
+    uploader = BackgroundUploader(cfg, pipeline, recorder)
 
     await listener.start()
+    if recorder:
+        uploader.start()
     idle = asyncio.create_task(_idle_loop(engine))
     window = None
     if ui and cfg.ui.enabled:
-        from engineer.ui.app import AppWindow, open_window
         from engineer.radio.switch import VoiceControl
+        from engineer.ui.app import AppWindow, open_window
         window = AppWindow(cfg, engine, listener, recorder, ptt, config_path,
-                           voice=VoiceControl(cfg, engine, audio))
+                           voice=VoiceControl(cfg, engine, audio), uploader=uploader)
         if audio and wait_for_setup:
             window.on_setup_done = lambda: welcome(cfg, audio, ptt.wanted(cfg))
         try:
@@ -234,6 +240,7 @@ async def _run(cfg: Config, record: bool | None, voice: bool, ptt_on: bool = Tru
             last = listener.packets_received
     finally:
         idle.cancel()
+        await uploader.close()
         VARIETY.save_in_background()
         listener.close()
         if window:
@@ -263,9 +270,9 @@ async def _run(cfg: Config, record: bool | None, voice: bool, ptt_on: bool = Tru
         if recorder and cfg.upload.auto:
             # Shutting down anyway, so a blocking upload is fine here.
             from engineer.ingest.share import upload_pending
-            print("Uploading this run's recordings to GitHub (Ctrl+C again to skip)...")
+            print("Uploading recordings not sent yet to GitHub (Ctrl+C again to skip)...")
             try:
-                upload_pending(cfg, recorder.paths_this_run)
+                upload_pending(cfg)          # every one not sent yet, not only this run's
             except KeyboardInterrupt:
                 print("Upload skipped. Later: uv run python -m engineer.ingest.share --pending")
         if recorder and recorder.paths_this_run:

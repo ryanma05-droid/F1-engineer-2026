@@ -113,6 +113,13 @@ class Recorder:
             cur.file.flush()
             cur.last_flush_ns = t_ns
 
+    def flush(self) -> None:
+        """Push everything written so far to the file (before it's uploaded while still open)."""
+        cur = self._current
+        if cur is not None:
+            cur.writer.flush(zstandard.FLUSH_BLOCK)
+            cur.file.flush()
+
     def close(self) -> None:
         self._close_current(time.time_ns())
         self.db.close()

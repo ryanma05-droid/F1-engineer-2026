@@ -250,6 +250,8 @@ ul.good li::before { content: "\2713"; position: absolute; left: 0; top: 1px; wi
           <div class="tip" id="tempoTipLive"></div></div>
         <div class="card"><h3><span class="grow">Logged questions</span><span class="muted small" id="fbCount"></span></h3>
           <div id="feedback"></div></div>
+        <div class="card" id="uploadCard"><h3><span class="grow">Recordings to GitHub</span><span class="muted small" id="upNote"></span></h3>
+          <div id="uploads"></div></div>
       </div>
     </div>
   </section>
@@ -504,6 +506,24 @@ function renderPre() {
   paint(el, body);
 }
 
+function renderUploads() {
+  const u = S.uploads, card = $("#uploadCard");
+  if (!u) { card.style.display = "none"; return; }
+  card.style.display = "";
+  $("#upNote").textContent = u.auto ? "auto" : "auto off";
+  const n = u.waiting.length;
+  let head;
+  if (u.uploading) head = `<b>Uploading</b> <span class="num">${esc(u.uploading)}</span>…`;
+  else if (n && u.racing && u.auto) head = `${n} waiting · they go up when you're not in a session`;
+  else if (n) head = `${n} recording${n === 1 ? "" : "s"} waiting to upload`;
+  else head = `All recordings uploaded`;
+  const err = u.error ? `<div class="tip">Last upload failed: ${esc(u.error)}</div>` : "";
+  const done = u.done.length ? `<div class="muted small" style="margin-top:6px">Sent this run: ${u.done.map(esc).join(", ")}</div>` : "";
+  if (paint($("#uploads"), `<div style="display:flex;gap:10px;align-items:center"><div class="small" style="flex:1">${head}</div>
+      <button class="btn" id="upNow" ${n && !u.uploading ? "" : "disabled"}>Upload now</button></div>${done}${err}`))
+    $("#upNow").onclick = async () => { S = await post("/api/upload"); render(); };
+}
+
 function renderFeedback() {
   const f = S.feedback, el = $("#feedback");
   $("#fbCount").textContent = f.count ? `${f.count} open` : "";
@@ -678,6 +698,7 @@ function renderWizard() {
 function render() {
   if (!S) return;
   renderTop(); renderSession(); renderFeed(); renderCoach(); renderPre(); renderPtt(); renderFeedback();
+  renderUploads();
   renderReportHead();
   tempoButtons($("#tempoLive"), S.tempo, setTempo);
   $("#tempoTipLive").innerHTML = tempoTip();
