@@ -23,7 +23,12 @@ from engineer.strategy.model import (
     StrategyModel,
     build_model,
 )
-from engineer.strategy.prerace import RaceLength, race_length, start_situations
+from engineer.strategy.prerace import (
+    RaceLength,
+    race_length,
+    same_length_rows,
+    start_situations,
+)
 from engineer.strategy.real_pit_loss import REAL_FILE, load_real
 from engineer.strategy.sim import Plan, RaceSituation, SimResult, plan_cost, simulate
 
@@ -150,7 +155,11 @@ def solve(req: StrategyRequest, history: list[dict],
         # This session might also be in the history table (a replay of a built recording).
         past = [r for r in history if r.get("session_uid") != req.session_uid]
         all_rows = past + list(req.session_rows)
-        track_rows = [r for r in all_rows if r.get("track_id") == req.track_id]
+        # Wear depends on the race length setting: a 5-lap race's laps aren't used for a
+        # 20-lap race (or the other way round). The wear ratio to the AI (all_rows) holds for both.
+        track_rows = same_length_rows(
+            [r for r in all_rows if r.get("track_id") == req.track_id],
+            req.situation.total_laps)
         model = build_model(track_rows, all_rows, list(req.current_stint), req.game, req.settings,
                             timer=_timer(req, pit), real_pit_s=pit[1].get(req.track_id))
         sit = replace(req.situation, pit_loss_s=model.pit_loss.value,

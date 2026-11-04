@@ -55,16 +55,16 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from engineer.bus import events as ev
 from engineer.analyzers.coaching import CoachCorner, CoachLap
+from engineer.bus import events as ev
 from engineer.config import Corners
 from engineer.features.lap_features import LapFeatureBuilder
 from engineer.features.laps import LapHistory, LapRecord
 from engineer.radio.director import Priority, RadioCall, RadioDirector
 from engineer.radio.phrases import coaching_phrase, corner_better_phrase, corner_phrase
 from engineer.state.race_state import RaceState
-from engineer.state.track_maps import TrackMap, TrackMaps, detect_corners
 from engineer.state.traces import LapTrace, TraceRecorder
+from engineer.state.track_maps import TrackMap, TrackMaps, detect_corners
 from engineer.tools.queries import REASON_THRESHOLDS, CornerDelta, corner_deltas
 
 log = logging.getLogger(__name__)
@@ -263,6 +263,15 @@ class CornerAnalyzer:
         deltas = self._log_coach_lap(trace, e)
         if self.coaching and deltas is not None:
             self._coach(e, deltas)
+            return
+        if not self.state.session.is_race:
+            # Practice and qualifying: the car "ahead" is ahead on lap time, often on a slow lap
+            # (3 Nov one-shot qualifying: "losing one point nine seconds to the car ahead"
+            # through one corner). Against the fastest lap of the session, else your own.
+            if self.bench is not None and self.bench.car != me:
+                self._compare(trace, self.bench.trace, "fastest")
+            else:
+                self._compare_best(trace)
             return
         gap_ms = self.cfg.nearby_gap_s * 1000
         c = self.state.cars

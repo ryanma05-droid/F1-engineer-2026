@@ -45,7 +45,7 @@ def test_compared_phrase_levels():
 
 def test_reference_not_previous_lap_is_said():
     d = LapDelta(lap(5, 70000), lap(3, 69500), None, 500, (500, 0, 0), 1)
-    assert lap_delta_phrase(d) == "One ten zero, five tenths slower on your last clean lap, lost in sector one."
+    assert lap_delta_phrase(d) == "One ten point zero, five tenths slower on your last clean lap, lost in sector one."
 
 
 def test_same_again():

@@ -10,6 +10,7 @@ like the live session it came from.
 from __future__ import annotations
 
 import logging
+import math
 from typing import Callable
 
 from engineer.bus.events import EventBus
@@ -28,6 +29,7 @@ class Pipeline:
         self.detector = EventDetector(self.bus)
         self.packets = 0
         self.unknown_packets = 0
+        self.after_end_packets = 0     # results-screen packets with a nonsense clock (skipped)
         self.bad_packets = 0
         self.last_arrival_ns: int | None = None
         self._warned_formats: set[int] = set()
@@ -54,6 +56,12 @@ class Pipeline:
             return
         if rec is None:
             self.unknown_packets += 1
+        if not session_time_ok(float(header["m_sessionTime"])):
+            # After a session ends the game keeps sending (results screen, lobby) with the clock
+            # at FLT_MAX (3 Nov online lobby: ~38 min of them). They carry no race, and that
+            # clock expired waiting radio calls and a jump back to 0 looked like a restart.
+            self.after_end_packets += 1
+            return
 
         old_uid = self.state.session_uid
         if self.state.apply(header, packet_id, rec):
@@ -61,3 +69,11 @@ class Pipeline:
         self.detector.process(self.state, packet_id, rec)
         for fn in self.after_packet:
             fn(packet_id)
+
+
+MAX_SESSION_TIME_S = 1e6       # no session lasts 11 days: anything above is the game's FLT_MAX
+
+
+def session_time_ok(t: float) -> bool:
+    return math.isfinite(t) and 0.0 <= t < MAX_SESSION_TIME_S
+

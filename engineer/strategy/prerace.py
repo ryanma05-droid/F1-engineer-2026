@@ -9,8 +9,8 @@ what the engineer already knows:
   just drove (qualifying at the same weekend);
 - the race length: the one you name ("fifteen laps"), else your last race at this track, else your
   usual race distance (your last race as a share of its full distance: 25 %, 35 %, 50 %, 100 %)
-  applied to this track's full distance, rounded up the way the game does (Melbourne 58 laps at
-  25 % = 15);
+  applied to this track's full distance, rounded to the nearest lap like the game (Melbourne 58
+  laps at 25 % = 15, at 35 % = 20);
 - the tyres: wear rates and pace from your history at this track (the same model as the race
   calls, engineer/strategy/model.py), and the game's tyre sets when the last session was here.
 
@@ -62,14 +62,13 @@ def last_race(history: list[dict]) -> tuple[int, int] | None:
         best[uid][1] = max(best[uid][1], int(r["lap"]))
     for uid in reversed(order):
         track, laps = best[uid]
-        if track is not None and laps > 0:
+        if track is not None and laps > SHORT_RACE:     # 5-lap races say nothing about yours
             return int(track), laps
     return None
 
 
 def last_race_at(history: list[dict], track_id: int) -> int | None:
-    """Laps of your newest race at this track, None if you haven't raced here."""
-    found = None
+    """Laps of your newest race at this track (5-lap races left out), None if none."""
     laps: dict[str, int] = {}
     for r in history:
         if r.get("track_id") != track_id or r.get("session_type") not in f.RACE_SESSION_TYPES \
@@ -77,8 +76,8 @@ def last_race_at(history: list[dict], track_id: int) -> int | None:
             continue
         uid = r.get("session_uid")
         laps[uid] = max(laps.get(uid, 0), int(r["lap"]))
-        found = uid
-    return laps.get(found) if found is not None else None
+    longer = [uid for uid in laps if laps[uid] > SHORT_RACE]
+    return laps[longer[-1]] if longer else None
 
 
 def usual_share(track_id: int, laps: int) -> float | None:
@@ -93,7 +92,9 @@ def usual_share(track_id: int, laps: int) -> float | None:
 
 def laps_at(track_id: int, share: float) -> int | None:
     full = FULL_RACE_LAPS.get(track_id)
-    return math.ceil(full * share - 1e-9) if full else None
+    # Rounded to the nearest lap, halves up, like the game: Melbourne 58 laps at 25 % = 15, at
+    # 35 % = 20 (20.3; 3 Nov), Shanghai 56 at 35 % = 20 (19.6).
+    return math.floor(full * share + 0.5) if full else None
 
 
 def race_length(track_id: int, history: list[dict],
@@ -102,6 +103,8 @@ def race_length(track_id: int, history: list[dict],
     recent: (track_id, laps) of a race seen live this run (the game's lap count, exact).
     From the history the laps are the most any car completed, so a race you left early reads
     short (Shanghai, 3 Nov: left on lap 6 of 14): they're snapped to the distance setting."""
+    if recent is not None and recent[1] <= SHORT_RACE:
+        recent = None
     if recent is not None and recent[0] == track_id:
         return RaceLength(recent[1], "last race here")
     here = last_race_at(history, track_id)
@@ -175,3 +178,24 @@ def order_starts(starts: list[PreRaceStart]) -> list[PreRaceStart]:
         return sorted(starts, key=lambda s: s.cost_s)
     best = min(safe, key=lambda s: s.cost_s)
     return [best] + sorted((s for s in starts if s is not best), key=lambda s: s.cost_s)
+
+
+def short_race(laps: int) -> bool:
+    """The game's 5-lap race setting. Tyres wear about half as fast there (3 Nov, Melbourne softs:
+    you 3.3 vs 6.2 %/lap, the AI 2.3 vs 4.3 in a 15-lap race; Brazil's 5-lap race the same), while
+    25 % and 35 % races wear alike, so wear is never mixed across the two."""
+    return laps <= SHORT_RACE
+
+
+def same_length_rows(rows: list[dict], race_laps: int) -> list[dict]:
+    """Lap rows usable for a race of race_laps: other races only if they're the same kind (5-lap
+    or a proper distance); practice and qualifying rows stay."""
+    want = short_race(race_laps)
+    most: dict[tuple, int] = {}
+    for r in rows:
+        if r.get("session_type") in f.RACE_SESSION_TYPES and r.get("lap") is not None:
+            key = (r.get("session_uid"), r.get("track_id"))
+            most[key] = max(most.get(key, 0), int(r["lap"]))
+    return [r for r in rows if r.get("session_type") not in f.RACE_SESSION_TYPES
+            or short_race(most.get((r.get("session_uid"), r.get("track_id")), 0)) == want]
+

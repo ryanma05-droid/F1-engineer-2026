@@ -103,7 +103,7 @@ class StrategyAnalyzer:
         self.prerace: PreRacePlan | None = None     # the latest pre-race plan (app window)
         self.prerace_auto = True                    # say it when qualifying ends
         self.pit_meter = None                       # features.pit_loss.PitLossMeter (build_engine)
-        self._prerace_auto_done: int | None = None  # ... once per session
+        self._prerace_auto_done: tuple | None = None  # ... once per (session UID, track)
         self._reset()
         bus.subscribe(ev.LapCompleted, self.on_lap)
         bus.subscribe(ev.PitEntry, self.on_pit_entry)
@@ -613,13 +613,16 @@ class StrategyAnalyzer:
 
     def _on_session_ended(self, e: ev.SessionEnded) -> None:
         """Qualifying done: car and tyre setup for the race comes next, so say the plan now."""
+        # Once per qualifying session: an online lobby keeps one session UID for every session
+        # (3 Nov: Melbourne, Shanghai and Texas qualifying all under one), so the track counts too.
+        key = (e.session_uid, self.last_track)
         if not self.prerace_auto or self.last_session_type not in QUALIFYING \
-                or self._prerace_auto_done == e.session_uid or not self.cfg.enabled:
+                or self._prerace_auto_done == key or not self.cfg.enabled:
             return
-        self._prerace_auto_done = e.session_uid
+        self._prerace_auto_done = key
 
         def said(plan: PreRacePlan) -> None:
-            if plan.starts:          # nothing to say without tyre numbers here
+            if plan.error is None:   # incl. "no tyre numbers for Texas yet"
                 self._say("prerace", phrases.prerace_phrase(
                     plan, self.verbosity, self.tyres.limit_pct, self.cfg.margin_pct),
                     Priority.HIGH, max_wait_s=60.0, wait_for_straight=False)

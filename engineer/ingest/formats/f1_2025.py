@@ -637,6 +637,17 @@ TRACKS = {
     41: "Zandvoort (Reverse)",
 }
 
+# Team IDs (Data_Output_from_F1_25_v3.pdf, "Team IDs"). Used to name online players whose names
+# are hidden (the game sends "Player").
+TEAMS = {
+    0: "Mercedes", 1: "Ferrari", 2: "Red Bull", 3: "Williams", 4: "Aston Martin", 5: "Alpine",
+    6: "RB", 7: "Haas", 8: "McLaren", 9: "Sauber", 41: "F1 Generic", 104: "Custom Team",
+    129: "Konnersport", 142: "APXGP", 154: "APXGP", 155: "Konnersport", 185: "Mercedes",
+    186: "Ferrari", 187: "Red Bull", 188: "Williams", 189: "Aston Martin", 190: "Alpine",
+    191: "RB", 192: "Haas", 193: "McLaren", 194: "Sauber",
+}
+HIDDEN_NAME = "Player"          # what the game sends for an online player with names hidden
+
 SESSION_TYPES = {
     0: "Unknown", 1: "Practice 1", 2: "Practice 2", 3: "Practice 3", 4: "Short Practice",
     5: "Qualifying 1", 6: "Qualifying 2", 7: "Qualifying 3", 8: "Short Qualifying",

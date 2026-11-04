@@ -28,7 +28,8 @@ def number_words(n: int) -> str:
 
 
 def say_lap_time(ms: int) -> str:
-    """69162 -> 'one oh nine one', 77680 -> 'one seventeen six', 59850 -> 'fifty nine eight'.
+    """69162 -> 'one oh nine one', 77680 -> 'one seventeen six', 59850 -> 'fifty nine eight',
+    100400 -> 'one forty point four' (not 'one forty four', which sounds like 1:44).
 
     Truncated to the tenth, like a timing screen (1:09.162 reads as 1:09.1)."""
     tenths_total = ms // 100
@@ -40,6 +41,9 @@ def say_lap_time(ms: int) -> str:
         secs = "oh oh"
     elif seconds < 10:
         secs = f"oh {_ONES[seconds]}"
+    elif seconds % 10 == 0:
+        # "one forty four" would sound like 1:44 (3 Nov Shanghai, a 1:40.4): "one forty point four".
+        return f"{number_words(minutes)} {number_words(seconds)} point {number_words(tenths)}"
     else:
         secs = number_words(seconds)
     return f"{number_words(minutes)} {secs} {number_words(tenths)}"

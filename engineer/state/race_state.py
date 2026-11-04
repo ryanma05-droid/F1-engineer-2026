@@ -347,7 +347,7 @@ class RaceState:
         c.ai_controlled = p["m_aiControlled"].astype(float)
         c.team_id = p["m_teamId"].astype(float)
         c.race_number = p["m_raceNumber"].astype(float)
-        c.names = [f.decode_name(bytes(n)) or None for n in p["m_name"]]
+        c.names = _named(p)
 
     def _on_lap_data(self, r: np.void) -> None:
         c = self.cars
@@ -465,3 +465,21 @@ _HANDLERS = {
     f.PacketId.LAP_POSITIONS: RaceState._on_lap_positions,
     f.PacketId.EVENT: RaceState._on_event,
 }
+
+
+def _named(p: np.ndarray) -> list[str | None]:
+    """Driver names; online players with hidden names (the game sends "Player" for every one of
+    them, 3 Nov lobby) are called by their team ("FERRARI", like the game's own capitals), with
+    the car number when two hidden players drive for the same team."""
+    names = [f.decode_name(bytes(n)) or None for n in p["m_name"]]
+    hidden = [i for i, n in enumerate(names) if n == f.HIDDEN_NAME and not p["m_aiControlled"][i]]
+    teams = [f.TEAMS.get(int(p["m_teamId"][i])) for i in hidden]
+    for i, team in zip(hidden, teams):
+        if team is None:
+            continue
+        label = team.upper()
+        if teams.count(team) > 1:
+            label += f" {int(p['m_raceNumber'][i])}"
+        names[i] = label
+    return names
+
