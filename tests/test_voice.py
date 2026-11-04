@@ -17,7 +17,6 @@ from engineer.voice.intents import match
 from tests.synth import FakeRace
 from tests.test_strategy import SETS, model, situation
 
-
 # -- intents -----------------------------------------------------------------------------------
 
 @pytest.mark.parametrize("said,intent", [
@@ -414,6 +413,7 @@ def test_microphone_that_stops_sending_is_noticed(monkeypatch):
     """27-29 Oct: every question came back as 0.32 s (just the pre-roll): the microphone stream
     had stopped delivering audio. The speech process now notices and reopens it."""
     import numpy as np
+
     from engineer.voice import speech
 
     class FakeStream:
@@ -505,3 +505,54 @@ def test_true_position_phrase():
     assert phrases.true_position_phrase(7, 8, [], ["Sainz"]) == (
         "P seven on the road. After your stop Sainz will be ahead. About P eight once it all "
         "shakes out.")
+
+
+def test_answers_to_the_questions_from_the_3_nov_races(tmp_path):
+    """The 20-lap lobby races: questions that got "Say again" or the wrong answer."""
+    race = race12(positions={0: 2, 1: 1}, gap_ahead_ms={0: 1200}, names=["PLAYER", "NORRIS"])
+    eng, radio = run_and_ask(race, {
+        66: "What's the fastest lap right now?", 68: "Has Norris pitted?",
+        70: "Can I catch the leader?", 72: "If I box at lap 8 for hards, how am I looking?",
+        74: "Why not hards?", 76: "Will hards make it to the end?",
+        78: "What will they be by the end?", 98: "What was the sector two differential to my best?",
+        82: "You say off or up?", 84: "Yeah, but should I pit later for hards?",
+    }, tmp_path, duration_ms=100000)
+    got = dict(eng.answers.answered)
+    assert got["fastest_overall"].startswith("You have it, ")           # 30.0 s laps vs 30.5
+    assert got["driver_pitted"].startswith("Norris hasn't stopped")
+    assert got["catch"].startswith("Norris is one point two seconds ahead.")
+    assert got["what_if_lap"].startswith(("Boxing lap eight for hards", "Lap eight for hards"))
+    assert got["why_not"].startswith("Hards at lap ") or got["why_not"].startswith("Hards are the plan")
+    assert got["compound_to_end"].startswith("A new set of hards from the end of this lap")
+    assert got["stints_end"].startswith("On the plan: these ")
+    assert got["sector"].startswith("Sector two")
+    assert got["box_shift"].startswith(("On hards.", "A lap later"))
+    assert "Say again." not in [v for k, v in got.items() if k != "clarify"]
+    # The strategy follow-ups are logged with the session, like box_now's.
+    import json
+    log = [json.loads(x) for x in (tmp_path / "ptt" / "questions.jsonl").read_text(
+        encoding="utf-8").splitlines()]
+    assert {x["intent"] for x in log if x.get("followup")} >= {"what_if_lap", "why_not"}
+
+
+def test_new_answer_phrases():
+    from types import SimpleNamespace as N
+    assert phrases.catch_phrase("Verstappen", 6900, 300, 8) == (
+        "Verstappen is six point nine seconds ahead. You're three tenths a lap quicker, about "
+        "twenty three laps to catch them, only eight to go. Not on pace alone.")
+    assert phrases.catch_phrase("Norris", 1200, 400, 8).endswith(
+        "on them in about three laps, eight to go.")
+    assert phrases.new_set_phrase(18, 15, 2.5, 60) == (
+        "A new set of hards from the end of this lap, about thirty eight percent at the flag "
+        "after fifteen laps, they'd make it.")
+    st = [N(compound=16, start_lap=0, end_lap=12, end_wear=40.0),
+          N(compound=17, start_lap=12, end_lap=20, end_wear=55.0)]
+    assert phrases.stints_phrase(st, 20) == (
+        "On the plan: these softs come off at lap twelve at about forty percent, then the "
+        "mediums finish at about fifty five percent.")
+    assert phrases.damage_cost_phrase(0.4, 10, 19.0, None) == (
+        "It's costing about four tenths a lap, about four seconds to the flag, less than a stop "
+        "costs, stay out.")
+    assert phrases.damage_cost_phrase(0.4, 10, 19.0, 12).endswith(
+        "Your stop on lap twelve fixes it, no extra stop.")
+    assert phrases.damage_cost_phrase(0.05, 10, 19.0, None).startswith("It isn't costing")

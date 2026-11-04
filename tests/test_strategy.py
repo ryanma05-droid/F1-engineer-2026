@@ -8,13 +8,23 @@ from engineer.app import build_engine
 from engineer.config import Config, Strategy
 from engineer.features.priors import WearPriors
 from engineer.radio import phrases
-from engineer.strategy.model import (CompoundModel, Estimate, GameTyreInfo, ModelSettings,
-                                     StrategyModel, TyreSet, build_model, combine, fit_deg,
-                                     fit_offsets, game_tyre_info, measure_pit_losses)
+from engineer.strategy.model import (
+    CompoundModel,
+    Estimate,
+    GameTyreInfo,
+    ModelSettings,
+    StrategyModel,
+    TyreSet,
+    build_model,
+    combine,
+    fit_deg,
+    fit_offsets,
+    game_tyre_info,
+    measure_pit_losses,
+)
 from engineer.strategy.runner import InlineRunner
 from engineer.strategy.sim import Plan, RaceSituation, Stop, simulate
 from tests.synth import FakeRace
-
 
 # -- synthetic lap rows (the columns of data/features/laps.parquet) ----------------------------
 
@@ -513,3 +523,28 @@ def test_the_call_holds_its_lap_while_the_best_lap_creeps():
     n = len(said)
     sa._on_plan(result(7, 11, 100.0, 110.0))
     assert sa.committed().stops[0].lap == 9 and len(said) == n
+
+
+def test_a_tight_plan_gives_way_to_the_safe_one_only_when_its_gain_changes_nothing():
+    """3 Nov Shanghai: softs "tight, sixty percent" from the lead; hards were the better call."""
+    from types import SimpleNamespace as N
+
+    from engineer.strategy.decision import Decision
+    eng = build_engine(Config(), out=io.StringIO(), priors=WearPriors(),
+                       strategy_runner=InlineRunner(None))
+    sa, st = eng.strategy, eng.pipeline.state
+    st.session.session_type, st.session_time, st.player_index = 15, 300.0, 0
+    c = st.cars
+    c.active[:3] = True
+    c.position[:3] = [1, 2, 3]
+    c.delta_to_car_in_front_ms[:3] = [0, 9000, 1000]
+    tight = N(safe=False, tightest=N(end_wear=59.0), plan=None)
+    safe = N(safe=True, tightest=N(end_wear=36.0), plan=None)
+    dec = Decision(tight, safe_alternative=safe, gain_s=5.8)
+    assert sa._buffer_check(dec).call is safe                 # 9 s in hand behind: hards
+    c.delta_to_car_in_front_ms[1] = 3000
+    assert sa._buffer_check(dec).call is tight                # 3 s behind: the gain matters
+    c.delta_to_car_in_front_ms[1] = 9000
+    unsure = Decision(N(safe=False, tightest=N(end_wear=45.0), plan=None),
+                      safe_alternative=safe, gain_s=20.0)
+    assert sa._buffer_check(unsure) is unsure                 # not tight, just early: no stop

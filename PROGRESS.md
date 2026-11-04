@@ -590,7 +590,7 @@ qualifying sessions were not uploaded (see 1); uploaded by hand on 4 Nov: one fi
 (20261104T014307Z, 525 MB) holds all three 20-lap races under one UID: Melbourne P2 from 19th,
 Shanghai P1, Texas P3, with 47 push-to-talk questions.
 
-Fixes, not built yet:
+Fixes (all built 4 Nov, see the end of this section):
 1. Recordings lost at upload (confirmed: the races were on the PC, in one file): both uploads were pushed 22 s apart at 03:47 UTC, i.e. at the
    end of one app run that covered the whole evening, and they are exactly the first two in
    the run's upload order (race, qualifying file, then the three races). The races were most
@@ -647,4 +647,16 @@ Fixes, not built yet:
 Measured in these races (pit lane timer): Melbourne 16.8 s (17 stops, quicker than the 19.0 s
 offline), Shanghai 23.4 s (21), Texas 18.7 s (19). 35 % races wear like 25 % ones (Melbourne
 softs ~7 %/lap); only the 5-lap race is the outlier.
+
+Built 4 Nov (all of 1-11): background uploads while not racing (every recording not sent, or
+grown since; "Upload now" on the Live tab); wear never mixed between 5-lap and proper races;
+FLT_MAX results-screen packets skipped; the pre-race plan after every qualifying in a lobby;
+hidden players by team ("FERRARI"); practice/qualifying corners vs the fastest lap; the new
+answers in item 7 (checked by re-asking every logged question in the replays: "Sector one,
+gaining five tenths on Hamilton", "A new set of hards from the end of this lap, about fifty eight
+percent at the flag ... they'd make it", "Fastest lap is Mercedes 2, one thirty eight six");
+"one forty point four"; a tight plan gives way to the safe one when its gain changes no place;
+pre-race laps rounded to the nearest. Also found: answers expired behind other top-priority
+calls waiting for a straight; your answer now goes right after box/safety car calls and waits up
+to 15 s.
 

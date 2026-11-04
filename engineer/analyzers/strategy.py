@@ -370,8 +370,34 @@ class StrategyAnalyzer:
         settings = DecisionSettings(margin_pct=cfg.margin_pct, rate_sd_one_lap=cfg.rate_sd_one_lap,
                                     gamble_min_s=cfg.gamble_min_s, gamble_take_s=cfg.gamble_take_s,
                                     min_gain_s=cfg.min_gain_s)
-        return decide(list(res.options) + [res.sim.best], res.situation, res.model, settings,
-                      self.tyres.limit_pct)
+        dec = decide(list(res.options) + [res.sim.best], res.situation, res.model, settings,
+                     self.tyres.limit_pct)
+        return self._buffer_check(dec)
+
+    def _buffer_check(self, dec: Decision | None) -> Decision | None:
+        """A tight plan is only worth its risk if the time it gains changes a place. When the
+        car behind is further back than that gain, and you either lead or couldn't catch the car
+        ahead with it, the safe plan is the call (3 Nov Shanghai: softs "tight, sixty percent"
+        from the lead; you took hards and won with them at thirty five percent)."""
+        if dec is None or not dec.taken_gamble or dec.safe_alternative is None \
+                or not self.racing():          # the pre-race plan has no gaps yet
+            return dec
+        # Only a plan that's really tight (expected within margin of the limit), not one that's
+        # only unsafe because the wear rate isn't sure yet: that one costs a needless stop.
+        if dec.call.tightest.end_wear <= self.tyres.limit_pct - self.cfg.margin_pct:
+            return dec
+        c, p = self.state.cars, self.state.player_index
+        if p is None or np.isnan(c.position[p]):
+            return dec
+        gain_ms = dec.gain_s * 1000
+        behind = np.flatnonzero(c.active & (c.position == c.position[p] + 1))
+        gap_behind = float(c.delta_to_car_in_front_ms[behind[0]]) if behind.size else math.inf
+        gap_ahead = math.inf if c.position[p] == 1 else float(c.delta_to_car_in_front_ms[p])
+        if np.isnan(gap_behind) or np.isnan(gap_ahead):
+            return dec
+        if gap_behind > gain_ms and gap_ahead > gain_ms:
+            return Decision(dec.safe_alternative, gamble=dec.call, gain_s=dec.gain_s)
+        return dec
 
     def _ahead(self) -> tuple[str, int] | None:
         """The car ahead and the gap to it (ms), for "enough to catch Norris"."""

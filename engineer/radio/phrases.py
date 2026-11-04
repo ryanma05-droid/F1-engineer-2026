@@ -791,6 +791,8 @@ def against_words(against: str) -> str:
         return f"the car {against}"
     if against in ("best", "pace"):
         return f"your {against}"
+    if against == "fastest":
+        return "the fastest lap"
     return against
 
 
@@ -1061,3 +1063,141 @@ def _variety_on() -> bool:
     """Longer wording lists only with variety on; off keeps the old rotation exactly."""
     from engineer.radio.variety import VARIETY
     return VARIETY.enabled
+
+
+# -- 3 Nov questions: what-ifs on a lap and tyre, why not a tyre, catching, damage -------------
+
+def _stint_end(model, plan, total_laps: int, idx: int = 0) -> float | None:
+    """Expected wear when the stint started by plan.stops[idx] ends (next stop or the flag)."""
+    if model is None or len(plan.stops) <= idx:
+        return None
+    s = plan.stops[idx]
+    cm = model.compounds.get(s.compound)
+    if cm is None:
+        return None
+    end = plan.stops[idx + 1].lap if len(plan.stops) > idx + 1 else total_laps
+    return s.set_wear + cm.wear_rate.value * (end - s.lap)
+
+
+def what_if_phrase(lap: int, plan, keep, wear_by_lap: float | None, limit_pct: float, model,
+                   total_laps: int) -> str:
+    """'Boxing lap ten for hards costs about two seconds over the plan. These at about forty
+    percent by then, the hards finish at about thirty five percent.'"""
+    s = plan.next_stop
+    what = f"lap {number_words(lap)} for {say_compound(s.compound)}" if s else \
+        f"lap {number_words(lap)}"
+    diff_ms = int(round((plan.cost_s - keep.cost_s) * 1000))
+    k = keep.next_stop
+    if k is not None and s is not None and k.lap == s.lap and k.compound == s.compound:
+        head = f"{what} is the plan"
+    elif abs(diff_ms) < 500:
+        head = f"boxing {what} is about the same as the plan"
+    elif diff_ms > 0:
+        head = f"boxing {what} costs about {say_gap(diff_ms)} over the plan"
+    else:
+        head = f"boxing {what} saves about {say_gap(diff_ms)} on the plan"
+    out = [_sentence(head)]
+    if len(plan.stops) > 1:
+        out.append(_sentence("then " + ", then ".join(
+            f"lap {number_words(x.lap)} for {say_compound(x.compound)}" for x in plan.stops[1:])))
+    bits = []
+    if wear_by_lap is not None and not math.isnan(wear_by_lap):
+        bits.append(f"these at about {say_percent(wear_by_lap)} by then"
+                    + (", past the limit" if wear_by_lap > limit_pct else ""))
+    end = _stint_end(model, plan, total_laps)
+    if end is not None and s is not None:
+        where = "finish" if len(plan.stops) == 1 else "come off"
+        bits.append(f"the {say_compound(s.compound)} {where} at about {say_percent(end)}")
+    if bits:
+        out.append(_sentence(*bits))
+    return " ".join(out)
+
+
+def why_not_phrase(compound: int, stop, plan, keep, model, total_laps: int, limit_pct: float,
+                   margin_pct: float, clear_gap_ms: float | None = None) -> str:
+    """'Hards at lap twelve instead of softs: about seven seconds slower, finishing at about
+    thirty five percent. The softs are quicker but tight, about fifty nine percent. With six
+    seconds in hand behind you, you can afford the hards.'"""
+    diff_ms = int(round((plan.cost_s - keep.cost_s) * 1000))
+    name, planned = say_compound(compound), say_compound(stop.compound)
+    mine, theirs = _stint_end(model, plan, total_laps), _stint_end(model, keep, total_laps)
+    if abs(diff_ms) < 500:
+        speed = "about the same time"
+    elif diff_ms > 0:
+        speed = f"about {say_gap(diff_ms)} slower"
+    else:
+        speed = f"about {say_gap(diff_ms)} quicker"
+    head = f"{name} at lap {number_words(stop.lap)} instead of {planned}: {speed}"
+    if mine is None:
+        wear = ""
+    elif len(plan.stops) > 1:            # another stop after them: they don't go to the flag
+        wear = f"coming off at lap {number_words(plan.stops[1].lap)} at about {say_percent(mine)}"
+    else:
+        wear = f"finishing at about {say_percent(mine)}"
+    out = [_sentence(head, wear)]
+    tight = theirs is not None and theirs > limit_pct - margin_pct
+    if tight and (mine is None or mine < theirs):
+        out.append(_sentence(f"the {planned} are quicker but tight, about {say_percent(theirs)}"))
+    if diff_ms > 0 and clear_gap_ms is not None:
+        if clear_gap_ms > diff_ms + 1000:
+            out.append(_sentence(f"with {say_gap(int(clear_gap_ms))} in hand behind you, you can "
+                                 f"afford the {name}"))
+        else:
+            out.append(_sentence(f"the car behind is only {say_gap(int(clear_gap_ms))} back"))
+    return " ".join(out)
+
+
+def new_set_phrase(compound: int, laps: int, rate: float, limit_pct: float) -> str:
+    """'A new set of hards from the end of this lap: about forty percent at the flag, they'd
+    make it.'"""
+    end = rate * laps
+    verdict = "they'd make it" if end <= limit_pct else "past the limit, they wouldn't make it"
+    return _sentence(f"a new set of {say_compound(compound)} from the end of this lap",
+                     f"about {say_percent(end)} at the flag after {number_words(min(laps, 99))} "
+                     f"laps", verdict)
+
+
+def stints_phrase(stints, total_laps: int) -> str:
+    """The plan's stints: 'On the plan: these softs come off at lap twelve at about forty
+    percent, then the mediums finish at about fifty five percent.'"""
+    bits = []
+    for i, st in enumerate(stints):
+        last = st.end_lap >= total_laps
+        verb = "finish" if last else f"come off at lap {number_words(st.end_lap)}"
+        who = f"these {say_compound(st.compound)}" if i == 0 else f"then the {say_compound(st.compound)}"
+        if st.end_wear >= 1000:
+            continue
+        bits.append(f"{who} {verb} at about {say_percent(st.end_wear)}")
+    return _sentence("on the plan: " + ", ".join(bits)) if bits else _sentence("no plan yet")
+
+
+def catch_phrase(name: str, gap_ms: float, gain_ms_per_lap: float, laps_to_go: int) -> str:
+    """'Verstappen is six point nine seconds ahead. You're three tenths a lap quicker: about
+    twenty three laps to catch them, eight to go. Not on pace alone.'"""
+    first = _sentence(f"{name} is {say_gap(int(gap_ms))} ahead")
+    if math.isnan(gain_ms_per_lap):
+        return f"{first} {_sentence('no pace to compare yet')}"
+    if gain_ms_per_lap < 50:
+        return f"{first} {_sentence('you are not quicker right now', 'not on pace alone')}"
+    laps = max(1, math.ceil(gap_ms / gain_ms_per_lap))
+    pace = f"you're {say_gap(int(gain_ms_per_lap))} a lap quicker"
+    if laps <= laps_to_go:
+        return f"{first} {_sentence(pace, f'on them in about {number_words(min(laps, 99))} laps', f'{number_words(min(laps_to_go, 99))} to go')}"
+    return f"{first} {_sentence(pace, f'about {number_words(min(laps, 99))} laps to catch them', f'only {number_words(min(laps_to_go, 99))} to go')} Not on pace alone."
+
+
+def damage_cost_phrase(loss_s: float, laps_to_go: int, pit_loss_s: float,
+                       stop_lap: int | None) -> str:
+    """'It's costing about four tenths a lap. Your stop on lap twelve fixes it, no extra stop.'"""
+    if loss_s < 0.1:
+        return _sentence("it isn't costing you anything I can see", "stay out")
+    per = f"it's costing about {say_gap(int(loss_s * 1000))} a lap"
+    if stop_lap is not None:
+        return _sentence(per) + " " + _sentence(f"your stop on lap {number_words(stop_lap)} "
+                                                f"fixes it", "no extra stop")
+    total = loss_s * laps_to_go
+    if total < pit_loss_s:
+        return _sentence(per, f"about {say_gap(int(total * 1000))} to the flag",
+                         "less than a stop costs, stay out")
+    return _sentence(per, f"about {say_gap(int(total * 1000))} to the flag",
+                     "more than a stop costs, box for a new wing")

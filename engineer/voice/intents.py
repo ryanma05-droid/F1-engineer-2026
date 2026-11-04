@@ -33,6 +33,9 @@ FIRST_NAMES = {
 }
 SURNAMES = set(FIRST_NAMES.values()) | {"kimi antonelli"}
 _DRIVER = r"\b(" + "|".join(sorted(set(FIRST_NAMES) | SURNAMES, key=len, reverse=True)) + r")\b"
+_NUM_WORDS = (r"(?:(?:twenty|thirty|forty|fifty|sixty|seventy)[ -]?)?(?:one|two|three|four|five|six|"
+              r"seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|"
+              r"eighteen|nineteen|twenty|thirty|forty|fifty)")
 _TURN = (r"\bturn (\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|"
          r"thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty)\b")
 
@@ -113,6 +116,44 @@ RULES: list[tuple[str, list[str]]] = [
                     r"find time|find pace)\b", r"\bwhere (can|could) (i|we) find time\b"]),
     # 29 Oct: "How does this current tyre hold up to the end of the race?", "Will I get over 45%?"
     # 2 Nov: "Are these tyres going to make it?"
+    # 3 Nov (20-lap races): "What's the fastest lap right now?", "What is the overall fastest
+    # lap? Not just mine." -> the session's fastest, not your own best.
+    ("fastest_overall", [r"\bfastest lap\b.*\b(overall|of the race|on track|right now|any(one|body| driver)|"
+                         r"not just mine|of everyone|in the race|in the session)\b",
+                         r"\b(overall|session|race'?s?) fastest lap\b",
+                         r"\bwho (has|'s got|set|holds|has got) (the )?fastest lap\b",
+                         r"^what('s| is) the fastest lap\b"]),
+    # "If I box at lap 10 for hards, how am I looking?", "What does the strategy look like if I
+    # change for hards at lap seven?"
+    ("what_if_lap", [r"\b(box|pit|stop|change|switch|go)\w*\b.*\blap (\d+|" + _NUM_WORDS + r")\b",
+                     r"\blap (\d+|" + _NUM_WORDS + r")\b.*\b(box|pit|stop|change|switch)\w*\b",
+                     r"\bhit lap (\d+|" + _NUM_WORDS + r")\b"]),
+    # "Why not hards?", "Why wouldn't I just go for hards?", "Should I pit for hards instead of
+    # softs?", "If I'm six seconds up, should I go hards?"
+    ("why_not", [r"\bwhy (not|wouldn't (i|we)|don't (i|we))\b.*\b(hards?|mediums?|softs?)\b",
+                 r"\b(hards?|mediums?|softs?) instead\b", r"\binstead of (the )?(hards?|mediums?|softs?)\b",
+                 r"\bshould (i|we) (go|switch|change|run|use|take|put on)( to| on| onto| for)?( the)? "
+                 r"(hards?|mediums?|softs?)\b", r"\bwhat about (the )?(hards?|mediums?|softs?)\b"]),
+    # "Will hards make it to the end?" (a new set of them, not the fitted ones); "What will they
+    # be by the end?", "How will they be at the end of the second stint?" (the plan's stints)
+    ("compound_to_end", [r"\b(hards?|mediums?|softs?)\b.*\b(make it|last|hold up|get) (to )?the (end|finish|flag)\b",
+                         r"\bwill (the )?(hards?|mediums?|softs?) (last|make it|hold)\b"]),
+    ("stints_end", [r"\b(what|how) will (they|these|the tyres?|my tyres?) (be|look)\b",
+                    r"\bend of the (first |second |next |last |final |third )?stint\b"]),
+    # "Has Albon pitted?" (also heard "As Albon pitted?")
+    ("driver_pitted", [r"\b(has|did|is|have) " + _DRIVER + r" (pitted|pit|boxed|box|stopped|been in)\b",
+                       r"\b" + _DRIVER + r" (pitted|boxed|stopped)\b"]),
+    # "Can I catch the leader?", "Will I catch Norris?"
+    ("catch", [r"\b(can|could|will|would) (i|we) catch\b", r"\bcatch (the leader|him|her|them)\b"]),
+    # "How did sector one look relative to Lewis?", "What was the sector two differential to my
+    # best?"
+    ("sector", [r"\bsector (one|two|three|1|2|3)\b"]),
+    # "How was that last couple turns?"
+    ("last_corners", [r"\b(last|those|these|final) (couple|two|few|2|3)( of)? (turns|corners)\b",
+                      r"\b(last|final) (turns|corners)\b"]),
+    # "You say off or up?"
+    ("clarify", [r"\b(off|up) or (off|up|down)\b", r"\b(did you|you) say (off|up|down|quicker|slower|"
+                 r"gaining|losing)\b", r"\bwas that (off|up|quicker|slower)\b"]),
     ("tyres_to_end", [r"\b(hold up|last|make it|get) (to|until|till) the (end|finish|flag)\b",
                       r"\bmake the (end|finish|flag)\b", r"\bget over \d+",
                       r"\bwill (these|the|my) tyres? (last|make it|hold)\b",
@@ -198,6 +239,7 @@ RULES: list[tuple[str, list[str]]] = [
 _FIXES = [
     (r"\btire", "tyre"), (r"\btyre's\b", "tyres"), (r"\bboxx\b", "box"), (r"\bpitt\b", "pit"),
     (r"\bfor the car\b", "to the car"), (r"\bp1\b", "p one"),
+    (r"\bhearts?\b", "hards"), (r"\breal hards\b", "will hards"),   # 3 Nov mishearings
 ]
 
 
@@ -232,6 +274,24 @@ def log_text(text: str) -> str:
     rest = _LOG_TRIGGER.sub("", text, count=1).strip()
     rest = re.sub(r"^(please|thanks|thank you)\W*$", "", rest, flags=re.I).strip()
     return rest if len(re.findall(r"[a-z0-9']+", rest, re.I)) >= 3 else ""
+
+
+def lap_in(text: str) -> int | None:
+    """'box at lap 10' / 'change at lap seven' -> the lap number said."""
+    t = normalise(text)
+    m = re.search(r"\blap (\d+)\b", t)
+    if m:
+        return int(m.group(1))
+    m = re.search(r"\blap (?:(" + "|".join(_TENS_WORDS) + r")[ -]?)?(" + "|".join(_NUMBER_WORDS)
+                  + r")?\b", t)
+    if m and (m.group(1) or m.group(2)):
+        return _TENS_WORDS.get(m.group(1) or "", 0) + _NUMBER_WORDS.get(m.group(2) or "", 0) or None
+    return None
+
+
+def sector_in(text: str) -> int | None:
+    m = re.search(r"\bsector (one|two|three|1|2|3)\b", normalise(text))
+    return {"one": 1, "two": 2, "three": 3}.get(m.group(1), None) or int(m.group(1)) if m else None
 
 
 def track_in(text: str) -> int | None:

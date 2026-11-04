@@ -91,6 +91,7 @@ class RaceCraftAnalyzer:
         self.drs_said: set[int] = set()
         self.fastest_holder: int | None = None
         self.damage_said: dict[str, float] = {}
+        self.damage_lap: int | None = None     # your lap when damage was first called
         self.contact_due: float | None = None
         self.finished = False
         self.sc_in_said = -math.inf
@@ -369,4 +370,6 @@ class RaceCraftAnalyzer:
                 self.damage_said[key] = v - v % DAMAGE_STEP_PCT
                 parts.append((name, float(v)))
         if parts:
+            if self.damage_lap is None and not np.isnan(self.state.cars.lap[me]):
+                self.damage_lap = int(self.state.cars.lap[me])
             self._say("racecraft_damage", phrases.contact_damage_phrase(parts))

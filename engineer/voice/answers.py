@@ -24,11 +24,20 @@ import numpy as np
 from engineer.bus import events as ev
 from engineer.radio import phrases
 from engineer.radio.director import Priority, RadioCall
-from engineer.tools.queries import lap_delta
 from engineer.state.track_maps import turn_name
 from engineer.strategy.decision import wear_at
+from engineer.tools.queries import lap_delta
 from engineer.voice.feedback import FeedbackLog
-from engineer.voice.intents import driver_in, laps_in, log_text, match, track_in, turn_in
+from engineer.voice.intents import (
+    driver_in,
+    lap_in,
+    laps_in,
+    log_text,
+    match,
+    sector_in,
+    track_in,
+    turn_in,
+)
 
 # Damage parts reported by "any damage?" (state key -> spoken name), from 10 %.
 DAMAGE_PARTS = {"front_left_wing": "front left wing", "front_right_wing": "front right wing",
@@ -38,7 +47,8 @@ DAMAGE_MIN_PCT = 10
 
 log = logging.getLogger(__name__)
 
-ANSWER_MAX_WAIT_S = 8.0
+ANSWER_MAX_WAIT_S = 15.0     # an answer is still worth hearing this late (it goes ahead of
+                             # everything but box and safety car calls)
 LOG_LAST_WITHIN_S = 180.0    # "log that" means the question asked up to this long before
 LOG_NEXT_WITHIN_S = 30.0     # "log the following question" alone: the next question, this soon
 
@@ -546,6 +556,8 @@ class QuestionAnswerer:
         stop = plan.next_stop
         lap = stop.lap + shift
         limit = sa.tyres.limit_pct
+        # 3 Nov: "Should I pit later for hards?" -> that tyre, not the planned one.
+        compound = _compound_in(self.heard) or stop.compound
 
         def answer(res) -> None:
             if res is None or res.what_if is None or res.what_if.best is None:
@@ -555,9 +567,11 @@ class QuestionAnswerer:
                 wear = wear_at(res.situation, res.model, lap) if res.situation else None
                 text = phrases.shift_phrase(shift, res.what_if.best.cost_s - keep.cost_s, wear,
                                             limit)
-            self._say("box_shift", text)
+                if compound != stop.compound:
+                    text = phrases._sentence(f"on {phrases.say_compound(compound)}") + " " + text
+            self._say_followup("box_shift", text)
 
-        if not sa.ask_what_if(answer, lap, stop.compound):
+        if not sa.ask_what_if(answer, lap, compound):
             return phrases._sentence("too late for that one")
         return None
 
@@ -749,8 +763,7 @@ class QuestionAnswerer:
         ref = corners.reference_trace(ref_lap) or corners._best_trace(exclude_lap=ref_lap)
         if trace is None or ref is None:
             return phrases._sentence("no clean lap to compare with yet")
-        from engineer.tools.queries import corner_stats
-        from engineer.tools.queries import CornerDelta
+        from engineer.tools.queries import CornerDelta, corner_stats
         d = CornerDelta(corner, corner_stats(trace, corner), corner_stats(ref, corner))
         if abs(d.delta_s) < 0.05:
             return phrases._sentence(f"{corner.name}, right on your pace")
@@ -848,7 +861,262 @@ class QuestionAnswerer:
             v = self.state.cars.damage[key][p]
             if not np.isnan(v) and v >= DAMAGE_MIN_PCT:
                 items.append((name, float(v)))
-        return phrases.damage_phrase(items)
+        text = phrases.damage_phrase(items)
+        # 3 Nov: "How should I be thinking about this damage?" -> what it costs, and whether to
+        # stop for it.
+        rc, sa = self.engine.racecraft, self.engine.strategy
+        if items and rc is not None and rc.damage_lap is not None:
+            laps = [r for r in self.engine.history.for_car(p) if r.clean and r.lap_time_ms]
+            before = [r.lap_time_ms for r in laps if r.lap < rc.damage_lap][-4:]
+            after = [r.lap_time_ms for r in laps if r.lap > rc.damage_lap][-3:]
+            if not before or not after:
+                return text + " " + phrases._sentence("give me a clean lap to see what it costs")
+            loss_s = (float(np.median(after)) - float(np.median(before))) / 1000
+            pit_s = sa.latest.model.pit_loss.value if sa.latest and sa.latest.model \
+                else sa.cfg.pit_loss_s
+            stop = sa.committed().next_stop if sa.committed() is not None else None
+            text += " " + phrases.damage_cost_phrase(loss_s, self._laps_to_go() or 0, pit_s,
+                                                     stop.lap if stop else None)
+        return text
+
+    # -- 3 Nov (20-lap races): questions that got "Say again" or the wrong answer --------------
+
+    def _a_fastest_overall(self) -> str:
+        """"What's the fastest lap right now?": the session's fastest lap, by anyone."""
+        p, hist = self._player(), self.engine.history
+        best = None
+        for car in range(len(self.state.cars.names)):
+            for r in hist.for_car(car):
+                if r.lap_time_ms and not r.invalid and (best is None or r.lap_time_ms < best[1].lap_time_ms):
+                    best = (car, r)
+        if best is None:
+            return phrases._sentence("no valid laps yet")
+        car, r = best
+        if car == p:
+            return phrases._sentence(f"you have it, {phrases.say_lap_time(r.lap_time_ms)}",
+                                     f"lap {phrases.number_words(r.lap)}")
+        text = phrases._sentence(f"fastest lap is {self._name(car) or 'another car'}, "
+                                 f"{phrases.say_lap_time(r.lap_time_ms)}",
+                                 f"lap {phrases.number_words(r.lap)}")
+        mine = [x.lap_time_ms for x in hist.for_car(p) if x.lap_time_ms and not x.invalid] \
+            if p is not None else []
+        if mine:
+            text += " " + phrases._sentence(f"your best is {phrases.say_gap(min(mine) - r.lap_time_ms)} "
+                                            f"off that")
+        return text
+
+    def _a_what_if_lap(self) -> str | None:
+        """"If I box at lap 10 for hards, how am I looking?": the best plan stopping at the end
+        of that lap (onto that tyre), against the committed plan."""
+        sa = self.engine.strategy
+        lap, compound = lap_in(self.heard), _compound_in(self.heard)
+        now = self._lap()
+        if lap is None or now is None:
+            return phrases._sentence("which lap")
+        if lap < now:
+            return phrases._sentence(f"lap {phrases.number_words(lap)} has gone")
+
+        def answer(res) -> None:
+            if res is None or res.what_if is None or res.what_if.best is None \
+                    or res.sim.best is None:
+                text = phrases._sentence(f"can't make lap {phrases.number_words(lap)} work"
+                                         + (f" on {phrases.say_compound(compound)}" if compound else ""))
+            else:
+                keep = res.hold or res.sim.best
+                wear = wear_at(res.situation, res.model, lap) if res.situation else None
+                text = phrases.what_if_phrase(lap, res.what_if.best, keep, wear,
+                                              sa.tyres.limit_pct, res.model,
+                                              int(self.state.session.total_laps or 0))
+            self._say_followup("what_if_lap", text)
+
+        if not sa.ask_what_if(answer, lap, compound):
+            return phrases._sentence("no strategy calls in this race") if not sa._active() \
+                else phrases._sentence("can't work that out right now")
+        return None
+
+    def _a_why_not(self) -> str | None:
+        """"Why not hards?" / "Should I go hards instead?": that tyre at the planned stop,
+        against the plan: the time it costs and how worn it would finish."""
+        sa = self.engine.strategy
+        compound = _compound_in(self.heard)
+        plan = sa.committed()
+        if compound is None:
+            return phrases._sentence("which tyre")
+        if plan is None:
+            return phrases._sentence("no plan yet, give me a couple of laps")
+        stop = plan.next_stop
+        if stop is None:
+            return phrases._sentence("no more stops planned, these go to the end")
+        if stop.compound == compound:
+            return phrases._sentence(f"{phrases.say_compound(compound)} are the plan, lap "
+                                     f"{phrases.number_words(stop.lap)}")
+        lead = self._clear_gap_ms()
+
+        def answer(res) -> None:
+            if res is None or res.what_if is None or res.what_if.best is None:
+                text = phrases._sentence(f"no {phrases.say_compound(compound)} left to fit")
+            else:
+                text = phrases.why_not_phrase(compound, stop, res.what_if.best, res.hold or res.sim.best,
+                                              res.model, int(self.state.session.total_laps or 0),
+                                              sa.tyres.limit_pct, sa.cfg.margin_pct, lead)
+            self._say_followup("why_not", text)
+
+        if not sa.ask_what_if(answer, stop.lap, compound):
+            return phrases._sentence("can't work that out right now")
+        return None
+
+    def _clear_gap_ms(self) -> float | None:
+        """The smaller of your gaps to the cars ahead and behind (None if unknown): the time a
+        slower plan can give away without changing a place."""
+        c, p = self.state.cars, self._player()
+        if p is None or np.isnan(c.position[p]):
+            return None
+        gaps = []
+        behind = np.flatnonzero(c.active & (c.position == c.position[p] + 1))
+        if behind.size and not np.isnan(c.delta_to_car_in_front_ms[behind[0]]):
+            gaps.append(float(c.delta_to_car_in_front_ms[behind[0]]))
+        return min(gaps) if gaps else None
+
+    def _a_compound_to_end(self) -> str:
+        """"Will hards make it to the end?": a new set of that tyre from the end of this lap."""
+        sa, compound = self.engine.strategy, _compound_in(self.heard)
+        res, now, total = sa.latest, self._lap(), self.state.session.total_laps
+        if compound is None:
+            return self._a_tyres_to_end()
+        cm = res.model.compounds.get(compound) if res is not None and res.model else None
+        if cm is None or now is None or not total:
+            return phrases._sentence(f"no wear numbers for the {phrases.say_compound(compound)} yet")
+        laps = max(0, int(total) - now)
+        return phrases.new_set_phrase(compound, laps, cm.wear_rate.value, sa.tyres.limit_pct)
+
+    def _a_stints_end(self) -> str:
+        """"What will they be by the end?" / "...at the end of the second stint?": each stint of
+        the plan and how worn it comes off."""
+        sa = self.engine.strategy
+        if sa.decision is None:
+            return self._a_tyres_to_end()
+        return phrases.stints_phrase(sa.decision.call.stints, int(self.state.session.total_laps or 0))
+
+    def _a_driver_pitted(self) -> str:
+        """"Has Albon pitted?": stops, when, and the tyres now."""
+        car = self._named_driver()
+        if car is None:
+            return phrases._sentence("I don't see that driver in this race")
+        c, name = self.state.cars, self._name(car) or "they"
+        if c.pit_status[car] > 0:
+            return phrases._sentence(f"{name} is in the pits now")
+        n = 0 if np.isnan(c.num_pit_stops[car]) else int(c.num_pit_stops[car])
+        comp = c.visual_compound[car]
+        tyre = phrases.say_compound(int(comp)) if not np.isnan(comp) else None
+        age = None if np.isnan(c.tyre_age_laps[car]) else int(c.tyre_age_laps[car])
+        if n == 0:
+            return phrases._sentence(f"{name} hasn't stopped",
+                                     f"on {tyre}" + (f", {phrases.number_words(min(age, 99))} laps old"
+                                                     if age is not None else "") if tyre else "")
+        laps = [r.lap for r in self.engine.history.for_car(car) if r.pit_in_lap]
+        when = f"on lap {phrases.number_words(laps[-1])}" if laps else ""
+        times = "once" if n == 1 else f"{phrases.number_words(n)} times"
+        return phrases._sentence(f"{name} has pitted {times}", when,
+                                 f"now on {tyre}" if tyre else "")
+
+    def _a_catch(self) -> str:
+        """"Can I catch the leader?": the gap, the pace difference over the last laps, and the
+        laps left."""
+        c, p, hist = self.state.cars, self._player(), self.engine.history
+        if p is None or np.isnan(c.position[p]):
+            return phrases._sentence("no timing yet")
+        car = self._named_driver()
+        if car is None:
+            want = 1 if re.search(r"\bleader\b", self.heard.lower()) else int(c.position[p]) - 1
+            idx = np.flatnonzero(c.active & (c.position == want))
+            car = int(idx[0]) if idx.size else None
+        if car is None or car == p:
+            return phrases._sentence("you're leading, nobody to catch")
+        if c.position[car] == c.position[p] - 1 and not np.isnan(c.delta_to_car_in_front_ms[p]):
+            gap_ms = float(c.delta_to_car_in_front_ms[p])     # right ahead: the game's own gap
+        else:
+            gap, mine = self._race_gap_ms(car), self._race_gap_ms(p)
+            if gap is None or mine is None or np.isnan(gap) or np.isnan(mine):
+                return phrases._sentence("no timing yet")
+            gap_ms = mine - gap
+        pace = []
+        for who in (p, car):
+            laps = [r.lap_time_ms for r in hist.for_car(who) if r.clean and r.lap_time_ms][-3:]
+            pace.append(float(np.median(laps)) if laps else math.nan)
+        to_go = self._laps_to_go() or 0
+        return phrases.catch_phrase(self._name(car) or "them", gap_ms, pace[1] - pace[0], to_go)
+
+    def _a_sector(self) -> str:
+        """"How did sector one look relative to Lewis?" / "sector two to my best?"."""
+        n, car = sector_in(self.heard), self._named_driver()
+        if n is None:
+            return phrases._sentence("which sector")
+        if car is not None:
+            deltas, against = self._sector_deltas_vs(car)
+        else:
+            deltas, against = self._sector_deltas_best()
+        d = next((ms for k, ms in deltas if k == n), None)
+        if d is None:
+            return phrases._sentence(f"no clean sector {phrases.number_words(n)} to compare yet")
+        return phrases.sector_phrase(n, d, against)
+
+    def _sector_deltas_vs(self, car: int) -> tuple[list[tuple[int, int]], str]:
+        """Against another car: the latest lap you both drove cleanly (your very last lap may
+        have been invalid or a pit lap: 3 Nov, "sector one relative to Lewis")."""
+        hist, p = self.engine.history, self._player()
+        theirs = {r.lap: r for r in hist.for_car(car) if r.clean}
+        me = next((r for r in reversed(hist.for_car(p) if p is not None else [])
+                   if r.clean and r.lap in theirs), None)
+        if me is None:
+            return [], ""
+        return self._diff(me.sector_ms, theirs[me.lap].sector_ms), self._name(car) or "them"
+
+    def _sector_deltas_best(self) -> tuple[list[tuple[int, int]], str]:
+        hist, p = self.engine.history, self._player()
+        mine = hist.for_car(p) if p is not None else []
+        if len(mine) < 2:
+            return [], ""
+        me = mine[-1]
+        others = [r for r in mine[:-1] if r.clean]
+        best = tuple(min((r.sector_ms[k] for r in others if r.sector_ms[k]), default=None)
+                     for k in range(3))
+        return self._diff(me.sector_ms, best), "best"
+
+    def _a_last_corners(self) -> str:
+        """"How was that last couple turns?": the last two corners of your last lap."""
+        corners = self.engine.corners
+        if not corners.last:
+            return phrases._sentence("no corner numbers for that lap yet")
+        ds = sorted(corners.last, key=lambda d: d.corner.number)[-2:]
+        bits = []
+        for d in ds:
+            gap = phrases.say_gap(int(round(d.delta_s * 1000)))
+            ref = phrases.against_words(corners.last_against or "best")
+            if abs(d.delta_s) < 0.05:
+                bits.append(f"{d.corner.name} matching {ref}")
+            elif d.delta_s > 0:
+                bits.append(f"{d.corner.name} {gap} slower than {ref}")
+            else:
+                bits.append(f"{d.corner.name} {gap} quicker than {ref}")
+        return phrases._sentence(*bits)
+
+    def _a_clarify(self) -> str:
+        """"You say off or up?": plainly, whether the last call meant quicker or slower."""
+        last = (self.last_radio or "").lower()
+        if re.search(r"\b(up on|gaining|quicker|faster|better|found|sorted)\b", last):
+            return phrases._sentence("up", "you were quicker there")
+        if re.search(r"\b(off|down|losing|slower|giving|lost)\b", last):
+            return phrases._sentence("off", "you were slower there")
+        return phrases._sentence("say again")
+
+    def _say_followup(self, intent: str, text: str) -> None:
+        """A strategy answer that came a moment after the question: said, and logged (it
+        travels with the recording's upload)."""
+        self._say(intent, text)
+        self.log.write({"time": time.strftime("%Y-%m-%dT%H:%M:%S"), "intent": intent,
+                        "session_uid": f"{self.state.session_uid or 0:016x}",
+                        "session_time": round(self.state.session_time or 0.0, 3),
+                        "answer": text, "lap": self._lap(), "followup": True})
 
     def _a_best_lap(self) -> str:
         p = self._player()

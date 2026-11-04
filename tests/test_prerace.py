@@ -214,3 +214,10 @@ def test_prerace_plan_after_each_qualifying_in_one_lobby():
     eng.director.release_now()
     assert any(t.startswith("Austria") for t in said) and any(t.startswith("Shanghai") for t in said)
     assert any(t.startswith("No tyre numbers for Texas") for t in said)
+
+
+def test_the_race_being_run_always_counts():
+    """Early in a 20-lap race its own laps (3 so far) must not look like a 5-lap race."""
+    now = history_at(0, 4, session="live")
+    assert {r["session_uid"] for r in same_length_rows(now, 20, this_session="live")} == {"live"}
+    assert same_length_rows(now, 20) == []

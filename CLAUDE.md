@@ -171,7 +171,8 @@ uv run python -m engineer.report                     # driver report PDF (data/r
   recordings: only BUTN events until ~7 s before lights out; UID-0 menu packets carry no
   session), so the track is the one said / picked in the window / the last session's, and the
   laps are the ones said, else your last race here, else your usual distance (laps / full race
-  laps, snapped to 25/35/50/100 %, ceil like the game). History laps are the most any car
+  laps, snapped to 25/35/50/100 %, rounded to the nearest lap like the game: Melbourne 35 % = 20).
+  5-lap races never count ("your last race here" or the usual distance). History laps are the most any car
   completed, so snapping also fixes races left early. Each dry start is solved from lap 0 in the
   worker (`StrategyRequest.starts`); the pick is the quickest safe start. No history at a track =
   no plan. On the grid it uses the game's laps and fitted tyre. Said by itself when qualifying
@@ -186,9 +187,39 @@ uv run python -m engineer.report                     # driver report PDF (data/r
   background when missing) counts like 3 stops; then the default. Melbourne 19.0 s (34 stops),
   Abu Dhabi 22.6 (38), Imola 22.9 (20, was 27.3 from in/out laps). One recording can hold
   several races under one UID: the meter keeps each finished session's stops (`done_rows`).
+- Wear by race length: the game wears tyres about half as fast in 5-lap races (3 Nov, same track
+  and compound, you and the AI alike), while 25 % and 35 % races wear alike. `runner.solve` uses
+  `prerace.same_length_rows`: a 5-lap race's laps never feed a proper-distance race (or back);
+  practice/qualifying rows stay. `WearPriors` (first laps of a stint only) still pools them.
+- Buffer: a taken gamble (tight plan) becomes the safe call when its gain wouldn't change a place
+  (car behind further back than the gain, and you lead or couldn't catch the car ahead with it;
+  `StrategyAnalyzer._buffer_check`, races only).
 - Menus: `RadioDirector.idle_after_s` (cli only) says calls at once when no packet has come for
   1 s (game time is frozen there, nothing would release the queue); `cli._idle_loop` calls
   `Engine.idle_tick` to pick up worker answers. Replays/tests keep the queued behaviour.
+
+## Online lobbies and session boundaries (3 Nov)
+
+- After a session ends the game sends for a long time with session time = FLT_MAX (results
+  screen, lobby). `Pipeline.feed` skips packets whose clock isn't a real one
+  (`session_time_ok`, counted in `after_end_packets`); the recorder still saves them.
+- An online lobby keeps ONE session UID for every session (three qualifying sessions, then three
+  races, in one file each). Restart detection splits them; per-session things key on
+  (UID, track) (the pre-race plan after qualifying), and the pit-loss meter keeps each session.
+- Hidden online names arrive as "Player": `race_state._named` calls them by team from the spec's
+  Team IDs (`f1_2025.TEAMS`): "FERRARI", "MERCEDES 24" when two share a team.
+- Outside races, corner calls compare with the session's fastest lap (`bench`), never "the car
+  ahead" (timing order, not track order).
+
+## Uploads
+
+- `ingest/uploader.py` `BackgroundUploader` (cli, with `upload.auto`): every recording not
+  uploaded, or grown 1 MB+ since (`share.pending`; uploaded.txt keeps "name size"), goes up one at
+  a time in a thread whenever no session is live (no real-clock packet for 20 s), so a big push
+  never competes with an online race. A grown recording replaces its branch (`+` push). Closing
+  the app waits for an upload under way (3 Nov: closing mid-upload lost three races). The Live
+  tab shows what's waiting, with "Upload now" (`/api/upload`, also with auto off). Shutdown still
+  uploads everything pending, any run.
 
 ## Wording variety
 
@@ -239,7 +270,17 @@ uv run python -m engineer.report                     # driver report PDF (data/r
   answering an uploaded flagged question, add the phrasing to intents.py and the answer to
   answers.py as usual; it then shows as "now goes to <intent>".
 - `replay --questions` re-asks logged questions at their session time (record everything, replay
-  anything).
+  anything). A recording with several sessions under one UID repeats session times: ask in order,
+  per session (as the 3 Nov check did).
+- 3 Nov additions: fastest_overall (the session's fastest lap, not yours), what_if_lap ("box at
+  lap 10 for hards": `ask_what_if` with that lap and tyre), why_not ("why not hards?" / "should I
+  go hards instead?": that tyre at the planned stop vs the plan, its end wear, the gap behind),
+  compound_to_end (a new set of that tyre from the end of this lap), stints_end (the plan's
+  stints and their end wear), driver_pitted ("has Albon pitted?"), catch (gap, pace over the last
+  3 clean laps, laps left), sector (one sector vs your best or a named car's latest clean lap),
+  last_corners, clarify ("off or up?" from the last call), damage cost (pace since the damage vs
+  a stop; `RaceCraftAnalyzer.damage_lap`). Strategy follow-ups are logged (`_say_followup`).
+  "Hearts" is heard for hards. Round-ten lap times: "one forty point four".
 
 ## The installed app (for friends)
 

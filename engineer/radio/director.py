@@ -150,6 +150,11 @@ class QuietZones:
         return self.busy_now(state) or self.busy_ahead(state, speech_s)
 
 
+# Within the same priority: box and safety car calls first, then the answer to the question you just
+# asked, then the rest oldest first (3 Nov Texas: "Will hards make it to the end?" was answered,
+# then expired behind a tyre warning that had been waiting for a straight).
+_RANK = {"box": 2, "safety_car": 2, "answer": 1}
+
 # Said even in quiet mode ("Quiet" on push-to-talk): box calls, safety car calls, and answers to
 # your own questions.
 QUIET_TOPICS = {"box", "safety_car", "answer"}
@@ -230,7 +235,7 @@ class RadioDirector:
             self._drop(call, "expired")
         if not self.queue or t < self.speaking_until:
             return
-        call = max(self.queue, key=lambda c: (c.priority, -c.queued_at))
+        call = max(self.queue, key=lambda c: (c.priority, _RANK.get(c.topic, 0), -c.queued_at))
         duration = estimate_duration_s(call.text)
         if call.wait_for_straight and self.zones.driver_busy(self.state, duration):
             return

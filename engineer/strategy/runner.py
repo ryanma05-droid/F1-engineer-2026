@@ -159,7 +159,7 @@ def solve(req: StrategyRequest, history: list[dict],
         # 20-lap race (or the other way round). The wear ratio to the AI (all_rows) holds for both.
         track_rows = same_length_rows(
             [r for r in all_rows if r.get("track_id") == req.track_id],
-            req.situation.total_laps)
+            req.situation.total_laps, this_session=req.session_uid)
         model = build_model(track_rows, all_rows, list(req.current_stint), req.game, req.settings,
                             timer=_timer(req, pit), real_pit_s=pit[1].get(req.track_id))
         sit = replace(req.situation, pit_loss_s=model.pit_loss.value,

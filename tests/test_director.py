@@ -2,7 +2,12 @@ import numpy as np
 
 from engineer.bus import events as ev
 from engineer.ingest.formats import f1_2025 as f
-from engineer.radio.director import Priority, RadioCall, RadioDirector, estimate_duration_s
+from engineer.radio.director import (
+    Priority,
+    RadioCall,
+    RadioDirector,
+    estimate_duration_s,
+)
 from engineer.state.race_state import RaceState
 
 TEL = f.PacketId.CAR_TELEMETRY
@@ -127,3 +132,28 @@ def test_flashback_clears_queue():
     r.bus.publish(ev.Flashback(1, 10.0, to_frame=1, to_session_time=5.0))
     r.drive(t=5.1, dist=50)
     assert r.said == []
+
+
+def test_your_answer_goes_ahead_of_other_waiting_calls_but_not_a_box_call():
+    """3 Nov Texas: an answer expired behind a tyre warning queued earlier at the same priority."""
+    from engineer.bus import events as ev
+    from engineer.radio.director import Priority, RadioCall, RadioDirector
+    from engineer.state.race_state import RaceState
+    bus, state = ev.EventBus(), RaceState()
+    state.session_time = 100.0
+    d = RadioDirector(bus, state)
+    said = []
+    bus.subscribe(ev.RadioMessage, lambda e: said.append(e.topic))
+    d.speaking_until = 105.0                                  # something is being said
+    d.submit(RadioCall(topic="tyre_warning", text="Front left at forty percent.",
+                       priority=Priority.HIGH, wait_for_straight=False, max_wait_s=30))
+    state.session_time = 101.0
+    d.submit(RadioCall(topic="answer", text="They'd make it.", priority=Priority.HIGH,
+                       wait_for_straight=False, max_wait_s=30))
+    state.session_time = 102.0
+    d.submit(RadioCall(topic="box", text="Box this lap, box this lap.", priority=Priority.HIGH,
+                       wait_for_straight=False, max_wait_s=30))
+    for t in (106.0, 110.0, 114.0):
+        state.session_time = t
+        d.after_packet(None)
+    assert said == ["box", "answer", "tyre_warning"]

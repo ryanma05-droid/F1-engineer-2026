@@ -187,9 +187,11 @@ def short_race(laps: int) -> bool:
     return laps <= SHORT_RACE
 
 
-def same_length_rows(rows: list[dict], race_laps: int) -> list[dict]:
+def same_length_rows(rows: list[dict], race_laps: int,
+                     this_session: str | None = None) -> list[dict]:
     """Lap rows usable for a race of race_laps: other races only if they're the same kind (5-lap
-    or a proper distance); practice and qualifying rows stay."""
+    or a proper distance); practice and qualifying rows stay, and so does the race being run
+    (this_session: its laps so far would look like a short race early on)."""
     want = short_race(race_laps)
     most: dict[tuple, int] = {}
     for r in rows:
@@ -197,5 +199,6 @@ def same_length_rows(rows: list[dict], race_laps: int) -> list[dict]:
             key = (r.get("session_uid"), r.get("track_id"))
             most[key] = max(most.get(key, 0), int(r["lap"]))
     return [r for r in rows if r.get("session_type") not in f.RACE_SESSION_TYPES
+            or r.get("session_uid") == this_session
             or short_race(most.get((r.get("session_uid"), r.get("track_id")), 0)) == want]
 
