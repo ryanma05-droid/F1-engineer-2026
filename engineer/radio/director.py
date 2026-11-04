@@ -2,7 +2,10 @@
 
 Analyzers don't talk directly; they hand the director a RadioCall. The director:
 
-- orders calls by priority (then oldest first). A call never cuts off one already being spoken.
+- says the answer to your question before anything else, and holds every other call while you're
+  on the mic and until the answer is said (see `listen`). A call never cuts off one already being
+  spoken.
+- orders the rest by priority (then oldest first).
 - drops a call that has waited longer than its `max_wait_s` (a lap delta said 10 s late is noise).
 - applies per-topic cooldowns, so the same kind of call can't repeat too often.
 - holds calls while the driver is busy (braking, turning, lifting) and releases them on straights.
@@ -150,10 +153,21 @@ class QuietZones:
         return self.busy_now(state) or self.busy_ahead(state, speech_s)
 
 
-# Within the same priority: box and safety car calls first, then the answer to the question you just
-# asked, then the rest oldest first (3 Nov Texas: "Will hards make it to the end?" was answered,
-# then expired behind a tyre warning that had been waiting for a straight).
-_RANK = {"box": 2, "safety_car": 2, "answer": 1}
+# Answers to your questions go before everything, whatever its priority (4 Nov: the long main
+# straight is the best place to ask, and it's where the lap is crossed, so the lap time, tyre and
+# strategy calls all queue up at the moment you ask). Then by priority; within the same priority
+# box and safety car calls first, then the rest oldest first.
+_RANK = {"box": 2, "safety_car": 2}
+
+# Holding the other calls for your answer: while the button is down (and the question takes up to
+# this long to say), then from the moment the question is heard until the answer is said, or this
+# long at most (a strategy answer is worked out in the background and comes a moment later).
+LISTEN_HOLD_S = 20.0
+ANSWER_HOLD_S = 8.0
+
+
+def _order(c: RadioCall) -> tuple:
+    return (c.topic == "answer", c.priority, _RANK.get(c.topic, 0), -c.queued_at)
 
 # Said even in quiet mode ("Quiet" on push-to-talk): box calls, safety car calls, and answers to
 # your own questions.
@@ -186,6 +200,10 @@ class RadioDirector:
         self._last_packet = -math.inf               # time.monotonic() of the last packet
         # The engineer's manner (radio/engineers.py): f(topic, text) -> what's said, or None.
         self.persona = None
+        # Waiting for your answer (game time): other calls stay queued, their wait paused.
+        self.hold_until: float | None = None
+        self._hold_from = 0.0
+        self._hold_wall = math.inf
         bus.subscribe(ev.SessionStarted, self._on_session_started)
         bus.subscribe(ev.SessionEnded, self._on_session_ended)
         bus.subscribe(ev.Flashback, self._on_flashback)
@@ -212,9 +230,42 @@ class RadioDirector:
         call.queued_at = t
         if self.idle():
             self._publish(call, t)
+            if call.topic == "answer":
+                self.stop_listening()
             return
         self.queue.append(call)
         self.after_packet(None)   # try straight away: no need to wait for the next packet
+
+    def listen(self, hold_s: float = LISTEN_HOLD_S) -> None:
+        """You're asking something (button down, or the question was just heard): nothing else
+        is said until the answer is. Calls already waiting keep their place, and the time held
+        (and the answer itself) doesn't count against how long they may wait."""
+        t = self._now()
+        if self.hold_until is None:
+            self._hold_from = t
+        self.hold_until = t + hold_s
+        # The game clock stands still when paused or in a menu: a wall-clock limit as well.
+        self._hold_wall = time.monotonic() + hold_s
+
+    def stop_listening(self) -> None:
+        """No answer coming (a short press, nothing heard), or the answer was said."""
+        if self.hold_until is None:
+            return
+        t = self._now()
+        # Their wait starts again once the answer has been said.
+        after = max(t, self.speaking_until)
+        for call in self.queue:
+            call.queued_at = max(call.queued_at + max(0.0, t - max(call.queued_at,
+                                                                   self._hold_from)), after)
+        self.hold_until = None
+        if self.queue:
+            self.after_packet(None)
+
+    def holding(self) -> bool:
+        if self.hold_until is not None and (self._now() >= self.hold_until
+                                            or time.monotonic() >= self._hold_wall):
+            self.stop_listening()
+        return self.hold_until is not None
 
     def idle(self) -> bool:
         """No packets coming (live only, see idle_after_s)."""
@@ -230,12 +281,15 @@ class RadioDirector:
         if not self.queue:
             return
         t = self._now()
-        for call in [c for c in self.queue if t - c.queued_at > c.max_wait_s]:
+        held = self.holding()
+        for call in [c for c in self.queue if t - c.queued_at > c.max_wait_s
+                     and (not held or c.topic == "answer")]:
             self.queue.remove(call)
             self._drop(call, "expired")
-        if not self.queue or t < self.speaking_until:
+        ready = [c for c in self.queue if not held or c.topic == "answer"]
+        if not ready or t < self.speaking_until:
             return
-        call = max(self.queue, key=lambda c: (c.priority, _RANK.get(c.topic, 0), -c.queued_at))
+        call = max(ready, key=_order)
         duration = estimate_duration_s(call.text)
         if call.wait_for_straight and self.zones.driver_busy(self.state, duration):
             return
@@ -243,6 +297,8 @@ class RadioDirector:
         said = self._publish(call, t)
         # The engineer's personality can make it longer (Kevin).
         self.speaking_until = t + (duration if said == call.text else estimate_duration_s(said))
+        if call.topic == "answer":
+            self.stop_listening()
 
     # -- internals -----------------------------------------------------------------------------
 
@@ -265,6 +321,7 @@ class RadioDirector:
 
     def _on_session_started(self, _e) -> None:
         self.queue.clear()
+        self.hold_until = None
         self.zones.reset()
         self.speaking_until = -math.inf
         self.last_said.clear()
@@ -275,7 +332,8 @@ class RadioDirector:
         waiting (the finish call) now, in priority order. The audio process plays them one
         after the other."""
         t = self._now()
-        for call in sorted(self.queue, key=lambda c: (-c.priority, c.queued_at)):
+        self.hold_until = None
+        for call in sorted(self.queue, key=_order, reverse=True):
             if call.priority >= Priority.HIGH:
                 self._publish(call, t)
         self.queue.clear()
@@ -288,5 +346,6 @@ class RadioDirector:
     def _on_flashback(self, _e) -> None:
         # Time jumped backwards: anything queued belongs to the rewound future.
         self.queue.clear()
+        self.hold_until = None
         self.speaking_until = -math.inf
         self.last_said.clear()

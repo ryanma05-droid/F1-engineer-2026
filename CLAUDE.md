@@ -50,6 +50,13 @@ uv run python -m engineer.report                     # driver report PDF (data/r
 - Analyzers never speak directly: they submit a `RadioCall` to the `RadioDirector`.
 - The director runs on game time and estimates speech length from text, so replays produce the
   same calls. Keep it that way: no wall-clock time or audio feedback in director decisions.
+  (Live-only exceptions: `idle_after_s` in menus, and the wall-clock cap on the answer hold.)
+- Your answer goes first, before every other call whatever its priority (`_order`). While you're
+  on the mic (`listen()` on button down, cli) and from the question until its answer is said
+  (`listen(ANSWER_HOLD_S)` in the answerer, 8 s at most) nothing else is started; calls already
+  queued wait with their expiry paused and restarted after the answer. A short press or nothing
+  heard calls `stop_listening()`. Why: the main straight is where you ask, and it's where the lap
+  is crossed and all the lap calls queue up (4 Nov).
 - Wiring lives in `engineer/app.py:build_engine` (shared by live and replay). Subscription order
   matters: LapHistory before analyzers.
 - The golden test also checks `tests/fixtures/*.calls.txt`; update it deliberately (and check each
@@ -246,7 +253,7 @@ uv run python -m engineer.report                     # driver report PDF (data/r
 
 - Hold LB (XInput) or L1 (PlayStation, winmm), shared with the game -> speech process (faster-whisper, own process, default
   Windows mic) -> `QuestionAsked` event -> `QuestionAnswerer` (wired in `build_engine`, so tests
-  and replays answer the same way) -> director topic "answer" (HIGH, said even in quiet mode).
+  and replays answer the same way) -> director topic "answer" (HIGH, said even in quiet mode, always first).
 - Answers come from the same query functions/analyzer state as the proactive calls. Beyond the
   basics: rejoin ("where do I come out", same `_rejoin` as the box call, using your gap from
   before pit entry when asked in the pit lane), true_position (cars ahead that haven't stopped

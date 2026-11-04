@@ -660,3 +660,8 @@ pre-race laps rounded to the nearest. Also found: answers expired behind other t
 calls waiting for a straight; your answer now goes right after box/safety car calls and waits up
 to 15 s.
 
+
+4 Nov, answers first: anything you ask on the mic is answered before any other call. While the
+button is down, and from the question until the answer is said (8 s at most), the engineer starts
+nothing else; the lap time, tyre and strategy calls that queue up as you cross the line on the main
+straight wait (not dropped) and follow the answer. Box and safety car calls come right after it.

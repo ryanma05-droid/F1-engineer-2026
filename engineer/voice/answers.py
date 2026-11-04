@@ -23,7 +23,7 @@ import numpy as np
 
 from engineer.bus import events as ev
 from engineer.radio import phrases
-from engineer.radio.director import Priority, RadioCall
+from engineer.radio.director import ANSWER_HOLD_S, Priority, RadioCall
 from engineer.state.track_maps import turn_name
 from engineer.strategy.decision import wear_at
 from engineer.tools.queries import lap_delta
@@ -106,6 +106,8 @@ class QuestionAnswerer:
     # -- entry point -----------------------------------------------------------------------------
 
     def on_question(self, e: ev.QuestionAsked) -> None:
+        # Nothing else on the radio until this is answered (radio/director.py).
+        self.director.listen(ANSWER_HOLD_S)
         intent = match(e.text)
         entry = {"time": time.strftime("%Y-%m-%dT%H:%M:%S"),
                  "session_uid": f"{e.session_uid:016x}", "session_time": round(e.session_time, 3),
@@ -121,6 +123,7 @@ class QuestionAnswerer:
             log.warning("question %r not answered: recognition took %.0f s", e.text,
                         e.stt_ms / 1000)
             self.log.write(entry)
+            self.director.stop_listening()
             return
         handler = getattr(self, f"_a_{intent.name}", None)
         self.heard = e.text

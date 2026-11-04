@@ -67,7 +67,17 @@ def start_ptt(cfg: Config, engine):
     pads = button.connected()
     print(f"Push-to-talk: hold {button_label(v.controller_type, v.button)} and ask. {speech.description}. "
           f"Controllers connected: {len(pads) or 'none yet'}.")
-    ptt = PushToTalk(button, speech.press, speech.release, speech.cancel,
+    director = engine.director
+
+    def press():                  # on the mic: nothing else said until the answer is
+        director.listen()
+        speech.press()
+
+    def cancel():
+        director.stop_listening()
+        speech.cancel()
+
+    ptt = PushToTalk(button, press, speech.release, cancel,
                      min_press_s=v.min_press_s, max_s=v.max_question_s)
     return ptt, speech
 
@@ -153,6 +163,8 @@ async def _ptt_loop(engine, ptt, speech) -> None:
                     bus.publish(ev.QuestionAsked(state.session_uid or 0,
                                                  state.session_time or 0.0, text=text,
                                                  audio_path=wav, stt_ms=stt_ms))
+                else:
+                    engine.director.stop_listening()
             elif msg[0] == "error":
                 log.warning("push-to-talk: %s", msg[1])
         await asyncio.sleep(0.02)

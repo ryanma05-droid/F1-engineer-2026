@@ -134,8 +134,9 @@ def test_flashback_clears_queue():
     assert r.said == []
 
 
-def test_your_answer_goes_ahead_of_other_waiting_calls_but_not_a_box_call():
-    """3 Nov Texas: an answer expired behind a tyre warning queued earlier at the same priority."""
+def test_your_answer_goes_ahead_of_every_other_waiting_call():
+    """3 Nov Texas: an answer expired behind a tyre warning queued earlier at the same priority.
+    4 Nov: answers go first, before box calls too."""
     from engineer.bus import events as ev
     from engineer.radio.director import Priority, RadioCall, RadioDirector
     from engineer.state.race_state import RaceState
@@ -156,4 +157,42 @@ def test_your_answer_goes_ahead_of_other_waiting_calls_but_not_a_box_call():
     for t in (106.0, 110.0, 114.0):
         state.session_time = t
         d.after_packet(None)
-    assert said == ["box", "answer", "tyre_warning"]
+    assert said == ["answer", "box", "tyre_warning"]
+
+
+def test_on_the_mic_nothing_else_is_said_until_the_answer():
+    """4 Nov: you ask on the main straight, the lap is crossed, and the lap calls queue up. They
+    wait (without expiring) until your answer has been said, then follow it."""
+    r = Rig()
+    d = r.d
+    r.drive(t=10.0, dist=100)
+    d.listen()                                                    # button down
+    d.submit(RadioCall("lap_delta", "One thirty two point one.", max_wait_s=3.0))
+    d.submit(RadioCall("box", "Box this lap.", priority=Priority.HIGH, wait_for_straight=False))
+    for t in (11.0, 13.0, 16.0):                                  # longer than their 3 s wait
+        r.drive(t=t, dist=100 + t)
+    assert r.said == [] and not r.dropped
+    d.listen(8.0)                                                 # question heard
+    d.submit(RadioCall("answer", "Hards make it to the end.", priority=Priority.HIGH,
+                       wait_for_straight=False, max_wait_s=15.0))
+    assert [m.topic for m in r.said] == ["answer"]
+    for t in (17.0, 18.5, 19.0, 20.0, 21.0, 22.0):
+        r.drive(t=t, dist=100 + t)
+    assert [m.topic for m in r.said] == ["answer", "box", "lap_delta"] and not r.dropped
+
+
+def test_the_hold_ends_by_itself_and_on_a_short_press():
+    r = Rig()
+    d = r.d
+    r.drive(t=10.0, dist=100)
+    d.listen(8.0)                                                 # heard, answer never comes
+    d.submit(RadioCall("lap_delta", "Lap.", max_wait_s=3.0))
+    r.drive(t=17.0, dist=170)
+    assert r.said == []
+    r.drive(t=18.5, dist=185)                                     # 8 s up: released
+    assert [m.topic for m in r.said] == ["lap_delta"]
+    d.listen()
+    d.stop_listening()                                            # short press / nothing heard
+    d.submit(RadioCall("tyre_status", "Tyres fine."))
+    r.drive(t=20.0, dist=300)
+    assert [m.topic for m in r.said] == ["lap_delta", "tyre_status"]
