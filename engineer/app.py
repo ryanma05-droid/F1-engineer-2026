@@ -26,6 +26,7 @@ from engineer.pipeline import Pipeline
 from engineer.radio.director import RadioDirector
 from engineer.radio.engineers import personality
 from engineer.radio.variety import VARIETY
+from engineer.report.focus import load_focus
 from engineer.state.traces import TraceRecorder
 from engineer.state.track_maps import TrackMaps
 from engineer.strategy.runner import InlineRunner
@@ -117,9 +118,11 @@ def build_engine(cfg: Config, out: TextIO | None = None,
     tyres = TyreAnalyzer(bus, state, features, director, cfg.tyres, priors=priors,
                          verbosity=talk)
     # Last: corner coaching is the least urgent call of a lap.
+    # What the driver report found (data/reports/focus.json, written with each report).
+    focus = load_focus(cfg.data_path / "reports") if cfg.corners.report_focus else None
     corners = CornerAnalyzer(bus, state, history, traces, TrackMaps(cfg.tracks_path), director,
                              cfg.corners, verbosity=talk, features=features,
-                             detail=cfg.radio.detail)
+                             detail=cfg.radio.detail, focus=focus)
     pipeline.after_packet.append(corners.after_packet)
     if strategy_runner is None:
         strategy_runner = InlineRunner(cfg.features_path)

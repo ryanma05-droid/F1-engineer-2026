@@ -669,3 +669,14 @@ straight wait (not dropped) and follow the answer. Box and safety car calls come
 4 Nov, volume slider: Settings -> Engineer voice has a volume slider. 70 % is the old loudness;
 100 % is about three times the level (measured 2.9x on the radio sound) with peaks squeezed by a
 soft limiter instead of clipping. It changes at once and the engineer says a line at the new level.
+
+4 Nov, coaching from the driver report: the report now hands live coaching its findings
+(data/reports/focus.json): your usual weak corners at each track and the habit behind them. Live,
+those corners are coached first from lap one ("Turn six, your usual one from the report, ...
+Get on the power much earlier."), the engineer says what to work on after your first lap, and
+says it once when a report corner is level with the fastest lap. "What should I work on?" asks
+for it. Found while building it: the report measured every session of a multi-session recording
+on the first track's corners (the 29 Oct file: Imola, Abu Dhabi and Bahrain; the 3 Nov lobby:
+Melbourne, Shanghai and Texas). Fixed: one entry per session. With your recordings the report's
+top habits changed from "exit speed onto straights" and "braking too early" to "slow squeeze to
+full throttle" (0.22 s a lap) and "winning the entry, losing the exit" (0.20 s).

@@ -493,6 +493,12 @@ class QuestionAnswerer:
                 hot = k + 1
         return phrases.tyre_tips_phrase(w, None if np.isnan(rate) else rate, target, hot)
 
+    def _a_report_focus(self) -> str:
+        """"What should I work on?": the driver report's corners here and the habit behind them
+        (the same words as the briefing at the start of a session)."""
+        text = self.engine.corners.focus_brief()
+        return text or phrases._sentence("no driver report yet, build one from the report tab")
+
     def _a_speed_tips(self) -> str:
         """"Give me tips on how to speed up" (3 Nov, logged): the two corners costing the most
         on the last lap and why, from the same comparison as the corner calls."""

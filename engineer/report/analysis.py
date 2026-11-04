@@ -32,7 +32,10 @@ from engineer.tools.queries import BRAKE_ON, FULL_THROTTLE, corner_stats
 log = logging.getLogger(__name__)
 
 # Bump when the numbers below change meaning: every cached recording is then analysed again.
-ANALYSIS_VERSION = 1
+# 2: one entry per session in a recording (an online lobby or a weekend keeps one file for
+#    several sessions at different tracks; 4 Nov: Imola, Abu Dhabi and Bahrain in one file were
+#    all measured on the Imola corners).
+ANALYSIS_VERSION = 2
 TOP_AI = 5                 # the reference: the quickest AI cars by median clean lap
 MIN_AI_CARS = 3            # fewer AI cars with clean laps (time trial, a short practice): skipped
 TIME_TRIAL = 18
@@ -119,27 +122,50 @@ def _replay(path: Path):
     pipeline.bus.subscribe(ev.SessionStarted, lambda e: traces.reset())
     pipeline.bus.subscribe(ev.Flashback, lambda e: traces.rewind())
     pipeline.after_packet.append(traces.after_packet)
-    rows = []
-    builder.listeners.append(rows.append)
-    lap_traces: dict[tuple[int, int], LapTrace] = {}
+    # Per session (SessionStarted: a new session, a restart, the next race in a lobby): lap
+    # numbers start again, so rows and traces are kept apart by session.
+    parts: list[tuple[list, dict]] = [([], {})]
+
+    def on_session(_e) -> None:
+        if parts[-1][0] or parts[-1][1]:
+            parts.append(([], {}))
+    pipeline.bus.subscribe(ev.SessionStarted, on_session)
+    builder.listeners.append(lambda r: parts[-1][0].append(r))
 
     def on_lap(e: ev.LapCompleted) -> None:
         tr = traces.trace_for(e.car_idx, e.lap)
         if tr is not None and tr.usable:
-            lap_traces[(e.car_idx, e.lap)] = tr
+            parts[-1][1][(e.car_idx, e.lap)] = tr
     pipeline.bus.subscribe(ev.LapCompleted, on_lap)
     for t_ns, raw in read_recording(path):
         pipeline.feed(raw, t_ns)
-    return rows, lap_traces, pipeline.state
+    return parts, pipeline.state
+
+
+def entries_of(entry: dict) -> list[dict]:
+    """The report entries in a cached analysis: one per session ("parts"), or the entry itself."""
+    return entry.get("parts", [entry])
 
 
 def analyze_recording(path: Path | str, maps: TrackMaps) -> dict:
     """The report's view of one recording. {"skipped": reason} when there's nothing to compare
-    (no laps of yours, a time trial, too few AI cars)."""
+    (no laps of yours, a time trial, too few AI cars). A recording with several sessions you
+    drove in gives {"parts": [one entry per session]}."""
     path = Path(path)
-    rows, lap_traces, state = _replay(path)
+    parts, state = _replay(path)
     base = {"file": path.name, "version": ANALYSIS_VERSION,
             "recorded_at": recorded_at(path).isoformat()}
+    out = [_analyze_part(base | {"part": i}, rows, lap_traces, state, maps)
+           for i, (rows, lap_traces) in enumerate(parts)]
+    used = [e for e in out if e.get("skipped") != "no laps of yours"]
+    if len(used) > 1:
+        return base | {"parts": used}
+    entry = (used or out)[0]
+    entry.pop("part", None)
+    return entry
+
+
+def _analyze_part(base: dict, rows: list, lap_traces: dict, state, maps: TrackMaps) -> dict:
     mine = [r for r in rows if r.is_player]
     if not mine:
         return base | {"skipped": "no laps of yours"}
@@ -210,10 +236,11 @@ class AnalysisCache:
     def _fresh(self, entry: dict, rec: Path) -> bool:
         if entry.get("version") != ANALYSIS_VERSION or entry.get("size") != rec.stat().st_size:
             return False
-        if "track_id" in entry:
-            tmap = self.maps.load(entry["track_id"])
-            if tmap is not None and [asdict(c) for c in tmap.corners] != entry.get("map"):
-                return False                # the track map was edited: measure again
+        for e in entries_of(entry):
+            if "track_id" in e:
+                tmap = self.maps.load(e["track_id"])
+                if tmap is not None and [asdict(c) for c in tmap.corners] != e.get("map"):
+                    return False            # the track map was edited: measure again
         return True
 
     def cached(self, rec: Path) -> dict | None:

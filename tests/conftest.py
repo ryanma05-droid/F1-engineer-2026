@@ -6,6 +6,7 @@ the fixed wording; tests/test_variety.py turns it on to test it."""
 import os
 
 os.environ["RACE_ENGINEER_VARIETY"] = "0"
+os.environ["RACE_ENGINEER_REPORT_FOCUS"] = "0"     # report/focus.py: no local report
 
 import pytest  # noqa: E402
 

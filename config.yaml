@@ -59,6 +59,7 @@ corners:                # corner coaching (Phase 4)
   back_off_after: 3     # after this many calls in a row on a corner: every other lap, unless worse
   battle_gap_s: 1.0     # a car this close ahead or behind: no corner coaching (you're busy)
   max_wait_s: 25        # wait up to this long for a straight
+  report_focus: true    # coach the corners and habits from your driver report first
 
 racecraft:              # the human side: battles, passes, start/finish, penalties (races only)
   enabled: true

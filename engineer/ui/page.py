@@ -96,6 +96,13 @@ button { font: inherit; color: inherit; }
   margin-left: 4px; vertical-align: 1px; text-transform: uppercase; letter-spacing: .04em; }
 .badge.focus { background: rgba(225,6,0,.18); color: var(--red-2); }
 .badge.fixed { background: rgba(12,163,12,.18); color: #5fd35f; }
+.repfocus { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); font-size: 13px; }
+.repfocus .k { font-size: 11px; color: var(--ink-3); text-transform: uppercase; letter-spacing: .1em; margin-bottom: 6px; }
+.repfocus .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
+.repfocus .chip { background: var(--panel-2); border: 1px solid var(--line); border-radius: 99px; padding: 3px 10px;
+  text-transform: capitalize; font-weight: 600; }
+.repfocus .chip.done { border-color: rgba(12,163,12,.5); color: #5fd35f; }
+.repfocus .chip span { color: var(--ink-3); font-weight: 500; margin-left: 4px; text-transform: none; }
 .fb { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; max-height: 300px; overflow: auto; }
 .fb li { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: start;
   padding: 8px 10px; background: var(--panel-2); border-radius: 8px; font-size: 13px; }
@@ -437,6 +444,15 @@ function trendSvg(vals) {
     cy="${pts.at(-1)[1].toFixed(1)}" r="3" fill="${vals.at(-1) > 0 ? "#e66767" : "#3987e5"}"/></svg>`;
 }
 
+function reportFocus(r) {
+  if (!r) return `<div class="repfocus muted">Build a driver report (Report tab) and the engineer coaches
+    your usual weak corners first.</div>`;
+  const chips = r.corners.map(x => `<span class="chip${x.level ? " done" : ""}">${esc(x.name)}<span>${x.level
+    ? "level now" : "+" + x.loss_s.toFixed(2) + " s usual"}</span></span>`).join("");
+  return `<div class="repfocus"><div class="k">From your report</div>${chips ? `<div class="chips">${chips}</div>` :
+    `<div class="muted" style="margin-bottom:6px">No report corners at this track yet.</div>`}${r.habit
+    ? `<div>Habit to work on: <b>${esc(r.habit)}</b></div>` : ""}</div>`;
+}
 function renderCoach() {
   const c = S.coaching, el = $("#coach");
   const hint = S.tempo === "coaching" ? "" : `<div class="tip" style="margin-top:12px">Switch the tempo to
@@ -444,7 +460,7 @@ function renderCoach() {
   $("#coachVs").textContent = c.laps ? `vs ${c.bench} · ${c.laps} lap${c.laps === 1 ? "" : "s"}` : "";
   if (!c.laps) {
     paint(el, `<p class="muted" style="margin:0">After your first clean lap, each lap is compared with the
-      fastest lap on track, corner by corner.</p>` + hint);
+      fastest lap on track, corner by corner.</p>` + reportFocus(c.report) + hint);
     return;
   }
   const span = Math.max(0.2, ...c.corners.map(x => Math.abs(x.delta_s)));
@@ -459,7 +475,7 @@ function renderCoach() {
     </div>
     <div class="crows">${rows}</div>
     <div class="legend"><span><i style="background:var(--loss)"></i>slower than ${esc(c.bench)} here</span>
-      <span><i style="background:var(--gain)"></i>quicker</span><span>line: last ${Math.min(6, c.laps)} laps</span></div>` + hint);
+      <span><i style="background:var(--gain)"></i>quicker</span><span>line: last ${Math.min(6, c.laps)} laps</span></div>` + reportFocus(c.report) + hint);
 }
 
 const LAPS_HOW = {"last race here": "same as your last race here", "usual distance": "your usual race distance",

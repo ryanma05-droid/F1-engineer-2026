@@ -40,6 +40,16 @@ losing comes first ("Still turn two"), and "Better into turn two, keep doing tha
 fixed. In a fight it isn't silenced (you chose coaching; Melbourne, 2 Nov, had a car within a
 second on nine of fifteen laps), just cut to one corner.
 
+From your driver report (report/focus.py, data/reports/focus.json): the corners where you
+usually lose the most at this track come straight after a live habit, from the first lap (one
+lap there is the same old corner, not a one-off), at NORMAL priority, said the first time as
+"Turn four, one of your report corners, ...", with the cause your report habit points at when
+it shows this lap. Once per session the engineer says what you're working on (after your first
+lap: "From your report, the time's in turn four and turn six. Work on the exits ..."), and once
+per corner when a report corner is level with the fastest lap on track ("Turn four, level with
+the fastest lap now. That was a report corner."). In coaching mode the report corners are
+ordered right after the habits too.
+
 Wording (radio.detail): "plain" says what to do ("brake slightly later"), "specific" says the
 measurement ("braking fifteen metres earlier").
 
@@ -61,7 +71,14 @@ from engineer.config import Corners
 from engineer.features.lap_features import LapFeatureBuilder
 from engineer.features.laps import LapHistory, LapRecord
 from engineer.radio.director import Priority, RadioCall, RadioDirector
-from engineer.radio.phrases import coaching_phrase, corner_better_phrase, corner_phrase
+from engineer.radio.phrases import (
+    coaching_phrase,
+    corner_better_phrase,
+    corner_phrase,
+    focus_brief_phrase,
+    focus_level_phrase,
+)
+from engineer.report.focus import CoachingFocus, FocusCorner
 from engineer.state.race_state import RaceState
 from engineer.state.traces import LapTrace, TraceRecorder
 from engineer.state.track_maps import TrackMap, TrackMaps, detect_corners
@@ -94,7 +111,8 @@ class CornerAnalyzer:
     def __init__(self, bus: ev.EventBus, state: RaceState, history: LapHistory,
                  traces: TraceRecorder, maps: TrackMaps, director: RadioDirector,
                  settings: Corners | None = None, verbosity: str = "normal",
-                 features: LapFeatureBuilder | None = None, detail: str = "plain"):
+                 features: LapFeatureBuilder | None = None, detail: str = "plain",
+                 focus: CoachingFocus | None = None):
         self.state = state
         self.history = history
         self.traces = traces
@@ -119,6 +137,11 @@ class CornerAnalyzer:
         # corner -> [(lap, loss called, your corner time that lap, streak when called)]
         self.calls: dict[int, list[tuple[int, float, float, int]]] = {}
         self.praised: dict[int, int] = {}          # corner -> lap "better" was said
+        self.focus = focus                         # from the driver report (report/focus.py)
+        self.focus_corners: dict[int, FocusCorner] = {}   # this track's report corners
+        self.briefed = False                       # "from your report, ..." said this session
+        self.report_said: set[int] = set()         # report corners named as such this session
+        self.level_said: set[int] = set()          # "level with the fastest lap now" said
         bus.subscribe(ev.LapCompleted, self.on_lap)
         bus.subscribe(ev.SessionStarted, self._on_session_started)
         bus.subscribe(ev.Flashback, lambda e: setattr(self, "pending", None))
@@ -136,6 +159,11 @@ class CornerAnalyzer:
         self.calls = {}
         self.praised = {}
         self.track_map = self.maps.load(e.track_id) if e.track_id is not None else None
+        self.focus_corners = {c.number: c for c in self.focus.for_track(e.track_id)} \
+            if self.focus is not None else {}
+        self.briefed = False
+        self.report_said = set()
+        self.level_said = set()
         if self.track_map:
             log.info("corner map: %d corners from %s", len(self.track_map.corners),
                      self.maps.path(e.track_id))
@@ -261,6 +289,9 @@ class CornerAnalyzer:
             if self.track_map is None:
                 return
         deltas = self._log_coach_lap(trace, e)
+        self._brief()
+        if deltas is not None:
+            self._level_check(deltas)
         if self.coaching and deltas is not None:
             self._coach(e, deltas)
             return
@@ -326,6 +357,11 @@ class CornerAnalyzer:
             pick = max(habits, key=lambda d: (self.streak(d.corner.number), d.delta_s))
             text = self._loss_call(pick, trace.lap, against, self.streak(pick.corner.number))
             priority = Priority.NORMAL
+        elif report := [d for d in losses if d.corner.number in self.focus_corners]:
+            # A report corner: your usual weak spot here, so not a one-off even on lap one.
+            pick = max(report, key=lambda d: d.delta_s)
+            text = self._loss_call(pick, trace.lap, against, 0)
+            priority = Priority.NORMAL
         elif losses:
             pick = max(losses, key=lambda d: d.delta_s)
             text = self._loss_call(pick, trace.lap, against, 0)
@@ -375,7 +411,9 @@ class CornerAnalyzer:
             better = found[0].corner.name
         # Habits first (longest streak), then the biggest losses.
         order = sorted(losses, key=lambda d: (-min(self.streak(d.corner.number),
-                                                   self.cfg.focus_after_laps), -d.delta_s))
+                                                   self.cfg.focus_after_laps),
+                                              d.corner.number not in self.focus_corners,
+                                              -d.delta_s))
         items = []
         for d in order[:most]:
             n = d.corner.number
@@ -383,7 +421,7 @@ class CornerAnalyzer:
             streak = streak if streak >= self.cfg.focus_after_laps else 0
             self.called_on[n] = e.lap
             self.calls.setdefault(n, []).append((e.lap, d.delta_s, d.mine.time_s, streak))
-            reason = self._habit_reason(d, e.lap, streak) if streak else d.reason()
+            reason = self._habit_reason(d, e.lap, streak) if streak else self._report_reason(d)
             items.append((d.corner.name, int(round(d.delta_s * 1000)), reason, d.reasons(),
                           streak))
         gap_ms = (lap_ms - bench.lap_time_ms) if lap_ms else 0
@@ -401,10 +439,82 @@ class CornerAnalyzer:
         again = not streak and n in self.called_on and lap - self.called_on[n] <= 3
         self.called_on[n] = lap
         self.calls.setdefault(n, []).append((lap, d.delta_s, d.mine.time_s, streak))
-        reason = self._habit_reason(d, lap, streak) if streak else d.reason()
+        reason = self._habit_reason(d, lap, streak) if streak else self._report_reason(d)
+        report = not streak and n in self.focus_corners and n not in self.report_said
+        if report:
+            self.report_said.add(n)
         return corner_phrase(d.delta_s, d.corner.name, against, reason, self.verbosity,
-                             again=again, streak=streak, detail=self.detail,
-                             reasons=d.reasons())
+                             again=again and not report, streak=streak, detail=self.detail,
+                             reasons=d.reasons(), report=report)
+
+    # -- the driver report -----------------------------------------------------------------------
+
+    def _report_reason(self, d: CornerDelta) -> tuple[str, float] | None:
+        """For a report corner, the cause its report habit points at if it shows this lap
+        (one thing to work on, the same one the report names); otherwise this lap's biggest."""
+        fc = self.focus_corners.get(d.corner.number)
+        now = d.reasons()
+        hits = [k for k in (fc.reasons if fc else ()) if k in now]
+        if hits:
+            k = max(hits, key=lambda k: now[k] / REASON_THRESHOLDS[k])
+            return k, now[k]
+        return d.reason()
+
+    def _corner_name(self, number: int) -> str | None:
+        c = next((c for c in self.track_map.corners if c.number == number), None) \
+            if self.track_map else None
+        return c.name if c else None
+
+    def focus_brief(self) -> str | None:
+        """What the report says to work on here: the report corners (worst first) and the habit
+        behind them (their most common one, else your top habit overall). None: no report."""
+        if self.focus is None or self.focus.empty:
+            return None
+        names = [n for c in self.focus_corners.values() if (n := self._corner_name(c.number))]
+        themes = [c.theme for c in self.focus_corners.values() if c.theme]
+        key = max(set(themes), key=themes.count) if themes else None
+        habit = next((h for h in self.focus.habits if h["key"] == key), None) if key else None
+        if habit is None and self.focus.habits:
+            habit = self.focus.habits[0]
+        if habit is None and not names:
+            return None
+        from engineer.report.focus import RADIO_HABIT
+        words = RADIO_HABIT.get(habit["key"], habit.get("radio")) if habit else None
+        return focus_brief_phrase(names[:2], words)
+
+    def report_card(self) -> dict | None:
+        """The Live tab: the report corners at this track and the habit, for the Coaching card."""
+        if self.focus is None or self.focus.empty:
+            return None
+        corners = [{"name": self._corner_name(c.number) or f"T{c.number}",
+                    "loss_s": c.loss_s, "laps": c.laps,
+                    "level": c.number in self.level_said}
+                   for c in self.focus_corners.values()]
+        habit = self.focus.habits[0]["title"] if self.focus.habits else None
+        return {"corners": corners, "habit": habit, "said": self.briefed}
+
+    def _brief(self) -> None:
+        """Once a session, after your first coached lap: what you're working on."""
+        if self.briefed or self.focus is None:
+            return
+        self.briefed = True
+        text = self.focus_brief()
+        if text:
+            self.director.submit(RadioCall(topic="coaching_focus", text=text,
+                                           priority=Priority.NORMAL,
+                                           max_wait_s=self.cfg.max_wait_s))
+
+    def _level_check(self, deltas: list[CornerDelta]) -> None:
+        """A report corner level with (or quicker than) the fastest lap on track: said once."""
+        for d in deltas:
+            n = d.corner.number
+            if n in self.focus_corners and n not in self.level_said and d.delta_s <= 0.02:
+                self.level_said.add(n)
+                self.director.submit(RadioCall(topic="coaching_focus",
+                                               text=focus_level_phrase(d.corner.name),
+                                               priority=Priority.LOW,
+                                               max_wait_s=self.cfg.max_wait_s))
+                return
 
     def _backed_off(self, d: CornerDelta, lap: int) -> bool:
         """Once a corner has been called back_off_after times in its current streak, it's said

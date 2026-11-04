@@ -95,6 +95,17 @@ uv run python -m engineer.report                     # driver report PDF (data/r
   lap (wired after race craft, so after the finish call) or at SessionEnded
   (`RadioDirector.release_now`), and saved to data/coaching/ by live play only (`save_dir`, set in
   cli). The driver report lists the latest ones (section 07).
+- Coaching from the driver report (`report/focus.py`): each report build writes
+  data/reports/focus.json (per track up to 3 corners losing 0.05 s+ to the quickest AI with 4+
+  laps, each with its theme and the live causes that theme shows as; your top 2 habits with a
+  short radio line). `build_engine` loads it (`corners.report_focus`; the suite sets
+  RACE_ENGINEER_REPORT_FOCUS=0). Live: a report corner losing time is called right after live
+  habits from the first lap, NORMAL priority, "one of your report corners" the first time a
+  session, with the theme's cause first (`_report_reason`); coaching mode orders them after
+  habits. Once a session after your first coached lap: "From your report, the time's in turn six
+  and turn two. Work on the throttle: ..." (topic coaching_focus, also the "what should I work
+  on?" answer); once per corner when it's level with the fastest lap on track. Live tab Coaching
+  card: "From your report" chips.
 - `data/tracks/<track>.json` is committed and hand-editable (official turn numbers). Without a
   file the map is learned from the first 2 clean laps and saved. The golden test uses
   `data/tracks/austria.json`.
@@ -128,6 +139,10 @@ uv run python -m engineer.report                     # driver report PDF (data/r
   `engineer run` stops; the installed app runs `RaceEngineer.exe --daily-report`).
 - Corner runs use `corner_stats()` for the shared numbers, so the report agrees with live
   coaching.
+- One entry per session (ANALYSIS_VERSION 2): a recording holding several sessions (online lobby,
+  a restart, a weekend) is cached as {"parts": [...]}; read entries with `entries_of()`. Before
+  this, every lap of a file was measured on its first track's corners (4 Nov: Abu Dhabi laps on
+  the Imola map made Imola turn four "1.2 s").
 
 ## App window
 

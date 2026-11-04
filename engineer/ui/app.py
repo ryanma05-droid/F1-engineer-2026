@@ -188,7 +188,9 @@ class AppWindow:
     def _coaching(self) -> dict:
         from engineer.analyzers.coaching import card
         corners = self.engine.corners
-        return card(corners.coach_laps, corners.cfg.focus_after_laps, corners.cfg.min_loss_s)
+        out = card(corners.coach_laps, corners.cfg.focus_after_laps, corners.cfg.min_loss_s)
+        out["report"] = corners.report_card()
+        return out
 
     def _prerace(self) -> dict:
         sa = self.engine.strategy
@@ -365,7 +367,7 @@ def prerace_dict(plan, sa) -> dict:
 
 def report_insights(cfg: Config) -> dict:
     """The latest driver report's highlights, from the cached analyses (nothing is replayed)."""
-    from engineer.report.analysis import AnalysisCache
+    from engineer.report.analysis import AnalysisCache, entries_of
     from engineer.report.insights import build_report
     from engineer.state.track_maps import TrackMaps
 
@@ -377,7 +379,7 @@ def report_insights(cfg: Config) -> dict:
         if e is None:
             pending += 1
         else:
-            entries.append(e)
+            entries += entries_of(e)
     r = build_report(entries, datetime.now(timezone.utc))
     return {
         "sessions": len(r.sessions), "laps": r.laps, "pending": pending,

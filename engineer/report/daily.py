@@ -22,7 +22,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from engineer.config import FROZEN, Config
-from engineer.report.analysis import AnalysisCache
+from engineer.report.analysis import AnalysisCache, entries_of
 from engineer.report.insights import build_report
 from engineer.report.pdf import html_to_pdf, open_file
 from engineer.report.render import render_html
@@ -69,13 +69,17 @@ def generate(cfg: Config, progress=print) -> Path | None:
     out.mkdir(parents=True, exist_ok=True)
     recs = recordings(cfg)
     cache = AnalysisCache(out / "cache", TrackMaps(cfg.tracks_path))
-    entries = [cache.get(p, progress) for p in recs]
+    entries = [e for p in recs for e in entries_of(cache.get(p, progress))]
     state = load_state(cfg)
     # "Since last report" compares with the last report from an earlier day.
     previous = state.get("before") if state.get("date") == _today() else state.get("last")
     report = build_report(entries, datetime.now(timezone.utc), previous)
     from engineer.analyzers.coaching import load_summaries
     report.coaching = load_summaries(cfg.data_path / "coaching")
+    # What live coaching works on next (report/focus.py): read when the engineer starts.
+    from engineer.report.focus import focus_from_report, save_focus
+    if report.sessions:
+        save_focus(focus_from_report(report), out)
     if not report.sessions:
         progress(f"No sessions with laps to compare yet ({len(recs)} recordings in "
                  f"{cfg.sessions_path}). Race a few laps with the engineer running first.")

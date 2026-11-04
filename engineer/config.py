@@ -106,6 +106,8 @@ class Corners(BaseModel):
     back_off_after: int = Field(default=3, ge=1)     # same corner called this often: every other lap
     battle_gap_s: float = Field(default=1.0, ge=0)   # car this close ahead/behind: no coaching
     max_wait_s: float = Field(default=25.0, gt=0)
+    # Coach the corners and habits your driver report found first (report/focus.py).
+    report_focus: bool = True
 
 
 class RaceCraft(BaseModel):

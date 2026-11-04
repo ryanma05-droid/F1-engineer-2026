@@ -297,13 +297,15 @@ def corner_better_phrase(corner_name: str, gained_s: float | None = None) -> str
 def corner_phrase(delta_s: float, corner_name: str, against: str,
                   reason: tuple[str, float] | None = None, verbosity: str = "normal",
                   again: bool = False, streak: int = 0, detail: str = "plain",
-                  reasons: dict[str, float] | None = None) -> str:
+                  reasons: dict[str, float] | None = None, report: bool = False) -> str:
     """against: "ahead", "behind", "best" or "pace" (your best lap on similar tyre wear).
     'Turn three, losing two tenths to the car ahead, braking ten metres earlier.'
     'Turn four, three tenths off your best, minimum speed eight k p h down.'
     'Gaining a tenth on the car ahead through turn nine.' (delta_s < 0)
     again=True (same corner as the last call): 'Turn four again, ...'
-    streak=3 (lost time there 3 laps in a row): 'Turn four, third lap running, ...'"""
+    streak=3 (lost time there 3 laps in a row): 'Turn four, third lap running, ...'
+    report=True (a corner your driver report says you usually lose time in, first call this
+    session): 'Turn four, one of your report corners, ...'"""
     gap = say_gap(int(round(delta_s * 1000)))
     if against == "fastest":                       # coaching: the fastest lap on track
         if delta_s < 0:
@@ -322,11 +324,39 @@ def corner_phrase(delta_s: float, corner_name: str, against: str,
     why = "" if verbosity == "terse" else reason_words(reason, reasons, detail)
     if streak >= 2:
         head = f"{corner_name}, {_STREAK.get(streak, 'lap after lap')}"
+    elif report:
+        head = f"{corner_name}, " + pick("report_corner", ["one of your report corners",
+                                                           "the one from your report",
+                                                           "your usual one from the report"])
     else:
         head = f"{corner_name} again" if again else corner_name
     if detail == "plain" and why:                  # the advice as its own sentence
         return f"{_sentence(head, loss)} {_sentence(why)}"
     return _sentence(head, loss, why)
+
+
+def focus_brief_phrase(corners: list[str], habit: str | None) -> str:
+    """What the driver report says to work on, once at the start of a session.
+    'From your report, the time's in turn four and turn six. Work on the exits: brake a touch
+    earlier and get to full throttle sooner.' Either part can be missing."""
+    out = []
+    if corners:
+        where = " and ".join(corners)
+        out.append(_sentence(pick("focus_where", [f"from your report, the time's in {where}",
+                                                  f"from your report, watch {where}",
+                                                  f"your report says {where}"])))
+    if habit:
+        out.append(_sentence(f"work on {habit}") if corners
+                   else _sentence(f"from your report, work on {habit}"))
+    return " ".join(out)
+
+
+def focus_level_phrase(corner_name: str) -> str:
+    """A report corner level with the fastest lap on track, said once."""
+    return " ".join([_sentence(corner_name, "level with the fastest lap now"),
+                     _sentence(pick("focus_level", ["that was a report corner, nice",
+                                                    "that's a report corner, keep it there",
+                                                    "report corner sorted, keep that"]))])
 
 
 def coaching_phrase(lap_ms: int | None, gap_ms: int, who: str,

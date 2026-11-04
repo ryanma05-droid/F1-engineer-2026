@@ -121,3 +121,19 @@ def test_a_failed_analysis_is_retried_on_a_later_day(tmp_path, monkeypatch):
     p = next((tmp_path / "cache").iterdir())
     p.write_text(_json.dumps({**_json.loads(p.read_text()), "analysed_on": "2026-10-28"}))
     assert cache.cached(rec) is None                     # a later day: tried again
+
+
+def test_each_session_in_a_recording_is_its_own_entry(tmp_path, entry):
+    """4 Nov: a file with Imola, Abu Dhabi and Bahrain was measured on the Imola corners. The same
+    race twice in one file (a restart) gives two entries with the single race's numbers."""
+    from engineer.report.analysis import analyze_recording, entries_of
+    (tmp_path / "tracks").mkdir()
+    shutil.copy(AUSTRIA_MAP, tmp_path / "tracks")
+    rec = tmp_path / "20261020T180000Z_0c69b56cedd41e45.zst"
+    rec.write_bytes(FIXTURE.read_bytes() * 2)
+    got = analyze_recording(rec, TrackMaps(tmp_path / "tracks"))
+    parts = entries_of(got)
+    assert [p["part"] for p in parts] == [0, 1]
+    for p in parts:
+        assert p["my_laps"] == entry["my_laps"] and p["track"] == "Austria"
+    assert entries_of(entry) == [entry]

@@ -110,6 +110,11 @@ RULES: list[tuple[str, list[str]]] = [
     ("tyre_tips", [r"\b(tips?|advice|help)\b.*\b(manag\w*|sav\w*|look after)\b.*\btyres?\b",
                    r"\bhow (do|can|should) (i|we) (manage|save|look after) (the |my |these )?tyres?\b",
                    r"\bover ?(exert|work|heat|us)\w*\b", r"\b(killing|cooking|hurting) (the |my )?tyres?\b"]),
+    # What the driver report says to work on (report/focus.py).
+    ("report_focus", [r"\bwhat (should|do) (i|we) (work on|focus on|practi[cs]e)\b",
+                      r"\bwhat('s| is) (my|the) focus\b",
+                      r"\bwhat does (my|the) (driver )?report say\b",
+                      r"\bwhere do (i|we) (usually|normally|always) lose\b"]),
     # 3 Nov: "Give me tips on how to speed up."
     ("speed_tips", [r"\b(tips?|advice)\b.*\b(speed up|faster|quicker|pace|lap time)\b",
                     r"\bhow (do|can|could) (i|we) (speed up|go faster|get faster|be quicker|"

@@ -35,7 +35,6 @@ Newest pins first within each group.
 ## Recommended earlier (not built)
 
 - **Wet-weather strategy.** Rain forecast warnings, when to go to inters/wets and back to slicks.
-- **Coaching focus from the driver report.** Coach your recurring habits first.
 - **Pre-race plan final pass.** Show what the plan assumed; a short "plan is..." call on the grid.
 - **Qualifying engineer.** Gap in traffic on the out-lap, live delta to provisional pole, lap
   verdict on the in-lap.
@@ -52,4 +51,4 @@ Newest pins first within each group.
 ## Built since they were suggested
 
 Pit loss from the pit lane timer and real F1 results; answers first while you're on the mic;
-volume slider; background uploads.
+volume slider; background uploads; coaching from the driver report.
