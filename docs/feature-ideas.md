@@ -32,6 +32,17 @@ Newest pins first within each group.
   - Check: practice wear matches race wear at the same race length; whether F1 25 lets you
     watch the AI finish after retiring.
 
+- **Shared tyre estimates for tracks and race lengths you haven't raced (4 Nov).** Everyone's
+  races count toward a starting estimate; your own laps take over as you race.
+  - Pool the AI cars' wear (the same yardstick for everyone), scaled to each driver by their own
+    you-vs-AI ratio; keep 5-lap and proper-length races apart (already done for your own data).
+  - Pooled numbers count as limited evidence (like the real F1 pit loss counting as 3 stops), so
+    a few of your own laps outweigh them.
+  - Step 1: a starter tyre table built from every uploaded recording, shipped with each release
+    (tyre numbers only, no names). Step 2: friends on the installed app contribute a small
+    summary after each race (needs a way to send it without putting a GitHub key in the app).
+  - Check: game settings that change wear (difficulty, assists), track temperature, car setup.
+
 ## Recommended earlier (not built)
 
 - **Wet-weather strategy.** Rain forecast warnings, when to go to inters/wets and back to slicks.
