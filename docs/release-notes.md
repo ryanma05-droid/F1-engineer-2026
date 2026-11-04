@@ -22,21 +22,29 @@ folder and offers to bring your recordings, history, reports and settings over (
 
 ### New in this version
 
-- **Pre-race tyre plan**: before the race ask "what tyres should I start on?" (or "strategy for
-  Suzuka, fifteen laps"), or use the Pre-race card on the Live tab. It's also said when
-  qualifying ends.
-- **Coaching mode**, a fourth tempo: each lap against the fastest car on track, corner by corner,
-  with a summary when the session ends and a Coaching card on the Live tab.
-- **Plain corner advice** by default ("brake slightly later, then carry a bit more speed through
-  the corner"); say "give me the numbers" or pick Specific in Settings for metres and km/h.
-- **Pick your engineer's voice** on the Settings tab: five real-sounding engineers, and Kevin,
-  who is on work experience.
-- **Calls worded a few different ways**, so one race doesn't sound like the last.
-- **Better pit stop timing**: pit loss is measured with the game's own pit lane timer (real F1
-  figures are used until a track has a timed stop), so box calls and "where do I come out?" are
-  closer to reality.
-- Losing a place is called the same way as a pass (after it sticks), a good defence is praised,
-  and no place changes are called around your own stop.
+- **Updates in the app**: from this version on, the app tells you when a new one is out. On
+  Windows, "Download and install" then "Install and restart" updates it for you (settings and
+  recordings are kept). Settings > Updates can download new versions automatically (never during
+  a session; installing is always your click). This version itself has to be installed by hand.
+- **Your questions come first**: anything you ask on the radio is answered before any other
+  call, and the engineer doesn't talk over you while you hold the button.
+- **Volume slider** (Settings > Engineer voice): 70 % is the old loudness, up to about three times
+  louder at 100 %.
+- **Coaching from your driver report**: the corners where you usually lose time at a track are
+  coached first from lap one, the engineer says what to work on after your first lap, and tells
+  you when a report corner is fixed. Ask "what should I work on?" any time. Build a report once
+  (Driver report tab) to switch it on.
+- **Driver report fix**: a recording with several sessions (an online lobby, a race weekend) is
+  now measured session by session. Before, every lap was measured on the first track's corners.
+- **Background uploads**: recordings go up to GitHub while you're not racing, and closing the
+  app no longer cuts an upload off.
+- **Smarter strategy**: tyre wear from 5-lap races isn't mixed with proper-length races, a tight
+  plan gives way to the safe one when its gain changes no position, and the pre-race plan is said
+  after every qualifying in an online lobby.
+- **More answers on the radio**: "has Albon pitted?", "can I catch him?", "why not hards?",
+  "box at lap ten for hards?", sector comparisons, and "what's the fastest lap?".
+- Hidden online players are named by team ("Ferrari"), and lap times like 1:40.4 are said "one
+  forty point four".
 
 ### Mac (Apple Silicon, for F1 25 on Xbox / PlayStation)
 
