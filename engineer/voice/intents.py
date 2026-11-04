@@ -110,6 +110,9 @@ RULES: list[tuple[str, list[str]]] = [
     ("tyre_tips", [r"\b(tips?|advice|help)\b.*\b(manag\w*|sav\w*|look after)\b.*\btyres?\b",
                    r"\bhow (do|can|should) (i|we) (manage|save|look after) (the |my |these )?tyres?\b",
                    r"\bover ?(exert|work|heat|us)\w*\b", r"\b(killing|cooking|hurting) (the |my )?tyres?\b"]),
+    # Your rolling ideal lap (tools/ideal.py): before best_lap ("best possible lap").
+    ("ideal_lap", [r"\bideal\b", r"\btheoretical\b", r"\bbest possible\b",
+                   r"\b(potential|optimal|optimum) lap\b"]),
     # What the driver report says to work on (report/focus.py).
     ("report_focus", [r"\bwhat (should|do) (i|we) (work on|focus on|practi[cs]e)\b",
                       r"\bwhat('s| is) (my|the) focus\b",

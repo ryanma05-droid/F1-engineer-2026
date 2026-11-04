@@ -438,6 +438,10 @@ function renderPtt() {
       <div class="a">${esc(q.answer || "—")}</div></li>`).join("")}</ul>` : ""}`);
 }
 
+function lapTime(ms) {
+  const m = Math.floor(ms / 60000), s = (ms % 60000) / 1000;
+  return m + ":" + s.toFixed(3).padStart(6, "0");
+}
 function gapText(ms) {
   if (ms === null || ms === undefined) return "—";
   return (ms < 0 ? "−" : "+") + (Math.abs(ms) / 1000).toFixed(2) + "s";
@@ -455,6 +459,14 @@ function trendSvg(vals) {
     cy="${pts.at(-1)[1].toFixed(1)}" r="3" fill="${vals.at(-1) > 0 ? "#e66767" : "#3987e5"}"/></svg>`;
 }
 
+function idealLap(i) {
+  if (!i) return `<div class="repfocus muted">Ideal lap: after three clean laps this stint.</div>`;
+  const where = i.losses.map(x => `<span class="chip">${esc(x.name)}<span>+${x.s.toFixed(2)} s</span></span>`).join("");
+  return `<div class="repfocus"><div class="k">Ideal lap · last ${i.laps.length} laps, this stint</div>
+    <div style="margin-bottom:6px"><b class="num" style="font-size:18px">${lapTime(i.ms)}</b>
+    <span class="num" style="margin-left:8px;color:${i.gap_ms > 0 ? "var(--loss)" : "var(--gain)"}">L${i.lap} ${gapText(i.gap_ms)}</span></div>
+    ${where ? `<div class="chips">${where}</div>` : ""}</div>`;
+}
 function reportFocus(r) {
   if (!r) return `<div class="repfocus muted">Build a driver report (Report tab) and the engineer coaches
     your usual weak corners first.</div>`;
@@ -471,7 +483,7 @@ function renderCoach() {
   $("#coachVs").textContent = c.laps ? `vs ${c.bench} · ${c.laps} lap${c.laps === 1 ? "" : "s"}` : "";
   if (!c.laps) {
     paint(el, `<p class="muted" style="margin:0">After your first clean lap, each lap is compared with the
-      fastest lap on track, corner by corner.</p>` + reportFocus(c.report) + hint);
+      fastest lap on track, corner by corner.</p>` + idealLap(c.ideal) + reportFocus(c.report) + hint);
     return;
   }
   const span = Math.max(0.2, ...c.corners.map(x => Math.abs(x.delta_s)));
@@ -486,7 +498,7 @@ function renderCoach() {
     </div>
     <div class="crows">${rows}</div>
     <div class="legend"><span><i style="background:var(--loss)"></i>slower than ${esc(c.bench)} here</span>
-      <span><i style="background:var(--gain)"></i>quicker</span><span>line: last ${Math.min(6, c.laps)} laps</span></div>` + reportFocus(c.report) + hint);
+      <span><i style="background:var(--gain)"></i>quicker</span><span>line: last ${Math.min(6, c.laps)} laps</span></div>` + idealLap(c.ideal) + reportFocus(c.report) + hint);
 }
 
 const LAPS_HOW = {"last race here": "same as your last race here", "usual distance": "your usual race distance",
@@ -623,8 +635,8 @@ async function loadReport() {
       <div class="card kpi"><div class="k">Work on first</div>
         <div class="v" style="font-size:17px;line-height:1.25;margin-top:4px">${top ? esc(top.title) : "Nothing stands out"}</div>
         <div class="s">${top ? `about ${top.cost_s.toFixed(2)} s a lap` : "keep racing for more data"}</div></div>
-      <div class="card kpi"><div class="k">Typical vs your best</div>
-        <div class="v num">${R.ideal_gap_s.toFixed(2)}s</div><div class="s">per lap, if every corner matched your best</div></div>
+      <div class="card kpi"><div class="k">Typical vs your ideal lap</div>
+        <div class="v num">${R.ideal_gap_s.toFixed(2)}s</div><div class="s">per lap, vs your best corners of the last 5 laps</div></div>
       <div class="card kpi"><div class="k">Evidence</div>
         <div class="v num">${R.laps}<span class="muted" style="font-size:14px"> laps</span></div>
         <div class="s">${R.sessions} session${R.sessions === 1 ? "" : "s"}${R.pending ? ` · ${R.pending} new not in it yet` : ""}</div></div>

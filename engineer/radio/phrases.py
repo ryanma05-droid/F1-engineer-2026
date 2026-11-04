@@ -363,6 +363,26 @@ def focus_level_phrase(corner_name: str) -> str:
                                                     "report corner sorted, keep that"]))])
 
 
+def ideal_phrase(gap_ms: int, corner: str | None) -> str:
+    """Your rolling ideal lap (tools/ideal.py) vs the lap just done.
+    'Three tenths off your ideal, most of it turn four.'"""
+    head = f"{say_gap(gap_ms)} off your ideal"
+    return _sentence(head, f"most of it {corner}") if corner else _sentence(head)
+
+
+def ideal_answer_phrase(ideal_ms: int, laps: int, gap_ms: int, corner: str | None) -> str:
+    """'Ideal lap one twenty nine four, from your last five laps. Three tenths off it on that
+    lap, most of it turn four.'"""
+    out = [_sentence(f"ideal lap {say_lap_time(ideal_ms)}",
+                     f"from your last {number_words(laps)} laps")]
+    if gap_ms >= 50:
+        out.append(_sentence(f"{say_gap(gap_ms)} off it on that lap",
+                             *([f"most of it {corner}"] if corner else [])))
+    else:
+        out.append(_sentence("that lap was right on it"))
+    return " ".join(out)
+
+
 def coaching_phrase(lap_ms: int | None, gap_ms: int, who: str,
                     items: list[tuple[str, int, tuple[str, float] | None, dict, int]],
                     better: str | None = None, detail: str = "plain") -> str:

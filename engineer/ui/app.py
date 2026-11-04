@@ -193,6 +193,7 @@ class AppWindow:
         corners = self.engine.corners
         out = card(corners.coach_laps, corners.cfg.focus_after_laps, corners.cfg.min_loss_s)
         out["report"] = corners.report_card()
+        out["ideal"] = corners.ideal_card()
         return out
 
     def _prerace(self) -> dict:

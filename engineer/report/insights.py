@@ -41,7 +41,7 @@ class CornerAgg:
     d: dict = field(default_factory=dict)        # weighted mean of (mine - ref) per field
     ramp_me: float | None = None                 # metres from first throttle to full throttle
     ramp_ref: float | None = None
-    spread_s: float = 0.0                        # your median minus your best through it
+    spread_s: float = 0.0                        # your usual loss here to your rolling ideal lap
     brake_spread_m: float | None = None          # lap-to-lap spread of your braking point
     sessions: list = field(default_factory=list)  # (recorded_at, delta_time)
 
@@ -409,6 +409,42 @@ def strengths(corners: list[CornerAgg], types: list[TypeScore]) -> list[str]:
     return out
 
 
+# -- consistency: your laps against your rolling ideal lap ------------------------------------------
+
+def ideal_gaps(entries: list[dict], now: datetime) -> tuple[float, dict[tuple[int, int], float]]:
+    """Every clean lap against its rolling ideal (your last 5 clean laps in that stint, corner
+    segments, corrected for the stint's pace trend: tools/ideal.py), not your best run of the
+    whole session, which on fresh tyres makes later laps look inconsistent. Returns the average
+    gap per lap (recency-weighted) and each corner's average loss to the ideal."""
+    from engineer.tools.ideal import LapSegments, rolling_ideal
+    gap_w = gap_sum = 0.0
+    corner: dict[tuple[int, int], list[float]] = {}
+    for e in entries:
+        seg = e.get("my_segments")
+        if not seg or not seg.get("laps"):
+            continue
+        w = recency_weight(e["recorded_at"], now)
+        stints: dict[int, list[LapSegments]] = {}
+        for lap in seg["laps"]:
+            stints.setdefault(lap["stint"], []).append(
+                LapSegments(lap["lap"], lap["lap_ms"], lap["times"]))
+        for laps in stints.values():
+            laps.sort(key=lambda x: x.lap)
+            for k in range(len(laps)):
+                ideal = rolling_ideal(laps[:k + 1], seg["names"], seg["numbers"])
+                if ideal is None:
+                    continue
+                gap_sum += w * ideal.gap_ms / 1000
+                gap_w += w
+                for _name, number, loss in ideal.losses():
+                    if number is not None:
+                        acc = corner.setdefault((e["track_id"], number), [0.0, 0.0])
+                        acc[0] += w * loss
+                        acc[1] += w
+    per_corner = {k: s / wt for k, (s, wt) in corner.items() if wt > 0}
+    return (gap_sum / gap_w if gap_w else 0.0), per_corner
+
+
 # -- the whole report ---------------------------------------------------------------------------
 
 @dataclass
@@ -422,7 +458,7 @@ class Report:
     themes: list[Theme]
     strengths: list[str]
     overall_pct: float
-    ideal_gap_s: float          # per lap: your median vs your best through every corner
+    ideal_gap_s: float          # per lap: your laps vs your rolling ideal lap (tools/ideal.py)
     previous: dict | None = None
     coaching: list[dict] = field(default_factory=list)   # latest coaching summaries, newest first
 
@@ -448,10 +484,9 @@ def build_report(entries: list[dict], now: datetime | None = None,
     types = corner_types(corners)
     ws = [t.laps for t in tracks]
     overall = sum(t.pct * w for t, w in zip(tracks, ws)) / sum(ws) if ws else 0.0
-    laps = {}
+    ideal, per_corner = ideal_gaps(used, now)
     for c in corners:
-        laps[c.track_id] = max(laps.get(c.track_id, 0), c.laps)
-    ideal = (sum(sum(c.spread_s for c in corners if c.track_id == t) * n for t, n in laps.items())
-             / sum(laps.values())) if laps else 0.0
+        if (c.track_id, c.number) in per_corner:
+            c.spread_s = per_corner[(c.track_id, c.number)]
     return Report(now, used, skipped, tracks, types, corners, themes(corners, used, now),
                   strengths(corners, types), overall, ideal, previous)

@@ -36,7 +36,8 @@ log = logging.getLogger(__name__)
 #    several sessions at different tracks; 4 Nov: Imola, Abu Dhabi and Bahrain in one file were
 #    all measured on the Imola corners).
 # 3: whether you change gear yourself (the gear at the apex only counts then).
-ANALYSIS_VERSION = 3
+# 4: your laps split into corner segments (the rolling ideal lap, tools/ideal.py).
+ANALYSIS_VERSION = 4
 TOP_AI = 5                 # the reference: the quickest AI cars by median clean lap
 MIN_AI_CARS = 3            # fewer AI cars with clean laps (time trial, a short practice): skipped
 TIME_TRIAL = 18
@@ -205,7 +206,8 @@ def _analyze_part(base: dict, rows: list, lap_traces: dict, state, maps: TrackMa
         "top_ai_median_ms": float(np.median([np.median(pace[c]) for c in fast])),
         "field_median_ms": float(np.median([np.median(v) for v in pace.values()])),
         "pace_rank": 1 + sum(np.median(v) < my_median for v in pace.values()),
-        "cars": len(pace) + 1, "manual_gears": state.session.manual_gears, "corners": []}
+        "cars": len(pace) + 1, "manual_gears": state.session.manual_gears, "corners": [],
+        "my_segments": _my_segments(mine, lap_traces, tmap, player)}
     for i, c in enumerate(corners):
         nxt = corners[i + 1].entry_m if i + 1 < len(corners) else lap_m + corners[0].entry_m
         me = [corner_run(tr, c, nxt, lap_m) for tr in good if tr.car_idx == player]
@@ -219,6 +221,21 @@ def _analyze_part(base: dict, rows: list, lap_traces: dict, state, maps: TrackMa
                                "mine": [asdict(r) for r in me], "ref": median_run(ref),
                                "ref_runs": len(ref)})
     return out
+
+
+def _my_segments(mine: list, lap_traces: dict, tmap: TrackMap, player: int) -> dict:
+    """Your clean laps split into corner segments, with lap and stint, for the rolling ideal lap
+    (tools/ideal.py): the same split the live engineer uses."""
+    from engineer.tools.ideal import segment_times, segments
+    segs = segments(tmap)
+    laps = []
+    for r in mine:
+        tr = lap_traces.get((player, r.lap))
+        if not _clean(r) or tr is None or not r.lap_time_ms:
+            continue
+        laps.append({"lap": r.lap, "stint": r.stint, "lap_ms": r.lap_time_ms,
+                     "times": [round(t, 4) for t in segment_times(tr, r.lap_time_ms, segs)]})
+    return {"names": [s.name for s in segs], "numbers": [s.number for s in segs], "laps": laps}
 
 
 def _plain(o):

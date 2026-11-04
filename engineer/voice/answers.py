@@ -493,6 +493,16 @@ class QuestionAnswerer:
                 hot = k + 1
         return phrases.tyre_tips_phrase(w, None if np.isnan(rate) else rate, target, hot)
 
+    def _a_ideal_lap(self) -> str:
+        """"What's my ideal lap?": the rolling ideal from your last five clean laps this stint,
+        and how far the latest lap was off it (tools/ideal.py)."""
+        i = self.engine.corners.ideal
+        if i is None:
+            return phrases._sentence("not enough clean laps this stint yet, give me three")
+        name, _n, loss = i.losses()[0]
+        return phrases.ideal_answer_phrase(i.ms, len(i.laps), i.gap_ms,
+                                           name if loss >= 0.05 else None)
+
     def _a_report_focus(self) -> str:
         """"What should I work on?": the driver report's corners here and the habit behind them
         (the same words as the briefing at the start of a session)."""

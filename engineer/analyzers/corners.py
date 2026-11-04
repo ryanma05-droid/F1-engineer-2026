@@ -77,16 +77,19 @@ from engineer.radio.phrases import (
     corner_phrase,
     focus_brief_phrase,
     focus_level_phrase,
+    ideal_phrase,
 )
 from engineer.report.focus import CoachingFocus, FocusCorner
 from engineer.state.race_state import RaceState
 from engineer.state.traces import LapTrace, TraceRecorder
 from engineer.state.track_maps import TrackMap, TrackMaps, detect_corners
+from engineer.tools.ideal import IdealLap, LapSegments, rolling_ideal, segment_times, segments
 from engineer.tools.queries import REASON_THRESHOLDS, CornerDelta, corner_deltas
 
 log = logging.getLogger(__name__)
 
 WAIT_FOR_CAR_BEHIND_S = 5.0
+IDEAL_NOTE_MS = 300          # coaching mode mentions your ideal lap when this far off it
 LEARN_FROM_LAPS = 2
 
 
@@ -142,6 +145,7 @@ class CornerAnalyzer:
         self.briefed = False                       # "from your report, ..." said this session
         self.report_said: set[int] = set()         # report corners named as such this session
         self.level_said: set[int] = set()          # "level with the fastest lap now" said
+        self.ideal: IdealLap | None = None         # your rolling ideal lap (tools/ideal.py)
         bus.subscribe(ev.LapCompleted, self.on_lap)
         bus.subscribe(ev.SessionStarted, self._on_session_started)
         bus.subscribe(ev.Flashback, lambda e: setattr(self, "pending", None))
@@ -164,6 +168,7 @@ class CornerAnalyzer:
         self.briefed = False
         self.report_said = set()
         self.level_said = set()
+        self.ideal = None
         if self.track_map:
             log.info("corner map: %d corners from %s", len(self.track_map.corners),
                      self.maps.path(e.track_id))
@@ -288,6 +293,7 @@ class CornerAnalyzer:
             self._learn_map()
             if self.track_map is None:
                 return
+        self.ideal = self._ideal_lap()
         deltas = self._log_coach_lap(trace, e)
         self._brief()
         if deltas is not None:
@@ -427,9 +433,41 @@ class CornerAnalyzer:
                           streak))
         gap_ms = (lap_ms - bench.lap_time_ms) if lap_ms else 0
         text = coaching_phrase(lap_ms, gap_ms, self._name(bench.car), items, better, self.detail)
+        note = self.ideal_note(tuple(it[0] for it in items)) \
+            if self.ideal is not None and self.ideal.last_lap == e.lap else None
+        if note:
+            text = f"{text} {note}"
         # Its own topic: once a lap, and not held back by the corner calls' cooldown.
         self.director.submit(RadioCall(topic="coaching", text=text, priority=Priority.NORMAL,
                                        max_wait_s=self.cfg.max_wait_s))
+
+    def _ideal_lap(self) -> IdealLap | None:
+        """Your ideal lap now: the last 5 clean laps of this stint, corner segment by segment,
+        older laps moved to "as if driven now" by the stint's pace trend (tools/ideal.py)."""
+        if self.track_map is None:
+            return None
+        me = self.state.player_index
+        recs = self.history.for_car(me)
+        start = max((r.lap for r in recs if r.pit_out_lap or r.pit_in_lap), default=0)
+        segs = segments(self.track_map)
+        laps = []
+        for r in recs:
+            if r.lap <= start or not r.clean or not r.lap_time_ms:
+                continue
+            tr = self._clean_trace(me, r.lap)
+            if tr is not None:
+                laps.append(LapSegments(r.lap, r.lap_time_ms, segment_times(tr, r.lap_time_ms,
+                                                                            segs)))
+        return rolling_ideal(laps, [s.name for s in segs], [s.number for s in segs])
+
+    def ideal_note(self, said: tuple[str, ...] = ()) -> str | None:
+        """'Four tenths off your ideal, most of it turn nine.' None under IDEAL_NOTE_MS, or with
+        no ideal yet. A corner the call already named isn't repeated."""
+        i = self.ideal
+        if i is None or i.gap_ms < IDEAL_NOTE_MS:
+            return None
+        name, _n, loss = i.losses()[0]
+        return ideal_phrase(i.gap_ms, name if loss >= 0.05 and name not in said else None)
 
     def _name(self, car: int) -> str:
         n = self.state.cars.names[car] if car < len(self.state.cars.names) else None
@@ -482,6 +520,16 @@ class CornerAnalyzer:
         from engineer.report.focus import RADIO_HABIT
         words = RADIO_HABIT.get(habit["key"], habit.get("radio")) if habit else None
         return focus_brief_phrase(names[:2], words)
+
+    def ideal_card(self) -> dict | None:
+        """The Live tab: your ideal lap, the latest lap's gap to it and where."""
+        i = self.ideal
+        if i is None:
+            return None
+        return {"ms": i.ms, "gap_ms": i.gap_ms, "laps": list(i.laps), "lap": i.last_lap,
+                "trend_s": round(i.trend_s, 3),
+                "losses": [{"name": n, "s": round(s, 3)} for n, _k, s in i.losses()[:3]
+                           if s >= 0.03]}
 
     def report_card(self) -> dict | None:
         """The Live tab: the report corners at this track and the habit, for the Coaching card."""

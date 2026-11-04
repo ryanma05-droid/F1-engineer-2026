@@ -255,8 +255,8 @@ def render_html(report: Report) -> str:
          f"{_signed(best_type.pct, '%', 1)} vs the AI" if best_type else ""),
         ("Work on first", f'<div class="v small">{escape(top_theme.title) if top_theme else "Nothing stands out"}</div>',
          f"about {top_theme.cost_s:.2f} s a lap" if top_theme else "keep racing for more data"),
-        ("Typical vs your best", f'<div class="v num">{r.ideal_gap_s:.2f}s</div>',
-         "per lap, if every corner matched your best run"),
+        ("Typical vs your ideal lap", f'<div class="v num">{r.ideal_gap_s:.2f}s</div>',
+         "per lap, vs your best corners of the last 5 laps"),
     ]
     tiles_html = "".join(f'<div class="tile"><div class="k">{k}</div>{v}<div class="s">{s}</div></div>'
                          for k, v, s in tiles)
@@ -341,11 +341,13 @@ between sessions, so read the direction, not single points.</p>
 <div class="card">{_history_chart(r)}</div></section>
 
 <section style="break-inside:auto"><h2><span class="n">06</span>Corner by corner</h2>
-<p class="lede">Quickest to slowest against the AI. "Spread" is your typical run minus your best run
-through that corner.</p>
+<p class="lede">Quickest to slowest against the AI. "vs ideal" is how much you usually lose there to
+your ideal lap: your best run through it in your last five laps on the same tyres, allowing for
+how the tyres were fading. A big number is a consistency job; a corner near zero that still loses
+to the AI is a technique job.</p>
 <div class="card" style="padding:6px 8px"><table>
 <tr><th>Corner</th><th>Type</th><th class="r">AI min kph</th><th class="r">vs AI</th><th></th>
-<th>Where</th><th class="r">Spread</th><th class="r">Laps</th></tr>
+<th>Where</th><th class="r">vs ideal</th><th class="r">Laps</th></tr>
 {corner_rows}</table></div></section>
 
 {_coaching_section(r)}

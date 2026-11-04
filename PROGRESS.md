@@ -694,3 +694,12 @@ link. Not tried on Windows yet (needs a release with it, then the next one to up
 at the apex, at about the same speed, gets "take the apex a gear higher", and the report has a
 "A gear too low at the apex" habit. On the automatic gearbox it says nothing about gears (the
 gear isn't your choice). Every recording so far was driven on automatic.
+
+4 Nov, ideal lap: not your fastest lap of the race. Your best corners of your last five clean
+laps this stint, with older laps moved to "as if driven now" by how the stint's pace is fading
+(a sturdy median slope, capped at +0.25 s/lap; getting quicker counts only up to fuel burn,
+0.05 s/lap, since beyond that it's you learning the track). Ask "what's my ideal lap?"; the Live
+tab's Coaching card shows it; coaching mode adds "four tenths off your ideal, most of it turn
+nine" when you're 0.3 s+ off. The report's "Typical vs your best" and per-corner "Spread" now use
+it ("vs ideal"). Checked on the 18-lap Austria race: gaps of 0.05-0.9 s on normal laps, 2+ s on
+the messy ones.

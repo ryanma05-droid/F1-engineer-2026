@@ -114,6 +114,18 @@ uv run python -m engineer.report                     # driver report PDF (data/r
   specific "a gear lower at the apex". Report: "gear" in DELTA_FIELDS, theme `low_gear`, your
   gears dropped from the analysis on automatic (ANALYSIS_VERSION 3). Your recordings so far
   (Austria, Shanghai, Imola) were all on automatic.
+- Ideal lap (`tools/ideal.py`, shared by live and the report): NOT the fastest lap of the race
+  (fresh tyres make later laps look slow; 4 Nov). Your last 5 clean laps in the current stint
+  (min 3; a pit stop starts again), split into corner segments (line -> first corner entry, then
+  each corner's entry -> the next one's; they add up to the lap time), older laps moved to "as if
+  driven now" by the stint's pace trend (Theil-Sen median slope, capped -0.05..+0.25 s/lap: more
+  than fuel burn on the quick side is learning, not the car), spread over segments by share; the
+  ideal is the best corrected time per segment. Live: `CornerAnalyzer.ideal` after each clean
+  lap, Live tab card, "what's my ideal lap?" (intent ideal_lap, before best_lap), and coaching
+  mode adds "Four tenths off your ideal, most of it turn nine." from 0.3 s (not repeating a corner
+  the call named). Report (ANALYSIS_VERSION 4, `my_segments` per session): "Typical vs your ideal
+  lap" tile and the corner table's "vs ideal" column (`insights.ideal_gaps`) replace the old
+  median-minus-session-best spread.
 - `data/tracks/<track>.json` is committed and hand-editable (official turn numbers). Without a
   file the map is learned from the first 2 clean laps and saved. The golden test uses
   `data/tracks/austria.json`.
