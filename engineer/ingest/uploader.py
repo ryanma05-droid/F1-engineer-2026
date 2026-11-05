@@ -121,4 +121,5 @@ class BackgroundUploader:
         if not (repo / ".git").exists():
             raise share.UploadError(f"uploads need a git clone of the project; {repo} isn't one")
         share.upload(path, self.cfg.data_path / "share", self.cfg.upload.remote, repo=repo,
-                     progress=progress, questions_log=self.cfg.ptt_path / "questions.jsonl")
+                     progress=progress, questions_log=self.cfg.ptt_path / "questions.jsonl",
+                     public_repo=self.cfg.updates.repo)

@@ -205,7 +205,9 @@ class Report(BaseModel):
 
 class Upload(BaseModel):
     auto: bool = False          # push new recordings to GitHub when `engineer run` stops
-    remote: str = "origin"
+    # Where recordings go: your PRIVATE recordings repo (a git URL or a remote name). Never the
+    # public code repo (share.check_not_public refuses it).
+    remote: str = "https://github.com/ryanma05-droid/F1-engineer-recordings.git"
     repo: str | None = None     # the git clone to push from (installed app: the old terminal folder)
     min_mb: float = Field(default=2.0, ge=0)   # skip tiny recordings (menus, a few seconds)
 

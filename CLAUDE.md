@@ -368,8 +368,12 @@ uv run python -m engineer.report                     # driver report PDF (data/r
   `upload: {auto: true}` pushes the run's recordings when `engineer run` stops.
 - Uploads never touch the working tree: parts are committed with git plumbing (hash-object,
   mktree, commit-tree) and pushed to `recording-<time>`; `data/share/uploaded.txt` lists sent files.
-- To fetch one here: `git fetch origin <branch>`, `git show` each part into a folder, then
-  `share --join <first part>`.
+- Recordings go to the PRIVATE repo ryanma05-droid/F1-engineer-recordings (`upload.remote`, a
+  URL), never the public code repo: they hold push-to-talk transcripts, Windows paths and other
+  players' names (5 Nov, before sharing on Reddit). `share.check_not_public` refuses any remote
+  pointing at `updates.repo`. Never commit recordings, logged questions or feedback to this repo.
+- To fetch one here: add the private repo to the session, `git fetch <its URL> <branch>`,
+  `git show` each part into a folder, then `share --join <first part>`.
 
 ## Real-data facts (confirmed on tests/fixtures/austria_race_5laps.zst)
 

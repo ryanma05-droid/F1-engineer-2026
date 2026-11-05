@@ -103,3 +103,26 @@ def test_old_uploaded_list_without_sizes_still_counts():
     d = Path(tempfile.mkdtemp())
     (d / "uploaded.txt").write_text("a.zst\nb.zst 1234\n", encoding="utf-8")
     assert uploaded_sizes(d) == {"a.zst": None, "b.zst": 1234}
+
+
+def test_recordings_never_go_to_the_public_code_repo(tmp_path):
+    repo = tmp_path / "repo"
+    git("init", "-b", "main", str(repo), cwd=tmp_path)
+    git("remote", "add", "origin", "https://github.com/Owner/Code.git", cwd=repo)
+    git("remote", "add", "rec", "git@github.com:owner/code-recordings.git", cwd=repo)
+    rec = tmp_path / "20261027T010920Z_cdb2205fbdb7a7db.zst"
+    rec.write_bytes(b"\x01" * 1000)
+    for remote in ("origin", "https://github.com/owner/code", "git@github.com:owner/code.git"):
+        try:
+            share.upload(rec, tmp_path / "share", remote, repo=repo, progress=lambda m: None,
+                         public_repo="owner/Code")
+            raise AssertionError(f"{remote} should be refused")
+        except share.UploadError as exc:
+            assert "public repo" in str(exc)
+    share.check_not_public("rec", repo, "owner/code")          # the private one is fine
+    share.check_not_public("origin", repo, None)
+
+
+def test_default_upload_target_is_not_the_update_repo():
+    cfg = Config()
+    assert not share._same_repo(cfg.upload.remote, cfg.updates.repo)

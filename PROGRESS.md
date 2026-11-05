@@ -703,3 +703,15 @@ tab's Coaching card shows it; coaching mode adds "four tenths off your ideal, mo
 nine" when you're 0.3 s+ off. The report's "Typical vs your best" and per-corner "Spread" now use
 it ("vs ideal"). Checked on the 18-lap Austria race: gaps of 0.05-0.9 s on normal laps, 2+ s on
 the messy ones.
+
+## Going public (5 Nov)
+
+- [x] MIT licence; README rewritten for players (download, SmartScreen "More info > Run anyway",
+      game settings, features, privacy: what goes online), not developers first
+- [x] Recordings moved off the public repo: uploads go to the private
+      `ryanma05-droid/F1-engineer-recordings` (`upload.remote`), and an upload aimed at the public
+      code repo is refused (`share.check_not_public`)
+- [ ] Copy the 15 `recording-*` branches (and `recordings`) to the private repo, then delete them
+      from the public one (waiting on the private repo being created)
+- [ ] Two-factor login on the GitHub account (the updater installs whatever is released)
+

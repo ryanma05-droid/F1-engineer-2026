@@ -8,7 +8,9 @@ and push each recording to its own branch.
     uv run python -m engineer.ingest.share --join data/share/<name>.zst.part01
 
 How the upload works: the parts go into a commit of their own (just data/share/<parts>, no code)
-which is pushed straight to the branch `recording-<time>`. Nothing in your folder changes: no
+which is pushed straight to the branch `recording-<time>` of your PRIVATE recordings repo
+(`upload.remote`, a URL; never the public code repo: recordings hold your push-to-talk questions
+and other players' names). Nothing in your folder changes: no
 branch switching, no staged files, your own edits are untouched. Uploaded recordings are listed in
 data/share/uploaded.txt so they're never sent twice. Push-to-talk questions asked during the
 recording go along as <recording>.questions.jsonl (from data/ptt/questions.jsonl).
@@ -116,10 +118,33 @@ def session_questions(path: Path, questions_log: Path | None) -> Path | None:
     return out
 
 
+def remote_url(remote: str, repo: Path) -> str:
+    """A remote's URL: the remote itself when it's already one, else `git remote get-url`."""
+    if "://" in remote or remote.startswith("git@"):
+        return remote
+    return _git(["remote", "get-url", remote], repo)
+
+
+def _same_repo(url: str, full_name: str) -> bool:
+    """Does this git URL point at GitHub repo owner/name?"""
+    tail = url.strip().rstrip("/").removesuffix(".git").replace(":", "/").lower()
+    return tail.endswith("/" + full_name.strip("/").lower())
+
+
+def check_not_public(remote: str, repo: Path, public_repo: str | None) -> None:
+    """Recordings hold your push-to-talk questions and other players' names: they never go to
+    the public code repo (5 Nov, before sharing the project on Reddit)."""
+    if public_repo and _same_repo(remote_url(remote, repo), public_repo):
+        raise UploadError(f"recordings never go to the public repo {public_repo}; set "
+                          f"upload: remote: to your private recordings repo")
+
+
 def upload(path: Path, share_dir: Path, remote: str = "origin", repo: Path = PROJECT_ROOT,
-           progress=print, questions_log: Path | None = None) -> str:
+           progress=print, questions_log: Path | None = None,
+           public_repo: str | None = None) -> str:
     """Push one recording (plus the push-to-talk questions asked during it) to its own branch.
-    Returns the branch name."""
+    Returns the branch name. public_repo: never push there (check_not_public)."""
+    check_not_public(remote, repo, public_repo)
     branch = branch_name(path)
     size = path.stat().st_size
     progress(f"Uploading {path.name} ({size / 1e6:.0f} MB) to branch {branch}...")
@@ -209,7 +234,8 @@ def upload_pending(cfg: Config, paths: list[Path] | None = None, progress=print)
     for p in todo:
         try:
             branches.append(upload(p, share_dir, cfg.upload.remote, repo=repo, progress=progress,
-                                   questions_log=cfg.ptt_path / "questions.jsonl"))
+                                   questions_log=cfg.ptt_path / "questions.jsonl",
+                                   public_repo=cfg.updates.repo))
         except UploadError as exc:
             progress(f"Upload of {p.name} failed: {exc}")
     return branches
@@ -245,7 +271,7 @@ def main(argv: list[str] | None = None) -> int:
         try:
             upload(path, cfg.data_path / "share", cfg.upload.remote,
                    repo=Path(cfg.upload.repo) if cfg.upload.repo else PROJECT_ROOT,
-                   questions_log=cfg.ptt_path / "questions.jsonl")
+                   questions_log=cfg.ptt_path / "questions.jsonl", public_repo=cfg.updates.repo)
         except UploadError as exc:
             print(f"Upload failed: {exc}")
             return 1
