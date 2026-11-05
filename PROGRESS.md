@@ -711,7 +711,11 @@ the messy ones.
 - [x] Recordings moved off the public repo: uploads go to the private
       `ryanma05-droid/F1-engineer-recordings` (`upload.remote`), and an upload aimed at the public
       code repo is refused (`share.check_not_public`)
-- [ ] Copy the 15 `recording-*` branches (and `recordings`) to the private repo, then delete them
-      from the public one (waiting on the private repo being created)
-- [ ] Two-factor login on the GitHub account (the updater installs whatever is released)
+- [x] The 14 `recording-*` branches and `recordings` copied to the private repo (same commits,
+      checked branch by branch)
+- [ ] Delete them from the public repo (the cloud session isn't allowed to delete branches: done
+      from the PC)
+- [x] Two-factor login on the GitHub account (the updater installs whatever is released)
+- The committed test recording (tests/fixtures/austria_race_5laps.zst) is an offline race:
+  only AI driver names (you drove as Gasly), no push-to-talk, so it stays public.
 
