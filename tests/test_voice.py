@@ -556,3 +556,10 @@ def test_new_answer_phrases():
     assert phrases.damage_cost_phrase(0.4, 10, 19.0, 12).endswith(
         "Your stop on lap twelve fixes it, no extra stop.")
     assert phrases.damage_cost_phrase(0.05, 10, 19.0, None).startswith("It isn't costing")
+
+
+def test_7_nov_phrasings():
+    from engineer.voice.intents import match
+    assert match("What am I pitting?").name == "plan"       # heard for "When am I pitting?"
+    assert match("When am I pitting?").name == "plan"
+    assert match("Has Kimmy pitted?").name == "driver_pitted"

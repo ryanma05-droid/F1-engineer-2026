@@ -202,7 +202,10 @@ class RaceCraftAnalyzer:
         if ahead is None or np.isnan(gap) or e.pit_in_lap or e.pit_out_lap:
             self.ahead_gaps.clear()
             return
-        self.ahead_gaps = [x for x in self.ahead_gaps if x[1] == ahead][-2:] + [(e.lap, ahead, gap)]
+        # A lap re-driven after a flashback replaces its earlier gap (Brazil, 7 Nov: one lap
+        # three times made the closing rate divide by zero laps).
+        kept = [x for x in self.ahead_gaps if x[1] == ahead and x[0] < e.lap]
+        self.ahead_gaps = kept[-2:] + [(e.lap, ahead, gap)]
         name = self._name(ahead)
         if gap <= 1000:
             if ahead not in self.drs_said and len(self.ahead_gaps) >= 2:
@@ -325,9 +328,12 @@ class RaceCraftAnalyzer:
         self.swaps = [x for x in self.swaps if t < x.due]
         if self._under_sc() or c.pit_status[me] > 0:
             return
-        # Still the way round it was reported? (Swapped back = no call.)
-        gained = [x for x in due if x.gained and c.position[me] < c.position[x.other]]
-        lost = [x for x in due if not x.gained and c.position[me] > c.position[x.other]]
+        # Still the way round it was reported? (Swapped back = no call.) A car that has gone
+        # into the pit lane wasn't passed on track: a pit stop isn't a move (Baku, 7 Nov: five
+        # cars pitted as you crossed the line and Antonelli's stop became "Good move, P two").
+        on_track = [x for x in due if not c.pit_status[x.other] > 0]
+        gained = [x for x in on_track if x.gained and c.position[me] < c.position[x.other]]
+        lost = [x for x in on_track if not x.gained and c.position[me] > c.position[x.other]]
         pos = int(c.position[me])
         # Retaken from a car that passed you moments before: that's a fight, not a pass.
         fights = [x for x in gained

@@ -525,11 +525,11 @@ class StrategyAnalyzer:
             if length and dist >= length / 2:    # already past half way: one call only
                 self.half_said = True
                 self._say("box", phrases.box_half_phrase(stop.compound), Priority.HIGH,
-                          max_wait_s=10.0)
+                          max_wait_s=10.0, must_say=True)
             else:
                 rejoin = self._rejoin(self._sc_stop(stop))
                 self._say("box", phrases.box_phrase(stop.compound, rejoin, self.verbosity),
-                          Priority.HIGH)
+                          Priority.HIGH, must_say=True)
             return
         if (self.box_lap == lap and not self.half_said and not in_pits and length
                 and not math.isnan(dist) and dist >= length / 2):
@@ -537,7 +537,7 @@ class StrategyAnalyzer:
             compound = stop.compound if stop is not None else None
             if compound is not None:
                 self._say("box", phrases.box_half_phrase(compound), Priority.HIGH,
-                          max_wait_s=10.0)
+                          max_wait_s=10.0, must_say=True)
 
     def _sc_stop(self, stop) -> bool:
         return self.latest is not None and stop.lap in self.latest.sc_laps
@@ -772,12 +772,12 @@ class StrategyAnalyzer:
     # -- output ----------------------------------------------------------------------------------
 
     def _say(self, topic: str, text: str, priority: int, max_wait_s: float | None = None,
-             wait_for_straight: bool = True) -> None:
+             wait_for_straight: bool = True, must_say: bool = False) -> None:
         if text:
             self.director.submit(RadioCall(
                 topic=topic, text=text, priority=priority,
                 max_wait_s=self.cfg.max_wait_s if max_wait_s is None else max_wait_s,
-                wait_for_straight=wait_for_straight))
+                wait_for_straight=wait_for_straight, must_say=must_say))
 
 
 def _name(raw: str | None) -> str | None:

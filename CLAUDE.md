@@ -57,6 +57,16 @@ uv run python -m engineer.report                     # driver report PDF (data/r
   queued wait with their expiry paused and restarted after the answer. A short press or nothing
   heard calls `stop_listening()`. Why: the main straight is where you ask, and it's where the lap
   is crossed and all the lap calls queue up (4 Nov).
+- `must_say` calls (both box calls) don't expire after `max_wait_s`: they stop waiting for a
+  straight and go at the next gap in speech, dropped only after `MUST_SAY_CAP` x the wait
+  (Interlagos, 7 Nov: the half-lap "Box box" waited 10 s in the infield and was dropped). At
+  SessionEnded HIGH calls AND the lap time (`END_FLUSH_TOPICS`) are said (one-shot qualifying
+  ends the moment the lap is done).
+- Lap times wait up to `radio.lap_delta_max_wait_s` 10 s for a straight (was 3: Baku's line is
+  2.5 s from turn 1, so the lap time was dropped on most laps; now said ~7 s after the line).
+  A lap re-driven after a flashback to just before the line isn't announced again when within
+  `SAME_LAP_MS` (100) of the lap time already said (Brazil, 7 Nov: 12 flashbacks, mostly a spin
+  at turn 1 rewound to 0.4 s before the line).
 - Wiring lives in `engineer/app.py:build_engine` (shared by live and replay). Subscription order
   matters: LapHistory before analyzers.
 - The golden test also checks `tests/fixtures/*.calls.txt`; update it deliberately (and check each
@@ -141,6 +151,9 @@ uv run python -m engineer.report                     # driver report PDF (data/r
   defending / attacking (only if you'd realistically catch them), countdown,
   finish, fastest lap (when taken from someone else), your penalties (IDs from the PDF spec),
   safety car in, damage after contact.
+- Passes: a car in the pit lane when the pass settles (4 s on) wasn't passed on track, so no call
+  (Baku, 7 Nov: OVTK came on the pit entry road, before pit status changed; Antonelli's stop
+  became "Good move, P two"). The "pace dropping" call is skipped on an in-lap.
 - Game events reach analyzers as `ev.GameEvent` (`detectors.PASSED_THROUGH`).
 - The director says waiting HIGH calls on SessionEnded: the game stops sending 0.1 s after your
   last lap, so the finish call would otherwise never be released.

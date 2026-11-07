@@ -1,0 +1,56 @@
+{
+  "track_id": 16,
+  "track": "Brazil",
+  "track_length_m": 4294.0,
+  "corners": [
+    {
+      "number": 1,
+      "name": "turn one",
+      "entry_m": 180.0,
+      "apex_m": 400.0,
+      "exit_m": 615.0
+    },
+    {
+      "number": 2,
+      "name": "turn two",
+      "entry_m": 1260.0,
+      "apex_m": 1435.0,
+      "exit_m": 1615.0
+    },
+    {
+      "number": 3,
+      "name": "turn three",
+      "entry_m": 1935.0,
+      "apex_m": 2215.0,
+      "exit_m": 2250.0
+    },
+    {
+      "number": 4,
+      "name": "turn four",
+      "entry_m": 2250.0,
+      "apex_m": 2370.0,
+      "exit_m": 2415.0
+    },
+    {
+      "number": 5,
+      "name": "turn five",
+      "entry_m": 2415.0,
+      "apex_m": 2485.0,
+      "exit_m": 2660.0
+    },
+    {
+      "number": 6,
+      "name": "turn six",
+      "entry_m": 2660.0,
+      "apex_m": 2790.0,
+      "exit_m": 3145.0
+    },
+    {
+      "number": 7,
+      "name": "turn seven",
+      "entry_m": 3145.0,
+      "apex_m": 3275.0,
+      "exit_m": 3425.0
+    }
+  ]
+}

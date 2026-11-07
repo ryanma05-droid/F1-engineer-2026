@@ -1,0 +1,70 @@
+{
+  "track_id": 20,
+  "track": "Baku (Azerbaijan)",
+  "track_length_m": 5994.0,
+  "corners": [
+    {
+      "number": 1,
+      "name": "turn one",
+      "entry_m": 140.0,
+      "apex_m": 330.0,
+      "exit_m": 470.0
+    },
+    {
+      "number": 2,
+      "name": "turn two",
+      "entry_m": 540.0,
+      "apex_m": 665.0,
+      "exit_m": 845.0
+    },
+    {
+      "number": 3,
+      "name": "turn three",
+      "entry_m": 1365.0,
+      "apex_m": 1535.0,
+      "exit_m": 1655.0
+    },
+    {
+      "number": 4,
+      "name": "turn four",
+      "entry_m": 1655.0,
+      "apex_m": 1760.0,
+      "exit_m": 1925.0
+    },
+    {
+      "number": 5,
+      "name": "turn five",
+      "entry_m": 1975.0,
+      "apex_m": 2165.0,
+      "exit_m": 2320.0
+    },
+    {
+      "number": 6,
+      "name": "turn six",
+      "entry_m": 2420.0,
+      "apex_m": 2560.0,
+      "exit_m": 2675.0
+    },
+    {
+      "number": 7,
+      "name": "turn seven",
+      "entry_m": 2675.0,
+      "apex_m": 2865.0,
+      "exit_m": 3085.0
+    },
+    {
+      "number": 8,
+      "name": "turn eight",
+      "entry_m": 3605.0,
+      "apex_m": 3775.0,
+      "exit_m": 3925.0
+    },
+    {
+      "number": 9,
+      "name": "turn nine",
+      "entry_m": 3990.0,
+      "apex_m": 4135.0,
+      "exit_m": 4305.0
+    }
+  ]
+}

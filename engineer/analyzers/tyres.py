@@ -114,6 +114,8 @@ class TyreAnalyzer:
         return "", "", 0
 
     def _dropoff_call(self, lap: LapFeatures, e: ev.LapCompleted) -> None:
+        if e.pit_in_lap:                  # these tyres are coming off (Baku, 7 Nov)
+            return
         if lap.lap - self.dropoff_lap < REPEAT_LAPS:
             return
         # Confirmed on two laps running, so one mistake lap can't trigger it.

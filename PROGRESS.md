@@ -719,3 +719,22 @@ the messy ones.
 - The committed test recording (tests/fixtures/austria_race_5laps.zst) is an offline race:
   only AI driver names (you drove as Gasly), no push-to-talk, so it stays public.
 
+## Diagnostic of the 3 and 7 Nov recordings (7 Nov)
+
+Jeddah 5 laps (left after lap 1), Baku one-shot qualifying, Baku 13-lap race, Interlagos 18 laps.
+Replayed with the logged questions. Fixed:
+- [x] Baku lap times dropped on 5 of the first 6 laps (line 2.5 s from turn 1; 3 s wait): wait is
+      now 10 s, said ~7 s after the line
+- [x] Interlagos half-lap "Box box" dropped (no straight in the infield): box calls are must-say
+- [x] A lap re-driven after a flashback was announced again (Brazil laps 6 and 14: 2 and 3 times)
+- [x] A car diving into the pits counted as a pass ("Good move on Antonelli, P two" while P7)
+- [x] "Pace dropping, they're starting to go" on the in-lap
+- [x] One-shot qualifying lap time never said (session ends at once)
+- [x] Race craft closing-rate divide by zero on a repeated lap
+- [x] "When am I pitting?" (heard "What am I pitting?") and "Kimmy" for Kimi weren't understood
+Checked and fine: the plan's end wear (Baku: "about forty five percent at the flag", it was 46 %);
+speech 1.0-1.4 s per question; "Has Antonelli pitted?" works in the current code (the Baku race
+ran an older copy: it also uploaded to the public repo).
+Not changed: Russell re-passed 4.6 s after your move and your re-pass got a fresh "pass" call
+rather than "back past him" (inside the 5 s window that treats a quick swap back as your move).
+

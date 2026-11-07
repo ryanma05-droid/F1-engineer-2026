@@ -25,6 +25,7 @@ class Intent:
 FIRST_NAMES = {
     "max": "verstappen", "yuki": "tsunoda", "lando": "norris", "oscar": "piastri",
     "charles": "leclerc", "lewis": "hamilton", "george": "russell", "kimi": "antonelli",
+    "kimmy": "antonelli",                         # how speech recognition hears Kimi
     "andrea": "antonelli", "fernando": "alonso", "lance": "stroll", "pierre": "gasly",
     "franco": "colapinto", "jack": "doohan", "esteban": "ocon", "ollie": "bearman",
     "oliver": "bearman", "alex": "albon", "alexander": "albon", "carlos": "sainz",
@@ -176,6 +177,9 @@ RULES: list[tuple[str, list[str]]] = [
     # When/which lap to stop is the plan, not "what if I box now" (28 Oct Melbourne: "when
     # should I pit?", "which lap should I pit?", "where should I pit?").
     ("plan", [r"\b(when|which lap|what lap)\b.*\b(pit|box|stop)\b",
+              # "When am I pitting?" (heard "What am I pitting?", Brazil 7 Nov)
+              r"\b(when|what) (am|are) (i|we) (pitting|boxing|stopping)\b",
+              r"\bwhen\b.*\b(pitting|boxing|stopping)\b",
               r"\bwhere should (i|we) (pit|box|stop)\b",
               r"\bdo (i|we) (have|need) to (stop|pit|box)( again)?\b",
               r"\b(what|which) tyres? should (i|we) (pit|box|stop|go) (for|on|onto)\b",

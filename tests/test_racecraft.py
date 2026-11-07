@@ -137,3 +137,38 @@ def test_lost_place_wording():
     assert phrases.lost_places_phrase(3, 9) == "Lost three places, P nine. Heads down, keep at it."
     assert phrases.fight_back_phrase("Hamilton", 5, False, 1) == \
         "Nicely defended, back ahead of Hamilton, P five."
+
+
+def test_a_car_going_into_the_pits_is_not_a_pass():
+    # Baku, 7 Nov: five cars pitted as you crossed the line and Antonelli's stop was called
+    # "Good move on Antonelli, P two."
+    race = FakeRace({0: [30000] * 4, 1: [29500] * 4}, positions={0: 2, 1: 1},
+                    names=["PLAYER", "ANTONELLI"], extra_packets=False, pit_laps={1: 2})
+    # Reported on the pit entry road (not yet in the pit lane), in the pit lane 4 s later.
+    _, radio = run(race, {56.0: ovtk(0, 1)}, moves={56.0: {0: 1, 1: 2}}, duration_ms=75000)
+    assert not any("Antonelli" in r for r in radio)
+    # The same swap on track is a pass.
+    race = FakeRace({0: [30000] * 4, 1: [29500] * 4}, positions={0: 2, 1: 1},
+                    names=["PLAYER", "ANTONELLI"], extra_packets=False)
+    _, radio = run(race, {56.0: ovtk(0, 1)}, moves={56.0: {0: 1, 1: 2}}, duration_ms=75000)
+    assert any("Antonelli, P one" in r for r in radio)
+
+
+def test_a_lap_re_driven_after_a_flashback_is_not_announced_twice():
+    # Brazil, 7 Nov: a spin at turn 1, rewound to just before the line, three times on one lap;
+    # the lap time was said each time.
+    race = FakeRace({0: [30000, 30200, 30100, 30300]}, extra_packets=False)
+    cfg = Config(data_dir="/nonexistent-test-dir")
+    out = io.StringIO()
+    eng = build_engine(cfg, out=out, priors=WearPriors(), strategy_runner=InlineRunner(None))
+    laps, said = [], []
+    eng.pipeline.bus.subscribe(ev.LapCompleted, lambda e: laps.append(e.lap) if e.car_idx == 0
+                               else None)
+    eng.pipeline.bus.subscribe(ev.RadioMessage, lambda e: said.append(e.text)
+                               if e.topic == "lap_delta" else None)
+    # Lap 2 ends at 60.2 s: back from 64 s to 59 s, so lap 2 is completed again.
+    for t_ns, raw in race.frames(duration_ms=95000, flashback_at_ms=64000,
+                                 flashback_back_ms=5000):
+        eng.pipeline.feed(raw, t_ns)
+    assert laps.count(2) == 2                        # the game really did complete it twice
+    assert [s.lower().startswith("thirty two") for s in said].count(True) == 1, said

@@ -76,7 +76,7 @@ class Radio(BaseModel):
     volume_pct: int = Field(default=70, ge=0, le=100)
     volume: float = Field(default=1.0, ge=0.0, le=2.0)   # extra multiplier (config file only)
     output_device: str | int | None = None   # None = Windows default; part of a name, or index
-    lap_delta_max_wait_s: float = Field(default=3.0, gt=0)
+    lap_delta_max_wait_s: float = Field(default=10.0, gt=0)
     cooldowns_s: dict[str, float] = {"lap_delta": 5.0, "tyre_status": 30.0, "tyre_warning": 10.0,
                                      "tyre_temp": 10.0, "tyre_dropoff": 60.0,
                                      "corner": 30.0, "strategy_plan": 20.0, "box": 0.0,

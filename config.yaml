@@ -24,7 +24,8 @@ radio:
   volume: 1.0           # extra multiplier on top of the slider
   output_device: null   # null = Windows default output. Or part of a device name, e.g. "Headphones"
                         # (list them: python -m engineer.radio.setup_voice --devices)
-  lap_delta_max_wait_s: 3.0   # wait up to this long for a straight, then drop the call
+  lap_delta_max_wait_s: 10.0  # wait up to this long for a straight, then drop the call
+                              # (Baku: the line is 2.5 s from turn 1, so 3 s dropped almost every lap)
   cooldowns_s:                # minimum gap between two calls of the same kind
     lap_delta: 5.0
     tyre_status: 30.0

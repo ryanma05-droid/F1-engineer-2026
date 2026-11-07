@@ -7,6 +7,9 @@ Analyzers don't talk directly; they hand the director a RadioCall. The director:
   spoken.
 - orders the rest by priority (then oldest first).
 - drops a call that has waited longer than its `max_wait_s` (a lap delta said 10 s late is noise).
+  A `must_say` call (the box calls) isn't dropped then: it stops waiting for a straight and is
+  said at the next gap in speech (Interlagos, 7 Nov: the half-lap "Box box" waited 10 s for a
+  straight in the infield and was dropped). It's only dropped after MUST_SAY_CAP x its wait.
 - applies per-topic cooldowns, so the same kind of call can't repeat too often.
 - holds calls while the driver is busy (braking, turning, lifting) and releases them on straights.
   See QuietZones below.
@@ -44,6 +47,7 @@ class RadioCall:
     priority: int = Priority.NORMAL
     max_wait_s: float = 3.0           # drop if not said within this much game time
     wait_for_straight: bool = True    # False for urgent calls that can't wait for a straight
+    must_say: bool = False            # after max_wait_s: said even mid-corner, not dropped
     origin_t_ns: int | None = None    # arrival time of the triggering packet (latency readout)
     queued_at: float = field(default=0.0, init=False)
 
@@ -51,6 +55,11 @@ class RadioCall:
 # Speech-length estimate: Piper voices speak roughly 2.8 words a second; plus the squelch beeps.
 WORDS_PER_SECOND = 2.8
 RADIO_OVERHEAD_S = 0.5
+MUST_SAY_CAP = 3.0                    # a must_say call is dropped after this many max_waits
+# Calls still worth saying when a session ends (the game stops sending, so nothing else would
+# release them): HIGH calls, and your lap time (one-shot qualifying ends the moment the lap is
+# done, 7 Nov Baku: the lap was never called).
+END_FLUSH_TOPICS = ("lap_delta",)
 
 
 def estimate_duration_s(text: str) -> float:
@@ -282,7 +291,7 @@ class RadioDirector:
             return
         t = self._now()
         held = self.holding()
-        for call in [c for c in self.queue if t - c.queued_at > c.max_wait_s
+        for call in [c for c in self.queue if self._expired(c, t)
                      and (not held or c.topic == "answer")]:
             self.queue.remove(call)
             self._drop(call, "expired")
@@ -291,7 +300,8 @@ class RadioDirector:
             return
         call = max(ready, key=_order)
         duration = estimate_duration_s(call.text)
-        if call.wait_for_straight and self.zones.driver_busy(self.state, duration):
+        overdue = call.must_say and t - call.queued_at > call.max_wait_s
+        if call.wait_for_straight and not overdue and self.zones.driver_busy(self.state, duration):
             return
         self.queue.remove(call)
         said = self._publish(call, t)
@@ -301,6 +311,11 @@ class RadioDirector:
             self.stop_listening()
 
     # -- internals -----------------------------------------------------------------------------
+
+    @staticmethod
+    def _expired(call: RadioCall, t: float) -> bool:
+        waited = t - call.queued_at
+        return waited > call.max_wait_s * (MUST_SAY_CAP if call.must_say else 1.0)
 
     def _publish(self, call: RadioCall, t: float) -> str:
         self.last_said[call.topic] = t
@@ -334,7 +349,7 @@ class RadioDirector:
         t = self._now()
         self.hold_until = None
         for call in sorted(self.queue, key=_order, reverse=True):
-            if call.priority >= Priority.HIGH:
+            if call.priority >= Priority.HIGH or call.topic in END_FLUSH_TOPICS:
                 self._publish(call, t)
         self.queue.clear()
 

@@ -196,3 +196,39 @@ def test_the_hold_ends_by_itself_and_on_a_short_press():
     d.submit(RadioCall("tyre_status", "Tyres fine."))
     r.drive(t=20.0, dist=300)
     assert [m.topic for m in r.said] == ["lap_delta", "tyre_status"]
+
+
+def test_a_box_call_is_said_mid_corner_rather_than_dropped():
+    # Interlagos, 7 Nov: half way round is the infield, no straight for 10 s, and the half-lap
+    # "Box box" was dropped.
+    r = Rig()
+    r.drive(t=1.0, dist=100, brake=0.6, throttle=0.0, steer=0.4)
+    r.d.submit(RadioCall("box", "Box box, end of this lap.", Priority.HIGH, max_wait_s=10.0,
+                         must_say=True))
+    r.d.submit(RadioCall("lap_delta", "One oh nine one.", max_wait_s=10.0))
+    for k in range(1, 10):
+        r.drive(t=1.0 + k, dist=100 + k * 30, brake=0.6, throttle=0.0, steer=0.4)
+    assert r.said == []                                    # still waiting for a straight
+    r.drive(t=11.5, dist=500, brake=0.6, throttle=0.0, steer=0.4)
+    assert r.texts() == ["Box box, end of this lap."]      # overdue: said in the corner
+    assert [d.text for d in r.dropped] == ["One oh nine one."]
+
+
+def test_a_must_say_call_is_dropped_after_its_cap():
+    r = Rig()
+    r.d.speaking_until = 100.0                             # a very long call still going
+    r.d.submit(RadioCall("box", "Box box.", Priority.HIGH, max_wait_s=2.0, must_say=True))
+    r.drive(t=5.0, dist=100)
+    assert r.dropped == []                                 # past its wait, under the cap
+    r.drive(t=6.5, dist=150)
+    assert [d.text for d in r.dropped] == ["Box box."] and r.said == []
+
+
+def test_your_lap_time_is_said_when_the_session_ends():
+    # One-shot qualifying ends the moment the lap is done (Baku, 7 Nov).
+    r = Rig()
+    r.drive(t=1.0, dist=100, brake=1.0, throttle=0.0)
+    r.d.submit(RadioCall("lap_delta", "One forty three three."))
+    r.d.submit(RadioCall("tyre_status", "Fronts cold.", Priority.LOW))
+    r.bus.publish(ev.SessionEnded(1, 1.1, reason="SEND"))
+    assert r.texts() == ["One forty three three."]
