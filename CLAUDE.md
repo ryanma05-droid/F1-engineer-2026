@@ -151,6 +151,12 @@ uv run python -m engineer.report                     # driver report PDF (data/r
   defending / attacking (only if you'd realistically catch them), countdown,
   finish, fastest lap (when taken from someone else), your penalties (IDs from the PDF spec),
   safety car in, damage after contact.
+- Long battles (`_battle`): the same car within `battle_gap_s` (1 s) ahead or behind at the line
+  `battle_laps` (3) laps running -> encouragement (topic racecraft_battle, LOW, so not in quiet
+  mode), again every `battle_repeat_laps` (3), at most 4 per car; "back and forth" wording after
+  2+ swaps in this battle; not within 15 s of a defend/attack/pass call (next lap instead).
+  Counted as said only once on the radio: a flashback or an expired wait puts it back (Brazil,
+  7 Nov: the Russell battle call was cleared by a flashback and never came back).
 - Passes: a car in the pit lane when the pass settles (4 s on) wasn't passed on track, so no call
   (Baku, 7 Nov: OVTK came on the pit entry road, before pit status changed; Antonelli's stop
   became "Good move, P two"). The "pace dropping" call is skipped on an in-lap.
@@ -282,7 +288,9 @@ uv run python -m engineer.report                     # driver report PDF (data/r
   last lap, finish, lap-time change words, tyre status/warnings, corner losses, coaching, plan
   head, box tyre line, SC stay/in, undercut, fastest lap) pick from a few wordings with
   `pick(key, options, n)`. Facts stay in every wording; "box this lap, box this lap" never
-  varies. No repeat of a call's last two wordings, remembered across races
+  varies. `avoid_count`: lists of up to 3 use every wording before one comes back, longer lists
+  pick from the two least recent (7 Nov: stock lines came round too often; the race craft
+  lists now have 5-8 wordings, the extras only with variety on). Remembered across races
   (data/radio/variety.json, live only; live seeds randomly per session, replays seed from the
   session UID). The suite runs with it off (tests/conftest.py) so option 0 = the old wording and
   the golden calls are unchanged; tests/test_variety.py runs the fixture with it on.
@@ -298,7 +306,12 @@ uv run python -m engineer.report                     # driver report PDF (data/r
 
 - `radio/engineers.py`: six engineers (Settings tab), each a Piper voice + speed; Kevin (work
   experience) also has a personality that wraps calls with panic/apologies, seeded so replays
-  repeat. The call text is never changed: `RadioMessage.text` stays the call (racecraft and
+  repeat. Not too much of him (7 Nov): big line pools, never a line twice in a session (an
+  empty pool = quiet), lines from recent races kept back (`KEVIN_MEMORY`,
+  data/radio/kevin.json, live only, loaded/saved in cli like variety), one line per ordinary
+  call at most and `QUIRK_GAP_S` (45 s game time) between them; box/SC/penalty calls always get
+  his panic. The director passes game time (`persona(topic, text, t)`) and calls
+  `persona.new_session(uid)` at SessionStarted (live: random shuffle; replay: from the UID). The call text is never changed: `RadioMessage.text` stays the call (racecraft and
   answers match on it), `RadioMessage.spoken` / `.said` is what's heard (audio, console, feed).
   `radio.engineer` picks one (`radio.voice_name` / `length_scale` follow it); unset = the old
   `radio.voice`. `radio/switch.py` downloads a voice on first pick and restarts the audio

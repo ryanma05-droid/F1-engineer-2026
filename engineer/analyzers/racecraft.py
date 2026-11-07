@@ -17,6 +17,11 @@ Races only. Each call is said once per situation, with its own rules so it isn't
 - Attacking: the car ahead is within `attack_gap_s` (4 s), you've closed at least
   `min_closing_s` (0.15 s) a lap over the last two laps, and at that rate you'd catch it before
   the flag ("realistic"). Then "DRS range on Norris" the first time you get within 1 s.
+- Long battles: the same car within `battle_gap_s` (1 s) ahead or behind at the line for
+  `battle_laps` (3) laps running gets encouragement ("Russell has been on you for four laps and
+  still hasn't got by. Brilliant work, stay calm."), again every `battle_repeat_laps` (3) while
+  it lasts, at most BATTLE_MAX_CALLS per car; "back and forth" wording once you've swapped places
+  twice. Not on a lap that already had a defend/attack/DRS/pass call about it.
 - Countdown: five laps to go (with the gap ahead) and the last lap.
 - Finish: the flag, your position and places gained from the grid.
 - Fastest lap of the race: when you take it from someone else (not every time you improve it).
@@ -53,6 +58,8 @@ COUNTDOWN_LAPS = 5
 ATTACK_REPEAT_LAPS = 4
 SC_IN_REPEAT_S = 30.0
 PASS_GROUP_S = 8.0
+BATTLE_MAX_CALLS = 4         # encouragement per car per race
+BATTLE_QUIET_S = 15.0        # not right after another race craft call
 
 
 LOST_REPEAT_S = 60.0         # the same lost place isn't said again this soon (flashbacks)
@@ -81,6 +88,7 @@ class RaceCraftAnalyzer:
         bus.subscribe(ev.Flashback, lambda e: self._on_flashback())
         bus.subscribe(ev.PitEntry, self._on_pit_entry)
         bus.subscribe(ev.RadioMessage, self._on_radio)
+        bus.subscribe(ev.RadioDropped, self._on_dropped)
 
     def _reset(self) -> None:
         self.swaps: list[_Swap] = []
@@ -104,16 +112,39 @@ class RaceCraftAnalyzer:
         self.lost_calls = 0                                  # wording rotation
         self.fights_said = 0
         self.pit_laps = 0                                    # in lap + out lap: no lost calls
+        self.battles: dict[int, tuple[int, int]] = {}        # car -> (first lap, last lap) close
+        self.battle_swaps: dict[int, list[float]] = {}       # car -> when places swapped
+        self.battle_said: dict[int, int] = {}                # car -> lap encouragement was said
+        self.battle_calls: dict[int, int] = {}               # car -> how many times
+        # Battle calls not on the radio yet: text -> (car, said lap and count before). A
+        # flashback or an expired wait puts them back (Brazil, 7 Nov: two lost to flashbacks).
+        self.battle_pending: dict[str, tuple[int, int | None, int]] = {}
 
     def _on_flashback(self) -> None:
         self.swaps.clear()
         self.contact_due = None
+        for text in list(self.battle_pending):           # the director dropped them unsaid
+            self._battle_unsaid(text)
+
+    def _battle_unsaid(self, text: str) -> None:
+        car, said, calls = self.battle_pending.pop(text)
+        if said is None:
+            self.battle_said.pop(car, None)
+        else:
+            self.battle_said[car] = said
+        self.battle_calls[car] = calls
+
+    def _on_dropped(self, e: ev.RadioDropped) -> None:
+        if e.topic == "racecraft_battle" and e.text in self.battle_pending:
+            self._battle_unsaid(e.text)
 
     def _on_radio(self, e: ev.RadioMessage) -> None:
         # A lost place counts as said once it's actually on the radio: a flashback can drop
         # the call unsaid, and the game then sends the pass again (Melbourne, 2 Nov, last lap).
         for car in self.lost_pending.pop(e.text, []) if e.topic == "racecraft_pass" else []:
             self.lost_said[car] = e.session_time
+        if e.topic == "racecraft_battle":
+            self.battle_pending.pop(e.text, None)
 
     def _on_pit_entry(self, e: ev.PitEntry) -> None:
         if e.car_idx == self.state.player_index:
@@ -174,6 +205,7 @@ class RaceCraftAnalyzer:
             self.ahead_gaps.clear()                       # gaps behind the SC mean nothing
             return
         self._attack(e)
+        self._battle(e)
         if self.cfg.countdown and total:
             to_go = total - e.lap
             if to_go in (COUNTDOWN_LAPS, 1):
@@ -183,6 +215,60 @@ class RaceCraftAnalyzer:
                     to_go, int(c.position[me]), self._name(ahead),
                     None if np.isnan(gap) else float(gap)),
                     Priority.NORMAL if to_go == 1 else Priority.LOW, max_wait_s=30.0)
+
+    def _battle(self, e: ev.LapCompleted) -> None:
+        """Encouragement in a battle that goes on for laps (see the module notes)."""
+        if not self.cfg.battles:
+            return
+        if e.pit_in_lap or e.pit_out_lap or self.pit_laps or e.lap < 2:
+            self.battles.clear()
+            return
+        c, me = self.state.cars, self.state.player_index
+        limit = self.cfg.battle_gap_s * 1000
+        near: dict[int, str] = {}
+        ahead = self._car_at(c.position[me] - 1)
+        gap = c.delta_to_car_in_front_ms[me]
+        if ahead is not None and not np.isnan(gap) and 0 < gap <= limit \
+                and not c.pit_status[ahead] > 0:
+            near[ahead] = "ahead"
+        behind = self._car_at(c.position[me] + 1)
+        if behind is not None and not c.pit_status[behind] > 0:
+            g = c.delta_to_car_in_front_ms[behind]
+            if not np.isnan(g) and 0 < g <= limit:
+                near[behind] = "behind"
+        # A streak continues from the previous lap (or the same lap re-driven after a flashback).
+        streaks = {}
+        for car in near:
+            first, last = self.battles.get(car, (e.lap, e.lap))
+            streaks[car] = (first if last >= e.lap - 1 else e.lap, e.lap)
+        self.battles = streaks
+        due = []
+        for car, (first, _) in streaks.items():
+            laps = e.lap - first + 1
+            said = self.battle_said.get(car)
+            if laps < self.cfg.battle_laps or self.battle_calls.get(car, 0) >= BATTLE_MAX_CALLS:
+                continue
+            if said is not None and e.lap - said < self.cfg.battle_repeat_laps:
+                continue
+            due.append((laps, near[car] == "ahead", car))
+        if not due:
+            return
+        t = self.state.session_time or 0.0
+        recent = max((self.director.last_said.get(k, -math.inf) for k in
+                      ("racecraft_defend", "racecraft_attack", "racecraft_pass")),
+                     default=-math.inf)
+        if t - recent < BATTLE_QUIET_S:
+            return                                           # next lap, if it's still on
+        laps, _, car = max(due)
+        before = (car, self.battle_said.get(car), self.battle_calls.get(car, 0))
+        self.battle_said[car] = e.lap
+        self.battle_calls[car] = self.battle_calls.get(car, 0) + 1
+        # Swaps in this battle only: since about a lap before it started.
+        since = t - (laps + 1) * e.lap_time_ms / 1000.0
+        swaps = sum(x >= since for x in self.battle_swaps.get(car, []))
+        text = phrases.battle_phrase(self._name(car), near[car], laps, swaps)
+        self.battle_pending[text] = before
+        self._say("racecraft_battle", text, Priority.LOW, max_wait_s=15.0)
 
     def _finish(self, e: ev.LapCompleted) -> None:
         if self.finished or not self.cfg.finish or e.position is None:
@@ -273,6 +359,7 @@ class RaceCraftAnalyzer:
             other = b if a == me else a
             if c.pit_status[other] > 0 or c.pit_status[me] > 0:
                 return
+            self.battle_swaps.setdefault(other, []).append(e.session_time)
             gained = a == me
             if gained:
                 self.passed[other] = e.session_time

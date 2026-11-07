@@ -969,14 +969,18 @@ def lost_place_phrase(name: str | None, position: int, n: int = 0) -> str:
     opts = [f"{_sentence(f'lost {lost} to {name}')} {_sentence(f'stay with {name}')}",
             f"{_sentence(f'{name} got by, {now}')} {_sentence('stay close, the move back is on')}",
             f"{_sentence(f'{name} is through, {now}')} {_sentence('keep the pressure on')}",
-            f"{_sentence(f'{name} past, {now}')} {_sentence(f'stick with {name}, chances will come')}"]
+            f"{_sentence(f'{name} past, {now}')} {_sentence(f'stick with {name}, chances will come')}",
+            f"{_sentence(f'{name} got through, {now}')} {_sentence('stay in the tow, look for the switchback')}",
+            f"{_sentence(f'lost {lost} to {name}')} {_sentence('not over yet, stay right with them')}",
+            f"{_sentence(f'{name} is by, {now}')} {_sentence('reset and go again')}",
+            f"{_sentence(f'{name} found a way past, {now}')} {_sentence('keep it close, they have to defend now')}"]
     return pick("lost_place", opts if _variety_on() else opts[:3], n)
 
 
 def lost_places_phrase(count: int, position: int) -> str:
     """'Lost two places, P eight. Heads down, plenty of race left.'"""
     return f"{_sentence(f'lost {number_words(count)} places, {say_position(position)}')} " \
-           f"{_sentence(pick('lost_places', ['heads down, keep at it', 'reset, plenty of race left', 'shake it off, keep going']))}"
+           f"{_sentence(pick('lost_places', ['heads down, keep at it', 'reset, plenty of race left', 'shake it off, keep going', 'still plenty to play for', 'stay calm, we go again', 'regroup, they come back to you']))}"
 
 
 def fight_back_phrase(name: str | None, position: int, heard_lost: bool, n: int = 0) -> str:
@@ -985,14 +989,21 @@ def fight_back_phrase(name: str | None, position: int, heard_lost: bool, n: int 
     briefly and it's a good defence ('Good fight, Hamilton couldn't make it stick, P five.')."""
     who = name or "them"
     pos = say_position(position)
-    if heard_lost:
-        return pick("fight_back", [
+    back = [
             f"{_sentence(f'straight back past {who}, {pos}')} Great response.",
             f"{_sentence(f'got it back from {who}, {pos}')} That's how you answer.",
-            f"{_sentence(f'back ahead of {who}, {pos}')} Good fight."], n)
-    return pick("fight_held", [_sentence(f"good fight, {who} couldn't make it stick, {pos}"),
-                               _sentence(f"nicely defended, back ahead of {who}, {pos}"),
-                               _sentence(f"great racing with {who}, you kept the place, {pos}")], n)
+            f"{_sentence(f'back ahead of {who}, {pos}')} Good fight.",
+            f"{_sentence(f'and you take it back from {who}, {pos}')} Brilliant.",
+            f"{_sentence(f'switchback on {who}, {pos}')} Lovely bit of racing.",
+            f"{_sentence(f'back past {who} straight away, {pos}')} That's the reply."]
+    held = [_sentence(f"good fight, {who} couldn't make it stick, {pos}"),
+            _sentence(f"nicely defended, back ahead of {who}, {pos}"),
+            _sentence(f"great racing with {who}, you kept the place, {pos}"),
+            _sentence(f"{who} had a go, you held it, {pos}"),
+            _sentence(f"strong answer to {who}, still {pos}"),
+            _sentence(f"{who} got alongside and you shut the door, {pos}")]
+    return pick("fight_back", back if _variety_on() else back[:3], n) if heard_lost \
+        else pick("fight_held", held if _variety_on() else held[:3], n)
 
 
 def defend_phrase(name: str | None, gap_ms: float) -> str:
@@ -1000,14 +1011,55 @@ def defend_phrase(name: str | None, gap_ms: float) -> str:
     who = name or "car"
     drs = ", DRS range" if gap_ms <= 1000 else ""
     return (f"{_sentence(f'{who} behind, {say_gap(int(gap_ms))} and closing{drs}')} "
-            + pick("defend", ["Defend.", "Watch your mirrors.", "Cover the inside."]))
+            + pick("defend", ["Defend.", "Watch your mirrors.", "Cover the inside.",
+                              "Make the car wide.", "Protect the inside line.",
+                              "Clean exits, don't give them the tow."]))
 
 
 def breathing_room_phrase(name: str | None, gap_ms: float) -> str:
     """'Leclerc dropping back, two seconds now. Good defending.'"""
     who = name or "car behind"
     return (f"{_sentence(f'{who} dropping back, {say_gap(int(gap_ms))} now')} "
-            + pick("breathing", ["Good defending.", "Nicely done.", "That's the gap opening up."]))
+            + pick("breathing", ["Good defending.", "Nicely done.", "That's the gap opening up.",
+                                 "You've seen them off.", "Great job keeping them behind.",
+                                 "That's them dealt with."]))
+
+
+def battle_phrase(name: str | None, side: str, laps: int, swaps: int = 0) -> str:
+    """A battle that goes on (7 Nov: "more encouragement when there's a battle that is
+    consistent"). side: "behind" (you're defending), "ahead" (you're attacking); swaps: places
+    swapped with them in the battle. 'Russell has been on you for four laps and still hasn't got
+    by. Brilliant work, stay calm.'"""
+    n = number_words(laps)
+    if swaps >= 2:
+        who = name or "them"
+        opts = [(f"proper scrap with {who}, {n} laps of it", "loving this, keep it clean"),
+                (f"back and forth with {who} for {n} laps now", "great racecraft, stay patient"),
+                (f"brilliant battle with {who}, {n} laps and counting",
+                 "keep your head, pick your moment"),
+                (f"{who} just won't go away, {n} laps now", "you're matching every move, keep it up"),
+                (f"what a fight with {who}, {n} laps", "stay smart, it'll swing your way")]
+    elif side == "behind":
+        who = name or "the car behind"
+        opts = [(f"{who} has been on you for {n} laps and still hasn't got by",
+                 "brilliant work, stay calm"),
+                (f"{n} laps with {who} right behind you", "great defending, keep it tidy"),
+                (f"still holding {who} off, {n} laps now", "nice and clean, hit your marks"),
+                (f"{n} laps of pressure from {who} and you're handling it", "keep it up"),
+                (f"{who} is stuck behind you, {n} laps now", "that's championship defending"),
+                (f"{n} laps and {who} can't find a way past", "you're doing everything right")]
+    else:
+        who = name or "the car ahead"
+        opts = [(f"{n} laps on {who}'s gearbox", "stay patient, the chance will come"),
+                (f"still right with {who}, {n} laps now", "keep the pressure on, they'll crack"),
+                (f"{n} laps in {who}'s mirrors", "you're making them work, keep at it"),
+                (f"great job hanging onto {who}, {n} laps now",
+                 "get a good exit and the move is on"),
+                (f"{who} is feeling the heat, {n} laps of it", "stay close, wait for the mistake"),
+                (f"{n} laps glued to {who}", "you've got the pace, keep looking")]
+    key = "battle_swaps" if swaps >= 2 else f"battle_{side}"
+    first, second = pick(key, opts)
+    return f"{_sentence(first)} {_sentence(second)}"
 
 
 def attack_phrase(name: str | None, gap_ms: float, closing_ms: float, laps_to_catch: int) -> str:
@@ -1018,7 +1070,8 @@ def attack_phrase(name: str | None, gap_ms: float, closing_ms: float, laps_to_ca
     laps = "next lap" if laps_to_catch <= 1 else f"in about {number_words(min(laps_to_catch, 99))} laps"
     return (f"{_sentence(f'{who} ahead, {say_gap(int(gap_ms))}')} "
             f"{_sentence(f'catching {say_gap(int(closing_ms))} a lap', f'{on} {laps}')} "
-            + pick("attack", ["Keep pushing.", "Keep it coming.", "Reel them in."]))
+            + pick("attack", ["Keep pushing.", "Keep it coming.", "Reel them in.",
+                              "Stay on it.", "You've got the pace.", "Hunt them down."]))
 
 
 def drs_range_phrase(name: str | None) -> str:
@@ -1026,7 +1079,8 @@ def drs_range_phrase(name: str | None) -> str:
     if not name:
         return f"{_sentence('DRS range on the car ahead')} Go get it."
     return f"{_sentence(f'DRS range on {name}')} " + _sentence(pick("drs", [
-        f"go get {name}", f"have a look at {name}", f"use it on {name}"]))
+        f"go get {name}", f"have a look at {name}", f"use it on {name}",
+        f"set up the move on {name}", f"line {name} up"]))
 
 
 def laps_to_go_phrase(laps: int, position: int, ahead: str | None, gap_ms: float | None) -> str:
@@ -1036,7 +1090,9 @@ def laps_to_go_phrase(laps: int, position: int, ahead: str | None, gap_ms: float
     first = _sentence(head, say_position(position))
     if laps <= 1:
         return f"{first} " + pick("last_lap", ["Bring it home.", "Nice and clean to the flag.",
-                                               "One more, bring it home."])
+                                               "One more, bring it home.",
+                                               "Last one, keep it tidy.",
+                                               "Big lap, no mistakes."])
     if ahead and gap_ms is not None and gap_ms < 5000:
         return f"{first} {_sentence(f'{ahead} ahead, {say_gap(int(gap_ms))}')}"
     return first
@@ -1060,8 +1116,11 @@ def finish_phrase(position: int, gained_from_grid: int | None) -> str:
     if gained_from_grid is not None and gained_from_grid < 0:
         return f"{first} " + pick("finish_down", ["Tough one, we'll learn from it.",
                                                   "Not our day, we'll come back stronger.",
-                                                  "Hard race, we'll look at it."])
-    return f"{first} " + pick("finish_ok", ["Good job.", "Solid work.", "Good race."])
+                                                  "Hard race, we'll look at it.",
+                                                  "We'll go through it and come back quicker.",
+                                                  "Plenty to take from that one."])
+    return f"{first} " + pick("finish_ok", ["Good job.", "Solid work.", "Good race.",
+                                            "Well driven.", "Nice work today."])
 
 
 def fastest_lap_phrase(lap_time_s: float) -> str:

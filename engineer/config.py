@@ -128,6 +128,9 @@ class RaceCraft(BaseModel):
     clear_gap_s: float = Field(default=2.0, gt=0)      # ... until it drops back past this
     attack_gap_s: float = Field(default=4.0, gt=0)     # car ahead within this ...
     min_closing_s: float = Field(default=0.15, gt=0)   # ... and you close this much a lap
+    battle_gap_s: float = Field(default=1.0, gt=0)     # a battle: the same car within this ...
+    battle_laps: int = Field(default=3, ge=2)          # ... at the line this many laps running
+    battle_repeat_laps: int = Field(default=3, ge=1)   # encouragement again this often
 
 
 class Strategy(BaseModel):

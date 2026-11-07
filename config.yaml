@@ -66,7 +66,8 @@ racecraft:              # the human side: battles, passes, start/finish, penalti
   enabled: true
   start: true           # "Great start, up eight places."
   passes: true          # "Great move on Norris, P three." / "Lost P three to Leclerc."
-  battles: true         # defending / "catching three tenths a lap" / "DRS range on Norris"
+  battles: true         # defending / "catching three tenths a lap" / "DRS range on Norris" /
+                        # encouragement in a battle that goes on for laps
   countdown: true       # five laps to go, last lap
   finish: true          # "Chequered flag, P three. Up six from the grid, great drive."
   fastest_lap: true     # when you take fastest lap from someone else
@@ -80,6 +81,9 @@ racecraft:              # the human side: battles, passes, start/finish, penalti
   clear_gap_s: 2.0      # ... until it drops back past this: "Good defending."
   attack_gap_s: 4.0     # car ahead within this, and
   min_closing_s: 0.15   # you're closing this much a lap, and you'd catch it before the flag
+  battle_gap_s: 1.0     # a long battle: the same car within this at the line ...
+  battle_laps: 3        # ... this many laps running: "Third lap with Russell on you, ..."
+  battle_repeat_laps: 3 # encouragement again this often while it lasts
 
 strategy:               # pit strategy (Phase 5): the plan, box calls, safety car stops
   enabled: true

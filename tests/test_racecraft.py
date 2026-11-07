@@ -172,3 +172,40 @@ def test_a_lap_re_driven_after_a_flashback_is_not_announced_twice():
         eng.pipeline.feed(raw, t_ns)
     assert laps.count(2) == 2                        # the game really did complete it twice
     assert [s.lower().startswith("thirty two") for s in said].count(True) == 1, said
+
+
+def test_a_long_battle_gets_encouragement():
+    # 7 Nov: "more encouragement when it seems like there's a battle that is consistent".
+    # Behind Norris, eight tenths, lap after lap (no closing, so no "catching" call).
+    race = FakeRace({0: [30000] * 11, 1: [30000] * 11}, positions={0: 2, 1: 1},
+                    names=["PLAYER", "NORRIS"], extra_packets=False, gap_ahead_ms={0: 800})
+    _, radio = run(race, duration_ms=335000)
+    battle = [r for r in radio if "gearbox" in r]
+    assert battle and battle[0].startswith("Three laps on Norris's gearbox."), radio
+    assert 2 <= sum("Norris" in r and "laps" in r for r in radio) <= 4   # repeats, not every lap
+    # Norris all over you instead.
+    race = FakeRace({0: [30000] * 6, 1: [30000] * 6}, positions={0: 1, 1: 2},
+                    names=["PLAYER", "NORRIS"], extra_packets=False, gap_ahead_ms={1: 700})
+    _, radio = run(race, duration_ms=185000)
+    assert "Norris has been on you for three laps and still hasn't got by. Brilliant work, " \
+           "stay calm." in radio, radio
+
+
+def test_battle_phrases():
+    assert phrases.battle_phrase("Russell", "behind", 4) == \
+        "Russell has been on you for four laps and still hasn't got by. Brilliant work, stay calm."
+    assert phrases.battle_phrase("Russell", "ahead", 3, swaps=3) == \
+        "Proper scrap with Russell, three laps of it. Loving this, keep it clean."
+
+
+def test_a_battle_call_lost_to_a_flashback_is_made_again():
+    # Brazil, 7 Nov: the call waited for a straight, a flashback cleared it, and the re-driven
+    # lap thought it had been said.
+    race = FakeRace({0: [30000] * 6, 1: [30000] * 6}, positions={0: 1, 1: 2},
+                    names=["PLAYER", "NORRIS"], extra_packets=False, gap_ahead_ms={1: 700})
+    eng, _ = run(race, duration_ms=100000)           # laps 2 and 3 close: not yet a battle
+    rc = eng.racecraft
+    rc.battle_said[1], rc.battle_calls[1] = 4, 1
+    rc.battle_pending["Norris has been on you."] = (1, None, 0)
+    eng.pipeline.bus.publish(ev.Flashback(0, 100.0, to_frame=0, to_session_time=95.0))
+    assert 1 not in rc.battle_said and rc.battle_calls[1] == 0 and not rc.battle_pending

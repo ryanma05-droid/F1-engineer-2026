@@ -192,9 +192,12 @@ async def _run(cfg: Config, record: bool | None, voice: bool, ptt_on: bool = Tru
     engine.coaching.save_dir = cfg.data_path / "coaching"   # live only: replays don't write
     engine.director.idle_after_s = IDLE_AFTER_S              # menus: say answers at once
     # Wordings used lately, remembered across races so the next one sounds different.
+    from engineer.radio.engineers import KEVIN_MEMORY
     from engineer.radio.variety import VARIETY
     VARIETY.load(cfg.data_path / "radio" / "variety.json")
-    engine.pipeline.bus.subscribe(ev.SessionEnded, lambda e: VARIETY.save_in_background())
+    KEVIN_MEMORY.load(cfg.data_path / "radio" / "kevin.json")      # his jokes from recent races
+    engine.pipeline.bus.subscribe(ev.SessionEnded, lambda e: (VARIETY.save_in_background(),
+                                                              KEVIN_MEMORY.save_in_background()))
     pipeline = engine.pipeline
     audio = start_voice(cfg, engine) if voice else None
     if audio:
@@ -268,6 +271,7 @@ async def _run(cfg: Config, record: bool | None, voice: bool, ptt_on: bool = Tru
         updater.close()
         await uploader.close()
         VARIETY.save_in_background()
+        KEVIN_MEMORY.save_in_background()
         listener.close()
         if window:
             window.close()

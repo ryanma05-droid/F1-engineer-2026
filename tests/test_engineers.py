@@ -8,7 +8,7 @@ from engineer.bus import events as ev
 from engineer.config import Config
 from engineer.features.priors import WearPriors
 from engineer.radio.director import Priority, RadioCall
-from engineer.radio.engineers import BY_KEY, ENGINEERS, Intern, personality
+from engineer.radio.engineers import BY_KEY, ENGINEERS, Intern, LineMemory, personality
 from engineer.radio.switch import VoiceControl, current_key
 
 
@@ -28,13 +28,48 @@ def test_kevin_keeps_every_call_word_for_word_and_is_repeatable():
              ("racecraft_pass", "Norris got you, P six."), ("answer", "Gap ahead is a second."),
              ("strategy_plan", "Plan is one stop, box end of lap nine for softs."),
              ("lap_delta", "One twenty three four."), ("corner", "Turn two, brake later.")]
-    a, b = Intern(), Intern()
+    a, b = Intern(memory=LineMemory()), Intern(memory=LineMemory())
     out = [a(t, x) for t, x in calls]
     assert out == [b(t, x) for t, x in calls]          # seeded: replays say the same
     for (_, text), said in zip(calls, out):
         assert text[1:] in said and text[0].lower() in said.lower()   # "Okay so, turn two"
     assert out[0] != calls[0][1]                       # urgent calls always get the panic
-    assert sum(s != t for (_, t), s in zip(calls, out)) >= 4
+    assert sum(s != t for (_, t), s in zip(calls, out)) >= 2
+
+
+def test_kevin_never_repeats_a_line_and_spaces_his_jokes():
+    # 7 Nov: "he did say the same jokes a bit too much".
+    import engineer.radio.engineers as eng_mod
+    k = Intern(memory=LineMemory())
+    k.new_session(1234)
+    topics = ["lap_delta", "racecraft_pass", "corner", "answer", "tyre_status", "box",
+              "strategy_plan"]
+    lines, joke_times = [], []
+    for i in range(300):                               # a long race: a call every 6 s
+        t = 6.0 * i
+        topic = topics[i % len(topics)]
+        text = "Call number %d." % i
+        said = k(topic, text, t)
+        extra = said.replace(text, "|").split("|")
+        added = [x.strip() for x in extra if x.strip()]
+        lines += added
+        if added and topic != "box":
+            joke_times.append(t)
+    assert len(lines) == len(set(lines))               # never the same line twice in a race
+    assert all(b - a >= eng_mod.QUIRK_GAP_S for a, b in zip(joke_times, joke_times[1:]))
+    assert 0 < len(joke_times) < 300 * 6 / eng_mod.QUIRK_GAP_S + 1
+
+
+def test_kevin_keeps_lines_from_recent_races_back():
+    mem = LineMemory()
+    first = Intern(memory=mem)
+    first.new_session(1)
+    said_first = {first("box", "Box box.", float(i)).replace(" Box box.", "").split(" Box")[0]
+                  for i in range(4)}
+    second = Intern(memory=mem)
+    second.new_session(2)
+    opening = second("box", "Box box.", 0.0).split(" Box box.")[0]
+    assert opening not in said_first
 
 
 def test_director_says_kevins_version_but_events_keep_the_call():

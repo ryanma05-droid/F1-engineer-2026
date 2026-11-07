@@ -319,7 +319,7 @@ class RadioDirector:
 
     def _publish(self, call: RadioCall, t: float) -> str:
         self.last_said[call.topic] = t
-        spoken = self.persona(call.topic, call.text) if self.persona else None
+        spoken = self.persona(call.topic, call.text, t) if self.persona else None
         self.bus.publish(ev.RadioMessage(
             self.state.session_uid or 0, t, topic=call.topic, text=call.text,
             priority=call.priority, queued_at=call.queued_at, origin_t_ns=call.origin_t_ns,
@@ -334,7 +334,9 @@ class RadioDirector:
         self.bus.publish(ev.RadioDropped(self.state.session_uid or 0, self._now(),
                                          topic=call.topic, text=call.text, reason=reason))
 
-    def _on_session_started(self, _e) -> None:
+    def _on_session_started(self, e) -> None:
+        if self.persona is not None and hasattr(self.persona, "new_session"):
+            self.persona.new_session(e.session_uid)    # Kevin: a fresh shuffle each session
         self.queue.clear()
         self.hold_until = None
         self.zones.reset()

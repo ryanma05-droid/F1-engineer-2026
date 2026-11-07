@@ -738,3 +738,16 @@ ran an older copy: it also uploaded to the public repo).
 Not changed: Russell re-passed 4.6 s after your move and your re-pass got a fresh "pass" call
 rather than "back past him" (inside the 5 s window that treats a quick swap back as your move).
 
+## Engineers: less repetition, more encouragement in battles (7 Nov)
+
+- [x] Kevin: three times the lines; never the same line twice in a race; lines from recent races
+      kept back; a joke on far fewer calls (one line, 45 s apart; box calls still panic); a new
+      shuffle every race (it was the same seed, so the same jokes in the same order, every race).
+      Brazil with Kevin: 13 of 65 calls had a line, all different.
+- [x] All engineers: short wording lists go round in full before repeating; more wordings for
+      lost places, fights, defending, attacking, DRS, last lap, finishes
+- [x] Long battles: encouragement after 3 laps within a second of the same car, every 3 laps
+      while it lasts. Real races: "Back and forth with Norris for three laps now. Great
+      racecraft, stay patient." (Baku); "Brilliant battle with Russell, three laps and counting.
+      Keep your head, pick your moment." (Interlagos)
+

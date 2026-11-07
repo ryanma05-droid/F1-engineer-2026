@@ -5,7 +5,9 @@ A real engineer has a handful of ways to say each thing ("great start, up eight 
 Each call that varies lists its wordings in phrases.py and asks `VARIETY.pick(key, options)`.
 The facts (positions, gaps, laps, tyres) are in every wording; only the words around them change.
 
-- A wording used recently for that call isn't picked again (`AVOID`), and the memory carries
+- A wording used recently for that call isn't picked again (`avoid_count`: every wording of a
+  short list is used before one comes back, longer lists pick from the two least recent), and
+  the memory carries
   over between races (data/radio/variety.json, live only), so the next race doesn't open with
   the same start call as the last.
 - Live, each session gets a fresh random seed. Replays seed from the session UID, so the same
@@ -28,8 +30,14 @@ from pathlib import Path
 
 log = logging.getLogger(__name__)
 
-AVOID = 2            # don't repeat any of the last 2 wordings of a call (fewer for short lists)
-KEEP = 4             # wordings remembered per call
+KEEP = 12            # wordings remembered per call
+
+
+def avoid_count(n_options: int) -> int:
+    """How many of a call's latest wordings are kept back (7 Nov: the stock lines came round too
+    often). Up to 3 options: all but one, so each is used once before any comes back; more:
+    all but two, a choice of the two least recent."""
+    return n_options - 1 if n_options <= 3 else n_options - 2
 
 
 class Variety:
@@ -49,7 +57,7 @@ class Variety:
         if not self.enabled or len(options) == 1:
             return options[n % len(options)]
         recent = self.recent.get(key, [])
-        avoid = set(recent[-min(AVOID, len(options) - 1):])
+        avoid = set(recent[-avoid_count(len(options)):])
         idx = self.rng.choice([i for i in range(len(options)) if i not in avoid])
         self.recent[key] = (recent + [idx])[-KEEP:]
         return options[idx]

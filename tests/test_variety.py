@@ -106,3 +106,14 @@ def test_memory_is_saved_and_loaded(tmp_path):
     w = Variety()
     w.load(path)
     assert w.recent == saved["recent"] and w.live and len(w.recent["start_up"]) == 1
+
+
+def test_short_lists_use_every_wording_before_one_comes_back():
+    # 7 Nov: the stock lines ("chances will come") came round too often.
+    v = Variety()
+    v.enabled = True
+    for opts in (["a", "b", "c"], list("abcdef")):
+        picks = [v.pick("k" + str(len(opts)), opts) for _ in range(60)]
+        window = len(opts) - 1 if len(opts) <= 3 else len(opts) - 2
+        for i in range(len(picks) - window):
+            assert len(set(picks[i:i + window + 1])) == window + 1, picks
