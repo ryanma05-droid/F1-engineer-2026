@@ -90,6 +90,7 @@ class QuestionAnswerer:
         self.feedback = feedback or FeedbackLog(None)
         self.recent_radio: deque[str] = deque(maxlen=3)  # kept with a flagged question
         self._prev: dict | None = None                  # the last question, for "log that"
+        self._last_driver: int | None = None            # the driver last named, for "his lap"
         self._log_next_until: float | None = None       # "log the following question" alone
         bus.subscribe(ev.QuestionAsked, self.on_question)
         bus.subscribe(ev.RadioMessage, self._on_radio)
@@ -378,6 +379,12 @@ class QuestionAnswerer:
         if not sa._active():
             return phrases._sentence("no strategy calls in this race")
         if sa.decision is None:
+            p = self._player()
+            if p is not None and (self.state.cars.pit_status[p] > 0 or sa._stops_made()):
+                # Suzuka, 9 Nov: asked on the in-lap, after the stop was called, and got
+                # "no plan yet, give me a couple of laps" on lap eleven.
+                return phrases._sentence("working out the rest of the race after the stop",
+                                         "give me a moment")
             return phrases._sentence("no plan yet, give me a couple of laps")
         # The committed call, said the same way as on the radio.
         return phrases.call_phrase(sa.decision, int(self.state.session.total_laps or 0),
@@ -674,6 +681,8 @@ class QuestionAnswerer:
             gap = c.delta_to_car_in_front_ms[car]
         if np.isnan(gap):
             return phrases._sentence("no timing yet")
+        if car is not None:
+            self._last_driver = car
         return phrases.gap_answer_phrase(direction, self._name(car) if car is not None else None,
                                          float(gap))
 
@@ -792,7 +801,15 @@ class QuestionAnswerer:
     # -- other drivers ---------------------------------------------------------------------------
 
     def _named_driver(self) -> int | None:
-        return driver_in(self.heard, self.state.cars.names)
+        car = driver_in(self.heard, self.state.cars.names)
+        if car is not None:
+            self._last_driver = car
+            return car
+        # "What was his last lap relative to mine?" (9 Nov, after "Verstappen behind ..."): the
+        # driver named last, in a question or an answer.
+        if re.search(r"\b(his|her|their|him|them|he|she|they)\b", self.heard.lower()):
+            return self._last_driver
+        return None
 
     def _a_compare_driver(self) -> str:
         car, p = self._named_driver(), self._player()
@@ -888,8 +905,13 @@ class QuestionAnswerer:
             laps = [r for r in self.engine.history.for_car(p) if r.clean and r.lap_time_ms]
             before = [r.lap_time_ms for r in laps if r.lap < rc.damage_lap][-4:]
             after = [r.lap_time_ms for r in laps if r.lap > rc.damage_lap][-3:]
-            if not before or not after:
+            if not after:
                 return text + " " + phrases._sentence("give me a clean lap to see what it costs")
+            if not before:
+                # Damaged before any clean lap (Jeddah, 9 Nov: lap one, "Should I fix the
+                # wing?" asked four times got "give me a clean lap" every time). Nothing of
+                # yours to compare with, so compare with the quickest cars on the same laps.
+                return text + " " + self._damage_vs_field(p, laps, rc.damage_lap)
             loss_s = (float(np.median(after)) - float(np.median(before))) / 1000
             pit_s = sa.latest.model.pit_loss.value if sa.latest and sa.latest.model \
                 else sa.cfg.pit_loss_s
@@ -897,6 +919,23 @@ class QuestionAnswerer:
             text += " " + phrases.damage_cost_phrase(loss_s, self._laps_to_go() or 0, pit_s,
                                                      stop.lap if stop else None)
         return text
+
+    def _damage_vs_field(self, p: int, laps: list, damage_lap: int) -> str:
+        """Damage from before your first clean lap: your clean laps since vs the three quickest
+        other cars on the same laps. Only an upper bound (it's driving too), so it's said as
+        one: on the leaders' pace = not costing much."""
+        mine, field = [], []
+        for r in [r for r in laps if r.lap > damage_lap][-3:]:
+            others = sorted(o.lap_time_ms for car in range(len(self.state.cars.names))
+                            if car != p for o in self.engine.history.for_car(car)
+                            if o.lap == r.lap and o.clean and o.lap_time_ms)
+            if len(others) >= 3:
+                mine.append(r.lap_time_ms)
+                field.append(float(np.median(others[:3])))
+        if not mine:
+            return phrases._sentence("give me a clean lap to see what it costs")
+        gap_s = (float(np.median(mine)) - float(np.median(field))) / 1000
+        return phrases.damage_vs_field_phrase(gap_s)
 
     # -- 3 Nov (20-lap races): questions that got "Say again" or the wrong answer --------------
 
@@ -1162,6 +1201,68 @@ class QuestionAnswerer:
         if np.isnan(pos):
             return phrases._sentence("no timing yet")
         return phrases.position_phrase(int(pos), self._laps_to_go())
+
+    # -- 9 Nov additions ----------------------------------------------------------------------
+
+    def _gap_between(self, a: int, b: int) -> float | None:
+        """Seconds from car a back to car b (positive: b is behind), from the intervals."""
+        c = self.state.cars
+        pa, pb = c.position[a], c.position[b]
+        if np.isnan(pa) or np.isnan(pb):
+            return None
+        sign, lo, hi = (1, pa, pb) if pa < pb else (-1, pb, pa)
+        total = 0.0
+        for pos in range(int(lo) + 1, int(hi) + 1):
+            car = np.flatnonzero(c.active & (c.position == pos))
+            if not car.size or np.isnan(c.delta_to_car_in_front_ms[car[0]]):
+                return None
+            total += c.delta_to_car_in_front_ms[car[0]]
+        return sign * total / 1000.0
+
+    def _a_teammate(self) -> str:
+        """"Where's my teammate?": their position, the gap and their tyres."""
+        c, p = self.state.cars, self._player()
+        if p is None or np.isnan(c.team_id[p]):
+            return phrases._sentence("no timing yet")
+        mates = [i for i in np.flatnonzero(c.active & (c.team_id == c.team_id[p])) if i != p]
+        if not mates:
+            return phrases._sentence("I don't see your teammate in this race")
+        mate = int(mates[0])
+        self._last_driver = mate
+        name = self._name(mate) or "your teammate"
+        pos = c.position[mate]
+        if np.isnan(pos):
+            return phrases._sentence(f"no timing for {name} yet")
+        gap = self._gap_between(p, mate)
+        where = phrases.say_position(int(pos))
+        if gap is not None:
+            side = "behind" if gap > 0 else "ahead"
+            where += f", {phrases.say_gap(int(abs(gap) * 1000))} {side}"
+        comp = c.visual_compound[mate]
+        tyre = f", on {phrases.say_compound(int(comp))}" if not np.isnan(comp) else ""
+        return phrases._sentence(f"{name} is {where}{tyre}")
+
+    def _a_hype(self) -> str:
+        """"A little hype in the chat, Gary?" (9 Nov): a lift, built on how the race is going."""
+        c, p = self.state.cars, self._player()
+        pos = None if p is None or np.isnan(c.position[p]) else int(c.position[p])
+        grid = None if p is None or np.isnan(c.grid_position[p]) else int(c.grid_position[p]) + 1
+        return phrases.hype_phrase(pos, grid, self._laps_to_go())
+
+    def _a_pit_stop_time(self) -> str:
+        """"How long did the pit stop take?" (9 Nov): the game's pit lane and stationary times
+        for your last stop, and the other cars' typical stationary time this race."""
+        p = self._player()
+        meter = getattr(self.engine.strategy, "pit_meter", None)
+        if p is None or meter is None:
+            return phrases._sentence("no stop timed yet")
+        mine = [st for st in meter.stops if st.car_idx == p]
+        if not mine:
+            return phrases._sentence("you haven't stopped yet")
+        st = mine[-1]
+        others = [o.stop_s for o in meter.stops if o.car_idx != p and o.stop_s > 0 and not o.sc]
+        typical = float(np.median(others)) if len(others) >= 3 else None
+        return phrases.pit_stop_time_phrase(st.lane_s, st.stop_s, typical)
 
     def _a_laps_left(self) -> str:
         n = self._laps_to_go()

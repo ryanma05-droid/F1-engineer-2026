@@ -563,3 +563,27 @@ def test_7_nov_phrasings():
     assert match("What am I pitting?").name == "plan"       # heard for "When am I pitting?"
     assert match("When am I pitting?").name == "plan"
     assert match("Has Kimmy pitted?").name == "driver_pitted"
+
+
+def test_9_nov_phrasings():
+    from engineer.voice.intents import match
+    cases = {"What do you think about hards?": "why_not",
+             "How much slower would hards be?": "why_not",
+             "Run a strategy simulation for hards.": "why_not",
+             "What was his last lap relative to mine?": "compare_driver",
+             "Where's my teammate?": "teammate",
+             "Let's get a little hype in the chat here. Gary?": "hype",
+             "How long did the pit stop take?": "pit_stop_time",
+             "What's the pit strat?": "plan",
+             "How's this tyre? We're looking for the rest of the race.": "tyres_to_end"}
+    for text, intent in cases.items():
+        assert match(text).name == intent, text
+
+
+def test_9_nov_phrases():
+    assert phrases.pit_stop_time_phrase(21.3, 2.41, 2.6) == (
+        "Two point four seconds stationary, twenty one seconds in the pit lane. Two tenths "
+        "quicker than the others' typical stop.")
+    assert phrases.damage_vs_field_phrase(0.1).endswith("so it isn't costing much, I'd leave it.")
+    assert "six tenths a lap off the quickest cars" in phrases.damage_vs_field_phrase(0.6)
+    assert phrases.hype_phrase(1, 4, None).startswith("You're leading this thing!")

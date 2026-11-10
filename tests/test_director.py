@@ -232,3 +232,14 @@ def test_your_lap_time_is_said_when_the_session_ends():
     r.d.submit(RadioCall("tyre_status", "Fronts cold.", Priority.LOW))
     r.bus.publish(ev.SessionEnded(1, 1.1, reason="SEND"))
     assert r.texts() == ["One forty three three."]
+
+
+def test_urgent_race_craft_goes_before_a_corner_tip():
+    # Jeddah, 9 Nov: a 13 s corner tip queued first took the gap; "Last lap" and a fight call
+    # expired behind it.
+    r = Rig()
+    r.drive(t=1.0, dist=100, brake=1.0, throttle=0.0)
+    r.d.submit(RadioCall("corner", "Turn six, a long tip.", max_wait_s=20))
+    r.d.submit(RadioCall("racecraft_countdown", "Last lap, P two.", max_wait_s=30))
+    r.drive(t=2.0, dist=200)
+    assert r.texts() == ["Last lap, P two."]

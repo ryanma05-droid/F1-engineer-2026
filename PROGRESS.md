@@ -751,3 +751,22 @@ rather than "back past him" (inside the 5 s window that treats a quick swap back
       racecraft, stay patient." (Baku); "Brilliant battle with Russell, three laps and counting.
       Keep your head, pick your moment." (Interlagos)
 
+## Diagnostic of the 9-10 Nov online lobby (10 Nov)
+
+Suzuka, Jeddah and Bahrain races (P1 in all three), qualifying and practice; 36 questions.
+Fixed:
+- [x] Jeddah: 26 calls dropped; "Last lap", "Got it back from Russell", defend calls lost behind
+      long corner tips. Urgent race craft now ranks above corner/tyre calls; "Last lap" is
+      must-say
+- [x] "Should I fix the wing?" (damage on lap 1) got "give me a clean lap" four times: now
+      compared with the quickest cars ("on their pace, it isn't costing much, I'd leave it")
+- [x] "No plan yet, give me a couple of laps" asked on the in-lap after the stop
+- [x] New answers: teammate, hype, pit stop time, "his last lap relative to mine"
+- [x] Phrasings: "pit strat", "what do you think about hards", "how much slower would hards be",
+      "run a strategy sim for hards", "this tyre for the rest of the race"
+Logged as ideas (not built): coaching tips that depend on the gap ahead/behind; a "push now"
+call when you need to make up time (undercut, closing a gap).
+Learned: soft wear at Jeddah was overestimated (7 laps: 61 % predicted, 51 % at the flag), a
+first race there; the plan at Bahrain switched hards -> mediums (tight, 59 %) when the softs
+lasted better; you chose hards (box-now answer gave the cost) and won.
+

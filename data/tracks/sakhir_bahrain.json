@@ -1,0 +1,63 @@
+{
+  "track_id": 3,
+  "track": "Sakhir (Bahrain)",
+  "track_length_m": 5408.0,
+  "corners": [
+    {
+      "number": 1,
+      "name": "turn one",
+      "entry_m": 570.0,
+      "apex_m": 750.0,
+      "exit_m": 1000.0
+    },
+    {
+      "number": 2,
+      "name": "turn two",
+      "entry_m": 1370.0,
+      "apex_m": 1550.0,
+      "exit_m": 1725.0
+    },
+    {
+      "number": 3,
+      "name": "turn three",
+      "entry_m": 1815.0,
+      "apex_m": 1935.0,
+      "exit_m": 2075.0
+    },
+    {
+      "number": 4,
+      "name": "turn four",
+      "entry_m": 2140.0,
+      "apex_m": 2280.0,
+      "exit_m": 2455.0
+    },
+    {
+      "number": 5,
+      "name": "turn five",
+      "entry_m": 2590.0,
+      "apex_m": 2755.0,
+      "exit_m": 2905.0
+    },
+    {
+      "number": 6,
+      "name": "turn six",
+      "entry_m": 3325.0,
+      "apex_m": 3470.0,
+      "exit_m": 3665.0
+    },
+    {
+      "number": 7,
+      "name": "turn seven",
+      "entry_m": 3990.0,
+      "apex_m": 4135.0,
+      "exit_m": 4325.0
+    },
+    {
+      "number": 8,
+      "name": "turn eight",
+      "entry_m": 4775.0,
+      "apex_m": 4930.0,
+      "exit_m": 5125.0
+    }
+  ]
+}

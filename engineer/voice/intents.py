@@ -139,10 +139,21 @@ RULES: list[tuple[str, list[str]]] = [
                      r"\bhit lap (\d+|" + _NUM_WORDS + r")\b"]),
     # "Why not hards?", "Why wouldn't I just go for hards?", "Should I pit for hards instead of
     # softs?", "If I'm six seconds up, should I go hards?"
+    # 9 Nov additions
+    ("teammate", [r"\bteam ?mates?\b", r"\bother (car|driver) in (my|our) team\b"]),
+    ("hype", [r"\bhype\b", r"\bpump (me|us) up\b", r"\bpep talk\b", r"\bmotivat\w*\b",
+              r"\bgee (me|us) up\b", r"\bget (me|us) going\b"]),
+    ("pit_stop_time", [r"\bhow long (did|was|were) (the |my |that |our )?(pit ?stop|stop|stationary)",
+                       r"\b(pit ?stop|stop|stationary) time\b", r"\bhow (quick|fast|slow) was (the |my |that )?(pit ?stop|stop)\b"]),
     ("why_not", [r"\bwhy (not|wouldn't (i|we)|don't (i|we))\b.*\b(hards?|mediums?|softs?)\b",
                  r"\b(hards?|mediums?|softs?) instead\b", r"\binstead of (the )?(hards?|mediums?|softs?)\b",
                  r"\bshould (i|we) (go|switch|change|run|use|take|put on)( to| on| onto| for)?( the)? "
-                 r"(hards?|mediums?|softs?)\b", r"\bwhat about (the )?(hards?|mediums?|softs?)\b"]),
+                 r"(hards?|mediums?|softs?)\b", r"\bwhat about (the )?(hards?|mediums?|softs?)\b",
+                 # 9 Nov (Suzuka): all three got "Say again" or the plan without the hards
+                 r"\b(what do you think|thoughts|how about)( about| of| on)? (the )?(hards?|mediums?|softs?)\b",
+                 r"\bhow much (slower|quicker|faster|longer) (would|will|are|is) (the )?(hards?|mediums?|softs?)\b",
+                 r"\b(run|do|give me) (a |the )?(strategy )?(sim\w*|simulation)\b(?!.*\bnow\b)"
+                 r".*\b(hards?|mediums?|softs?)\b"]),
     # "Will hards make it to the end?" (a new set of them, not the fitted ones); "What will they
     # be by the end?", "How will they be at the end of the second stint?" (the plan's stints)
     ("compound_to_end", [r"\b(hards?|mediums?|softs?)\b.*\b(make it|last|hold up|get) (to )?the (end|finish|flag)\b",
@@ -166,7 +177,10 @@ RULES: list[tuple[str, list[str]]] = [
     ("tyres_to_end", [r"\b(hold up|last|make it|get) (to|until|till) the (end|finish|flag)\b",
                       r"\bmake the (end|finish|flag)\b", r"\bget over \d+",
                       r"\bwill (these|the|my) tyres? (last|make it|hold)\b",
-                      r"\b(are|is) (these|the|my) tyres? (going to|gonna) (last|make it|hold)\b"]),
+                      r"\b(are|is) (these|the|my) tyres? (going to|gonna) (last|make it|hold)\b",
+                      # 9 Nov: "How's this tyre? We're looking for the rest of the race."
+                      r"\btyres?\b.*\b(rest of the race|the distance)\b",
+                      r"\b(rest of the race|the distance)\b.*\btyres?\b"]),
     # 29 Oct: "How are we looking right now?"
     ("status", [r"\bhow (are|is) (we|it|things|everything) (looking|going)\b",
                 r"\bhow('s| is) (it|everything) (looking|going)\b", r"\bstatus( update)?\b",
@@ -200,10 +214,13 @@ RULES: list[tuple[str, list[str]]] = [
     # 2 Nov: "Be definitive with the strategy. What should I do?"
     ("plan", [r"\bplan\b", r"\bstrategy\b", r"\bbe definitive\b", r"\bwhat should (i|we) do\b", r"\bwhen (do|should|will) (i|we) (box|pit|stop)\b",
               r"\bwhen('s| is) (the|my|our) (stop|pit ?stop|box)\b", r"\bhow many stops\b",
-              r"\bpit window\b", r"\bwhich tyres? next\b"]),
+              r"\bpit window\b", r"\bwhich tyres? next\b", r"\bstrat\b"]),
     # A named driver: "where am I gaining on Lando?", "gap to Norris?" (27 Oct race)
     ("gap_driver", [_DRIVER + r".*\b(gap|how far|interval)\b",
                     r"\b(gap|how far|interval)\b.*" + _DRIVER]),
+    # 9 Nov: "What was his last lap relative to mine?" after an answer naming Verstappen.
+    ("compare_driver", [r"\b(his|her|their) (last )?(lap|laps|times?|pace)\b.*\b(mine|me|my)\b",
+                        r"\b(relative|compared) to (mine|me|my)\b.*\b(his|her|their)\b"]),
     ("compare_driver", [_DRIVER + r".*\b(gain|gaining|losing|lose|quicker|faster|slower|pace|"
                         r"compare|catching|time|speed|winning|beating)\b",
                         r"\b(gain|gaining|losing|lose|quicker|faster|slower|pace|compare|"

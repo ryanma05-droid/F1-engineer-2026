@@ -166,7 +166,13 @@ class QuietZones:
 # straight is the best place to ask, and it's where the lap is crossed, so the lap time, tyre and
 # strategy calls all queue up at the moment you ask). Then by priority; within the same priority
 # box and safety car calls first, then the rest oldest first.
-_RANK = {"box": 2, "safety_car": 2}
+# Within a priority: box and safety car calls, then race craft that's only worth saying right
+# away (the last lap, a pass or fight, a car closing), then the rest (corner tips, tyre status:
+# still true a few seconds later). Jeddah, 9 Nov: a 13 s corner tip won the first gap after the
+# line, and "Got it back from Russell" and "Last lap" expired behind it.
+_RANK = {"box": 3, "safety_car": 3, "racecraft_countdown": 2, "racecraft_pass": 2,
+         "racecraft_defend": 2, "racecraft_attack": 2, "racecraft_penalty": 2,
+         "racecraft_damage": 2, "racecraft_battle": 1}
 
 # Holding the other calls for your answer: while the button is down (and the question takes up to
 # this long to say), then from the moment the question is heard until the answer is said, or this

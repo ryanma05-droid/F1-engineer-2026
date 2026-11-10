@@ -1,0 +1,63 @@
+{
+  "track_id": 13,
+  "track": "Suzuka",
+  "track_length_m": 5809.0,
+  "corners": [
+    {
+      "number": 1,
+      "name": "turn one",
+      "entry_m": 610.0,
+      "apex_m": 870.0,
+      "exit_m": 1050.0
+    },
+    {
+      "number": 2,
+      "name": "turn two",
+      "entry_m": 1055.0,
+      "apex_m": 1245.0,
+      "exit_m": 1315.0
+    },
+    {
+      "number": 3,
+      "name": "turn three",
+      "entry_m": 1315.0,
+      "apex_m": 1565.0,
+      "exit_m": 1750.0
+    },
+    {
+      "number": 4,
+      "name": "turn four",
+      "entry_m": 2220.0,
+      "apex_m": 2320.0,
+      "exit_m": 2365.0
+    },
+    {
+      "number": 5,
+      "name": "turn five",
+      "entry_m": 2365.0,
+      "apex_m": 2500.0,
+      "exit_m": 2675.0
+    },
+    {
+      "number": 6,
+      "name": "turn six",
+      "entry_m": 2790.0,
+      "apex_m": 2935.0,
+      "exit_m": 3105.0
+    },
+    {
+      "number": 7,
+      "name": "turn seven",
+      "entry_m": 3715.0,
+      "apex_m": 3960.0,
+      "exit_m": 4200.0
+    },
+    {
+      "number": 8,
+      "name": "turn eight",
+      "entry_m": 4935.0,
+      "apex_m": 5410.0,
+      "exit_m": 5685.0
+    }
+  ]
+}

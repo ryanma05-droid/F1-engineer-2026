@@ -1299,6 +1299,61 @@ def catch_phrase(name: str, gap_ms: float, gain_ms_per_lap: float, laps_to_go: i
     return f"{first} {_sentence(pace, f'about {number_words(min(laps, 99))} laps to catch them', f'only {number_words(min(laps_to_go, 99))} to go')} Not on pace alone."
 
 
+def hype_phrase(position: int | None, grid: int | None, laps_left: int | None) -> str:
+    """A lift on request, built on the race so far."""
+    if position == 1:
+        opts = ["You're leading this thing! Every lap you're out front is a lap they can't "
+                "touch you. Let's go!",
+                "P one, and you're making it look easy. Head down, keep the hammer down!",
+                "Front of the field, mate. Nobody's got an answer for you. Keep it coming!"]
+    elif position is not None and grid is not None and position < grid:
+        up = number_words(grid - position)
+        opts = [f"Up {up} from the grid and still coming! This is your race, go take it!",
+                f"{up.capitalize()} places gained already. You're flying, keep it going!",
+                f"Look at you, {up} places up. They can see you coming, make them nervous!"]
+    elif position is not None and position <= 3:
+        opts = ["On the podium right now. That's the job, now let's go and get a better one!",
+                "Top three and in the fight. Pace is there, let's go hunting!",
+                "Podium spot, mate. Keep the pressure on and see what happens!"]
+    else:
+        opts = ["Come on! Plenty of race left and the pace is in the car. Let's go and get them!",
+                "Head up, eyes forward. Every lap is a chance, let's make it count!",
+                "This is where it gets good. Clean laps, big moves, let's go!"]
+    line = pick("hype", opts)
+    if laps_left is not None and 0 < laps_left <= 3:
+        line += " " + _sentence(f"{number_words(laps_left)} to go, give it everything")
+    return line
+
+
+def pit_stop_time_phrase(lane_s: float, stop_s: float, typical_s: float | None) -> str:
+    """'Two point four stationary, twenty one point three in the pit lane. A tenth quicker than
+    the others' typical stop.'"""
+    text = _sentence(f"{say_gap(int(round(stop_s * 1000)))} stationary",
+                     f"{say_gap(int(round(lane_s * 1000)))} in the pit lane")
+    if typical_s is not None:
+        d = stop_s - typical_s
+        if abs(d) < 0.15:
+            text += " " + _sentence("about the same as everyone else's")
+        else:
+            text += " " + _sentence(f"{say_gap(int(round(abs(d) * 1000)))} "
+                                    f"{'slower' if d > 0 else 'quicker'} than the others' "
+                                    f"typical stop")
+    return text
+
+
+def damage_vs_field_phrase(gap_s: float) -> str:
+    """Damage from before your first clean lap: nothing of yours to compare with, so the gap to
+    the quickest cars is all there is (an upper bound: it's your driving too)."""
+    head = _sentence("it's been there since before your first clean lap, so I can't measure "
+                     "it exactly")
+    if gap_s <= 0.3:
+        return head + " " + _sentence("you're on the pace of the quickest cars, so it isn't "
+                                      "costing much", "I'd leave it")
+    return head + " " + _sentence(f"you're {say_gap(int(gap_s * 1000))} a lap off the quickest "
+                                  f"cars, some of that is the wing",
+                                  "fix it at your stop rather than an extra one")
+
+
 def damage_cost_phrase(loss_s: float, laps_to_go: int, pit_loss_s: float,
                        stop_lap: int | None) -> str:
     """'It's costing about four tenths a lap. Your stop on lap twelve fixes it, no extra stop.'"""

@@ -62,6 +62,10 @@ uv run python -m engineer.report                     # driver report PDF (data/r
   (Interlagos, 7 Nov: the half-lap "Box box" waited 10 s in the infield and was dropped). At
   SessionEnded HIGH calls AND the lap time (`END_FLUSH_TOPICS`) are said (one-shot qualifying
   ends the moment the lap is done).
+- Ranking within a priority (`_RANK`): box/safety car, then race craft only worth saying now
+  (countdown, pass/fight, defend, attack, penalty, damage), then battle encouragement, then the
+  rest (corner tips, tyre status). "Last lap" is must_say. Jeddah, 9 Nov: a 13 s corner tip
+  queued first won the gap after the line; "Last lap" and a fight call expired behind it.
 - Lap times wait up to `radio.lap_delta_max_wait_s` 10 s for a straight (was 3: Baku's line is
   2.5 s from turn 1, so the lap time was dropped on most laps; now said ~7 s after the line).
   A lap re-driven after a flashback to just before the line isn't announced again when within
@@ -356,6 +360,16 @@ uv run python -m engineer.report                     # driver report PDF (data/r
   last_corners, clarify ("off or up?" from the last call), damage cost (pace since the damage vs
   a stop; `RaceCraftAnalyzer.damage_lap`). Strategy follow-ups are logged (`_say_followup`).
   "Hearts" is heard for hards. Round-ten lap times: "one forty point four".
+- 9 Nov additions: teammate (same `team_id`: position, gap from the intervals, tyres), hype (a
+  lift built on position / places gained), pit_stop_time (your last stop from the pit-lane
+  timer, `PitLossMeter.stops`: stationary and lane time vs the others' typical stationary time),
+  "his/her/their lap ... mine" = compare_driver with the driver last named in a question or an
+  answer (`_last_driver`, set by gap answers too), why_not also for "what do you think about
+  hards", "how much slower would hards be", "run a strategy sim for hards" (not with "now":
+  that's box_now), "pit strat" = plan, "tyre ... rest of the race" = tyres_to_end. Damage from
+  before your first clean lap: compared with the 3 quickest cars on the same laps
+  (`_damage_vs_field`; said as an upper bound) instead of "give me a clean lap" forever. Plan
+  asked during / just after your stop: "working out the rest of the race after the stop".
 
 ## The installed app (for friends)
 

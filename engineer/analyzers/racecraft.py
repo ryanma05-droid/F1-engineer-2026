@@ -174,11 +174,13 @@ class RaceCraftAnalyzer:
         return self.state.session.safety_car_status in (1, 2)
 
     def _say(self, topic: str, text: str | None, priority: int = Priority.NORMAL,
-             max_wait_s: float = 10.0, wait_for_straight: bool = True) -> None:
+             max_wait_s: float = 10.0, wait_for_straight: bool = True,
+             must_say: bool = False) -> None:
         if text:
             self.director.submit(RadioCall(topic=topic, text=text, priority=priority,
                                            max_wait_s=max_wait_s,
-                                           wait_for_straight=wait_for_straight))
+                                           wait_for_straight=wait_for_straight,
+                                           must_say=must_say))
 
     # -- laps ------------------------------------------------------------------------------------
 
@@ -214,7 +216,8 @@ class RaceCraftAnalyzer:
                 self._say("racecraft_countdown", phrases.laps_to_go_phrase(
                     to_go, int(c.position[me]), self._name(ahead),
                     None if np.isnan(gap) else float(gap)),
-                    Priority.NORMAL if to_go == 1 else Priority.LOW, max_wait_s=30.0)
+                    Priority.NORMAL if to_go == 1 else Priority.LOW, max_wait_s=30.0,
+                    must_say=to_go == 1)        # Jeddah, 9 Nov: "Last lap" was dropped
 
     def _battle(self, e: ev.LapCompleted) -> None:
         """Encouragement in a battle that goes on for laps (see the module notes)."""
