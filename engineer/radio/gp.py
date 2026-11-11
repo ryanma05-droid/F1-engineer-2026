@@ -33,7 +33,7 @@ _NUM = (r"(?:(?:twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety)[ -]?)?"
         r"(?:zero|oh|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|"
         r"fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|a)")
 # "one point two seconds", "eight tenths", "a tenth", "three seconds"
-_GAP = re.compile(rf"\b({_NUM}(?: point {_NUM})?) (seconds?|tenths?)\b", re.I)
+_GAP = re.compile(rf"\b({_NUM}(?: point {_NUM})?) (seconds?|tenths?)\b", re.IGNORECASE)
 
 _ANSWER_IN = ["Okay {n},", "Understood.", "Yep.", "Okay,", "Copy, {n}.", "So,"]
 _PASS_OUT = ["Nicely done.", "Well controlled.", "Lovely, {n}.", "Good job.", "Very tidy."]
