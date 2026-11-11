@@ -743,7 +743,8 @@ function renderUpdate() {
   if (paint(box, `<label class="small" style="display:flex;gap:10px;align-items:center;margin-bottom:10px">
       <input type="checkbox" id="updAuto" ${u.auto_download ? "checked" : ""}> Download new versions automatically
       <span class="muted">(never during a session; installing is always your click)</span></label>
-      <div class="small">${state} <button class="btn" id="updCheck" style="margin-left:8px">Check now</button></div>`)) {
+      <div class="small">${state} <button class="btn" id="updCheck" style="margin-left:8px">Check now</button></div>
+      ${u.last_install_failed ? `<div class="small" style="color:var(--loss);margin-top:8px">The last update didn't finish installing. Close Race Engineer and run the setup file from the release page, or send ${esc(u.install_log || "install.log")}.</div>` : ""}`)) {
     $("#updAuto").onchange = e => updateAction("auto", {auto_download: e.target.checked});
     $("#updCheck").onclick = () => updateAction("check");
   }

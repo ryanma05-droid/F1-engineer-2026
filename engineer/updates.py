@@ -6,9 +6,14 @@ the app window shows a banner with the release page and "Download and install":
 
 - Windows: the setup file is downloaded into data/updates/ (in a thread, never on the asyncio
   loop; checked against the size, and the SHA-256 when GitHub gives one). "Install" closes the
-  engineer normally (uploads finish, history is saved), then runs the installer silently a few
-  seconds later, once the app's files are free; it starts the new version when done. Settings
-  and data live outside the program folder, so nothing is lost.
+  engineer normally (uploads finish, history is saved), then runs the installer silently once
+  the app's process has exited (PowerShell Wait-Process, not a fixed delay); it starts the new
+  version when done. The installer closes any other copy of the app still holding its files
+  (/CLOSEAPPLICATIONS, CloseApplications=force) and writes data/updates/install.log; a failed
+  install is reported on the next start. 11 Nov: an update could fail because the daily driver
+  report started in its own process at shutdown, right before the installer, and kept the
+  app's files in use for minutes; it's skipped when an install is waiting. Settings and data
+  live outside the program folder, so nothing is lost.
 - Mac: the banner links to the .dmg (an app from a disk image can't replace itself).
 
 `updates.auto_download: true` (Settings tab) downloads a new version by itself whenever no
@@ -22,6 +27,7 @@ import asyncio
 import hashlib
 import json
 import logging
+import os
 import subprocess
 import sys
 import time
@@ -37,8 +43,11 @@ CHECK_EVERY_S = 6 * 3600
 FIRST_CHECK_AFTER_S = 5.0
 TIMEOUT_S = 15
 USER_AGENT = "RaceEngineer-updater"
-INSTALL_DELAY_S = 4          # the app closes first, then the installer runs
-SILENT_ARGS = ["/SILENT", "/SP-", "/SUPPRESSMSGBOXES", "/NORESTART"]
+INSTALL_DELAY_S = 2          # after the app's process has gone, a moment for its files
+WAIT_EXIT_S = 60             # longest wait for the app to exit before installing anyway
+SILENT_ARGS = ["/SILENT", "/SP-", "/SUPPRESSMSGBOXES", "/NORESTART", "/CLOSEAPPLICATIONS"]
+LOG_NAME = "install.log"
+LOG_OK = "Installation process succeeded"   # Inno Setup writes this line on success
 
 
 def parse_version(v: str | None) -> tuple[int, ...] | None:
@@ -134,14 +143,42 @@ def _ok(path: Path, rel: Release) -> bool:
     return True
 
 
-def run_installer(path: Path) -> None:
-    """Windows: the installer, silently, a few seconds from now (the app closes meanwhile). It
-    starts the new version when it's done (packaging/installer.iss)."""
-    args = " ".join(SILENT_ARGS)
-    # ping waits without a console window or a keypress (timeout.exe needs a console).
-    cmd = f'ping -n {INSTALL_DELAY_S + 1} 127.0.0.1 >nul & start "" "{path}" {args}'
+def _ps(text: str) -> str:
+    """A PowerShell single-quoted string."""
+    return "'" + str(text).replace("'", "''") + "'"
+
+
+def installer_command(path: Path, log_path: Path, wait_pid: int) -> list[str]:
+    """The hidden PowerShell that waits for the app (process wait_pid) to exit, then runs the
+    installer silently with a log."""
+    args = ",".join(_ps(a) for a in SILENT_ARGS + [f'/LOG="{log_path}"'])
+    script = (f"Wait-Process -Id {int(wait_pid)} -Timeout {WAIT_EXIT_S} "
+              f"-ErrorAction SilentlyContinue; Start-Sleep -Seconds {INSTALL_DELAY_S}; "
+              f"Start-Process -FilePath {_ps(path)} -ArgumentList {args}")
+    return ["powershell", "-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden",
+            "-Command", script]
+
+
+def run_installer(path: Path, log_path: Path | None = None, wait_pid: int | None = None) -> None:
+    """Windows: the installer, silently, once this process has exited. It starts the new
+    version when it's done (packaging/installer.iss)."""
+    log_path = log_path or path.with_name(LOG_NAME)
+    log_path.unlink(missing_ok=True)                 # this install's log only
+    cmd = installer_command(path, log_path, wait_pid if wait_pid is not None else os.getpid())
     flags = 0x00000008 | 0x00000200 | 0x08000000  # DETACHED, NEW_PROCESS_GROUP, NO_WINDOW
-    subprocess.Popen(["cmd", "/c", cmd], creationflags=flags, close_fds=True)
+    subprocess.Popen(cmd, creationflags=flags, close_fds=True)
+
+
+def last_install(folder: Path, current: str) -> dict | None:
+    """What the last in-app install did, from its log: None when there's no log."""
+    path = Path(folder) / LOG_NAME
+    try:
+        text = path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return None
+    ok = LOG_OK in text
+    tail = [ln for ln in text.splitlines() if ln.strip()][-8:]
+    return {"ok": ok, "log": str(path), "tail": tail if not ok else [], "version": current}
 
 
 class Updater:
@@ -167,6 +204,10 @@ class Updater:
         self.on_install = None       # cli: close the app (then run_installer)
         self._task: asyncio.Task | None = None
         self._want_download = False
+        self.last_install = last_install(self.folder, current) if self.enabled else None
+        if self.last_install and not self.last_install["ok"]:
+            log.warning("the last update didn't finish (see %s): %s", self.last_install["log"],
+                        " | ".join(self.last_install["tail"]))
 
     @property
     def folder(self) -> Path:
@@ -191,7 +232,9 @@ class Updater:
                 "can_install": self.can_install, "state": self.state, "error": self.error,
                 "progress": round(self.progress, 3), "auto_download": bool(u.auto_download),
                 "dismissed": rel is not None and u.skip_version == rel.version,
-                "checked": self.checked_at is not None}
+                "checked": self.checked_at is not None,
+                "last_install_failed": bool(self.last_install and not self.last_install["ok"]),
+                "install_log": self.last_install["log"] if self.last_install else None}
 
     # -- running ---------------------------------------------------------------------------------
 
@@ -274,4 +317,4 @@ class Updater:
         if self.install_requested and self.file is not None and self.file.exists():
             print(f"Installing Race Engineer {self.latest.version}: it starts again when done.",
                   flush=True)
-            run_installer(self.file)
+            run_installer(self.file, self.folder / LOG_NAME)

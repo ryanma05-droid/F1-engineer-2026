@@ -159,3 +159,30 @@ def test_window_buttons_and_settings(tmp_path):
     assert plain.snapshot()["update"]["enabled"] is False
     assert asyncio.run(plain._api_update({"action": "check"})).status == 409
     assert isinstance(Release("1", "p"), Release)
+
+
+def test_installer_waits_for_the_app_to_exit_and_logs(tmp_path):
+    # 11 Nov: a fixed 4 s wait, and the daily report process holding the app's files.
+    from pathlib import Path
+    from engineer.updates import SILENT_ARGS, installer_command
+    exe = Path(r"C:\Users\o'neil\AppData\Local\RaceEngineer\data\updates\RaceEngineer-Setup-0.1.7.exe")
+    log = exe.with_name("install.log")
+    cmd = installer_command(exe, log, 4242)
+    assert cmd[0] == "powershell" and "-WindowStyle" in cmd
+    script = cmd[-1]
+    assert script.startswith("Wait-Process -Id 4242 ")
+    assert "'C:\\Users\\o''neil\\" in script                     # quotes escaped
+    assert "/CLOSEAPPLICATIONS" in SILENT_ARGS and "'/CLOSEAPPLICATIONS'" in script
+    assert f"'/LOG=\"{log}\"'" in script
+
+
+def test_a_failed_install_is_reported_next_start(tmp_path):
+    from engineer.updates import last_install
+    assert last_install(tmp_path, "0.1.7") is None
+    (tmp_path / "install.log").write_text("2026-11-11 Log opened.\nDeleteFile failed; code 5.\n"
+                                          "Access is denied.\n", encoding="utf-8")
+    got = last_install(tmp_path, "0.1.7")
+    assert got["ok"] is False and "Access is denied." in got["tail"]
+    (tmp_path / "install.log").write_text("Installation process succeeded.\nLog closed.\n",
+                                          encoding="utf-8")
+    assert last_install(tmp_path, "0.1.7")["ok"] is True

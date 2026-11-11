@@ -770,3 +770,17 @@ Learned: soft wear at Jeddah was overestimated (7 laps: 61 % predicted, 51 % at 
 first race there; the plan at Bahrain switched hards -> mediums (tight, 59 %) when the softs
 lasted better; you chose hards (box-now answer gave the cost) and won.
 
+## Update install snag (11 Nov)
+
+A friend's update (from an older version) hit a snag; no error text yet. Checked: the release
+check and download work (v0.1.6 found, 155 MB, SHA-256 matches, 6 s); old settings files still
+load (only additions since 0.1.3); no library changes since 0.1.3. Found and fixed:
+- [x] "Install and restart" started the daily driver report in its own process at shutdown,
+      right before the silent installer: it holds the app's files for minutes. Skipped now.
+- [x] Fixed 4 s wait -> waits for the app's process to exit; installer closes any other copy
+      (/CLOSEAPPLICATIONS, CloseApplications=force)
+- [x] Installs write data/updates/install.log; a failed one shows in Settings > Updates
+- [ ] Not tried on Windows yet; v0.1.6's own updater still has the old behaviour (the
+      installer-side close applies from the next setup file)
+- [ ] Need from the friend: what they saw, and %LOCALAPPDATA%\RaceEngineer\logs\race-engineer.log
+

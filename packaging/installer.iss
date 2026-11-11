@@ -24,6 +24,10 @@ SolidCompression=yes
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 WizardStyle=modern
+; Close any copy of the app still using its files (a background driver report, a helper
+; process) instead of failing on "file in use"; the [Run] entry below restarts it.
+CloseApplications=force
+RestartApplications=no
 UninstallDisplayName=Race Engineer
 
 [Files]

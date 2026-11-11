@@ -394,9 +394,15 @@ uv run python -m engineer.report                     # driver report PDF (data/r
   Releases (`updates.repo`) 5 s after start and every 6 h, in a thread. Newer -> banner in the app
   window (`/api/update`: download, install, dismiss = `updates.skip_version`, check, auto).
   Windows: the setup .exe goes to data/updates/ (size + GitHub's sha256 checked); "Install and
-  restart" stops the app normally (cli `stopping` event; uploads/history/report as usual), then
-  as its last step `run_installer` starts it silently ~4 s later via cmd/ping, and installer.iss
-  restarts the app after a silent install (`skipifnotsilent`). `updates.auto_download` fetches
+  restart" stops the app normally (cli `stopping` event; uploads/history as usual, but NOT the
+  daily report: its own process held the app's files and broke the install, 11 Nov), then as its
+  last step `run_installer` starts a hidden PowerShell that waits for the app's process to exit
+  (`Wait-Process`, 60 s cap) and runs the installer silently with `/CLOSEAPPLICATIONS` and
+  `/LOG=data/updates/install.log`; installer.iss has `CloseApplications=force` and restarts the
+  app after a silent install (`skipifnotsilent`). The next start reads install.log
+  (`last_install`): no "Installation process succeeded" = a warning in the log and a red line
+  in Settings > Updates. Fixes in the updater itself only apply from the version AFTER the one
+  doing the updating; installer.iss changes apply to the installer being run. `updates.auto_download` fetches
   it ahead whenever no session is live; installing is always a click. Mac: a link to the .dmg.
   v0.1.4 and earlier have no updater: the first version with it has to be installed by hand.
 - The installed app adds each run's recordings to `laps`/`stints` when it closes

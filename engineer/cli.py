@@ -305,8 +305,9 @@ async def _run(cfg: Config, record: bool | None, voice: bool, ptt_on: bool = Tru
                 upload_pending(cfg)          # every one not sent yet, not only this run's
             except KeyboardInterrupt:
                 print("Upload skipped. Later: uv run python -m engineer.ingest.share --pending")
-        if recorder and recorder.paths_this_run:
-            # Once a day, in its own process (closing the window doesn't stop it).
+        if recorder and recorder.paths_this_run and not updater.install_requested:
+            # Once a day, in its own process (closing the window doesn't stop it). Not when an
+            # update is about to install: that process would hold the app's files (11 Nov).
             from engineer.report.daily import start_in_background
             start_in_background(cfg, config_path)
         updater.run_if_requested()          # last: the installer replaces the app's files
