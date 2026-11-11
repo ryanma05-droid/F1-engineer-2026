@@ -105,3 +105,45 @@ def test_add_recordings_appends_and_replaces_a_session(tmp_path):
     add_recordings([fixture], out, progress=lambda m: None)       # same session again: replaced
     assert pq.read_table(out / "laps.parquet").num_rows == 100
     assert pq.read_table(out / "stints.parquet").num_rows > 0
+
+
+def test_stints_split_by_track_and_restart_in_one_session_uid():
+    # 12 Nov: an online lobby keeps one session UID for every race: Suzuka then Jeddah were one
+    # set of stints, filed as Suzuka. A restart (lap number back to 1) is a new stint too.
+    suzuka = [_lap_on(13, n, 3.0 * n) for n in range(1, 6)]
+    jeddah = [_lap_on(29, n, 4.0 * n) for n in range(1, 6)]
+    restart = [_lap_on(29, n, 5.0 * n) for n in range(1, 4)]
+    stints = summarize_stints(suzuka + jeddah + restart)
+    assert sorted((s.track_id, s.laps) for s in stints) == [(13, 5), (29, 3), (29, 5)]
+
+
+def _lap_on(track, n, wear):
+    import dataclasses
+    fields = {f.name: None for f in dataclasses.fields(LapFeatures)}
+    fields.update(session_uid=7, track_id=track, session_type=15, car_idx=0, is_player=True,
+                  lap=n, stint=1, stint_lap=n, lap_time_ms=90000, invalid=False,
+                  pit_in_lap=False, pit_out_lap=False, race_start_lap=n == 1, safety_car=False,
+                  visual_compound=17, actual_compound=19, tyre_age_laps=n - 1,
+                  wear=(wear, wear, wear, wear))
+    return LapFeatures(**fields)
+
+
+def test_stints_refreshed_once_from_the_stored_laps(tmp_path):
+    """Tables written before the 12 Nov fix are summarised again from laps.parquet."""
+    import dataclasses
+
+    import pyarrow.parquet as pq
+
+    nan4 = (float("nan"),) * 4
+    laps = [dataclasses.replace(lap, damage=nan4, blisters=nan4, inner_avg=nan4,
+                                surface_avg=nan4, surface_max=nan4, hot_frac=nan4,
+                                cold_frac=nan4, fuel_kg=float("nan"), session_time=1.0)
+            for lap in ([_lap_on(10, n, 2.0 * n) for n in range(1, 6)]
+                        + [_lap_on(29, n, 3.0 * n) for n in range(1, 6)])]
+    assert LapFeatures.from_row(laps[3].to_row()).to_row() == laps[3].to_row()   # NaN-safe
+    tables._write([r.to_row() for r in laps], tmp_path / "laps.parquet")
+    tables._write([{"session_uid": "x", "track_id": 10}], tmp_path / "stints.parquet")
+    assert tables.refresh_stints(tmp_path)
+    rows = pq.read_table(tmp_path / "stints.parquet").to_pylist()
+    assert sorted(r["track_id"] for r in rows) == [10, 29]
+    assert not tables.refresh_stints(tmp_path)          # once only

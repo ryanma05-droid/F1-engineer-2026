@@ -482,6 +482,12 @@ uv run python -m engineer.report                     # driver report PDF (data/r
   v0.1.4 and earlier have no updater: the first version with it has to be installed by hand.
 - The installed app adds each run's recordings to `laps`/`stints` when it closes
   (`features_auto_add`), so the tyre/strategy history grows without a manual build.
+- Stints are per session UID, track, session type and "part" (a car's lap number dropping by 2+
+  = a restart or the next race), not per UID alone (12 Nov: a lobby's Suzuka and Jeddah races
+  were one set of stints filed as Suzuka). When `summarize_stints` changes, bump
+  `tables.STINTS_VERSION`: `refresh_stints` (cli start-up and `add_recordings`) re-summarises
+  old stints.parquet tables from laps.parquet (`LapFeatures.from_row`; marker
+  stints_version.txt), no replays needed.
 
 ## Settings and uploads
 

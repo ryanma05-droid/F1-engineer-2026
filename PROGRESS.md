@@ -837,3 +837,11 @@ From the real radio study's most common unprompted topics.
   console-only mode added about six calls over 20 laps.
 - [ ] Not tried live yet
 
+
+## Tyre history: stints split per race (12 Nov)
+
+- [x] A lobby's several races under one session UID were summarised as one set of stints, filed
+      under the first track (Suzuka and Jeddah together: Suzuka mediums looked like 3.2 %/lap,
+      really 4.3; Jeddah had no history). Stints now split by track, session type and restart.
+- [x] Existing tables are fixed by themselves on the next start (re-summarised from the stored
+      lap rows, once; no replays)

@@ -32,6 +32,12 @@ from engineer.tools.queries import corner_stats
 
 log = logging.getLogger(__name__)
 
+# Bump when summarize_stints changes: existing stints.parquet tables are then summarised again
+# from laps.parquet (the lap rows were right all along) by `refresh_stints`.
+# 2 (12 Nov): one session UID holding several tracks / restarts is split into separate stints.
+STINTS_VERSION = 2
+STINTS_MARKER = "stints_version.txt"
+
 
 def features_from_recording(path: Path | str) -> list[LapFeatures]:
     return _replay(path)[0]
@@ -121,6 +127,7 @@ def build(sessions_dir: Path | str, features_dir: Path | str, progress=print,
     stints = summarize_stints(laps)
     _write([r.to_row() for r in laps], features_dir / "laps.parquet")
     _write([s.to_row() for s in stints], features_dir / "stints.parquet")
+    _mark_stints(features_dir)
     _write(corner_rows, features_dir / "corners.parquet")
     _write(pit_rows, features_dir / "pit_losses.parquet")
     return len(laps), len(stints)
@@ -150,7 +157,34 @@ def add_recordings(paths: list[Path], features_dir: Path | str, progress=print) 
         if path.exists():
             old = [r for r in pq.read_table(path).to_pylist() if r["session_uid"] not in uids]
         _write(old + rows, path)
+        if name == "laps":
+            refresh_stints(features_dir)     # an old table: fix every session, not just these
+    _mark_stints(features_dir)
     return len(new)
+
+
+def _mark_stints(features_dir: Path) -> None:
+    (features_dir / STINTS_MARKER).write_text(str(STINTS_VERSION), encoding="ascii")
+
+
+def refresh_stints(features_dir: Path | str) -> bool:
+    """Summarise stints.parquet again from laps.parquet when it was written by an older
+    summarize_stints (no marker, or an older version). Quick: no recordings are replayed.
+    Returns True when it rebuilt."""
+    features_dir = Path(features_dir)
+    laps_path, marker = features_dir / "laps.parquet", features_dir / STINTS_MARKER
+    try:
+        if marker.read_text(encoding="ascii").strip() == str(STINTS_VERSION):
+            return False
+    except (OSError, ValueError):
+        pass
+    if not laps_path.exists():
+        return False
+    laps = [LapFeatures.from_row(r) for r in pq.read_table(laps_path).to_pylist()]
+    _write([s.to_row() for s in summarize_stints(laps)], features_dir / "stints.parquet")
+    _mark_stints(features_dir)
+    log.info("tyre history: stints summarised again from %d laps", len(laps))
+    return True
 
 
 def query(features_dir: Path | str, sql: str):

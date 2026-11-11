@@ -183,6 +183,11 @@ async def _run(cfg: Config, record: bool | None, voice: bool, ptt_on: bool = Tru
     if record is not None:
         cfg.record = record
 
+    from engineer.features.tables import refresh_stints
+    try:            # tyre history written by an older stint summary: redo it from the lap rows
+        refresh_stints(cfg.features_path)
+    except Exception as exc:
+        log.warning("could not refresh the tyre history: %s", exc)
     from engineer.strategy.runner import WorkerRunner
     strategy_runner = WorkerRunner(cfg.features_path)     # strategy sims in their own process
     # Real F1 pit losses per track, a starting value until the game's own stops are timed.

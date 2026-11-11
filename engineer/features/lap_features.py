@@ -22,13 +22,13 @@ Unknown, never zero: wear/damage hidden by "Your Telemetry" stay NaN, as in the 
 from __future__ import annotations
 
 import math
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, fields
 
 import numpy as np
 
 from engineer.bus import events as ev
 from engineer.ingest.formats import f1_2025 as f
-from engineer.state.race_state import N, WHEELS, RaceState
+from engineer.state.race_state import WHEELS, N, RaceState
 
 WHEEL_SUFFIXES = tuple(w.lower() for w in WHEELS)       # rl, rr, fl, fr
 INTER, WET = 7, 8                                       # visual compounds
@@ -217,6 +217,23 @@ class LapFeatures:
             row["fuel_kg"] = None
         return row
 
+    @classmethod
+    def from_row(cls, row: dict) -> LapFeatures:
+        """Back from a laps.parquet row (to_row's opposite, without the per-sector temps), so
+        stints can be summarised again from the stored laps without replaying recordings."""
+        row = dict(row)
+        kw = {}
+        for key in ("wear", "damage", "blisters", "inner_avg", "surface_avg", "surface_max",
+                    "hot_frac", "cold_frac"):
+            kw[key] = tuple(math.nan if (v := row.pop(f"{key}_{s}", None)) is None else float(v)
+                            for s in WHEEL_SUFFIXES)
+        uid = row.get("session_uid")
+        row["session_uid"] = int(uid, 16) if isinstance(uid, str) else int(uid or 0)
+        if row.get("fuel_kg") is None:
+            row["fuel_kg"] = math.nan
+        names = {fl.name for fl in fields(cls)} - {"temps"} - set(kw)
+        return cls(**{k: row.get(k) for k in names}, **kw)
+
 
 def _opt_int(x: float) -> int | None:
     return None if x is None or (isinstance(x, float) and math.isnan(x)) else int(x)
@@ -376,12 +393,25 @@ class Stint:
 
 
 def summarize_stints(laps: list[LapFeatures]) -> list[Stint]:
-    """Group lap records (any cars, any sessions) into stints."""
-    groups: dict[tuple[int, int, int], list[LapFeatures]] = {}
+    """Group lap records (any cars, any sessions, in the order they were driven) into stints.
+
+    One session UID can hold several sessions: an online lobby keeps one for every race, and a
+    restart keeps it too. So a stint is per session UID, track, session type and "part": a
+    car's lap number dropping by more than one (a new race or a restart; a flashback only
+    re-drives the same lap) starts a new part. 12 Nov: a lobby's Suzuka and Jeddah races were
+    one set of stints, filed as Suzuka; Jeddah had none of yours."""
+    groups: dict[tuple, list[LapFeatures]] = {}
+    part: dict[tuple, int] = {}
+    last: dict[tuple, int] = {}
     for r in laps:
-        groups.setdefault((r.session_uid, r.car_idx, r.stint), []).append(r)
+        who = (r.session_uid, r.car_idx, r.track_id, r.session_type)
+        prev = last.get(who)
+        if prev is not None and r.lap < prev - 1:
+            part[who] = part.get(who, 0) + 1
+        last[who] = r.lap
+        groups.setdefault(who + (part.get(who, 0), r.stint), []).append(r)
     out = []
-    for (uid, car, stint), rs in groups.items():
+    for (uid, car, _track, _stype, _part, stint), rs in groups.items():
         rs = sorted(rs, key=lambda r: r.lap)
         clean = [r.lap_time_ms for r in rs if r.clean and not r.safety_car]
         on_set = [r for r in rs if not r.pit_in_lap] or rs
