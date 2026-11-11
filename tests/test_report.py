@@ -2,7 +2,7 @@
 
 import json
 import shutil
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -18,21 +18,7 @@ FIXTURE = Path(__file__).parent / "fixtures" / "austria_race_5laps.zst"
 AUSTRIA_MAP = Path(__file__).parent.parent / "data" / "tracks" / "austria.json"
 
 
-@pytest.fixture(scope="module")
-def data_dir(tmp_path_factory) -> Path:
-    d = tmp_path_factory.mktemp("data")
-    (d / "sessions").mkdir()
-    (d / "tracks").mkdir()
-    shutil.copy(FIXTURE, d / "sessions" / "20261020T180000Z_0c69b56cedd41e45.zst")
-    shutil.copy(AUSTRIA_MAP, d / "tracks")
-    return d
-
-
-@pytest.fixture(scope="module")
-def entry(data_dir) -> dict:
-    cache = AnalysisCache(data_dir / "reports" / "cache", TrackMaps(data_dir / "tracks"))
-    rec = next((data_dir / "sessions").glob("*.zst"))
-    return cache.get(rec, progress=lambda m: None)
+# data_dir and entry (the real race, analysed once for the whole run) live in conftest.py.
 
 
 def test_analysis_of_a_real_race(entry):
@@ -74,7 +60,7 @@ def test_report_finds_strengths_and_ranks_themes(entry):
 
 
 def test_newer_sessions_count_more():
-    now = datetime(2026, 11, 30, tzinfo=timezone.utc)
+    now = datetime(2026, 11, 30, tzinfo=UTC)
     assert recency_weight("2026-11-30T00:00:00+00:00", now) == 1.0
     assert recency_weight("2026-10-31T00:00:00+00:00", now) == pytest.approx(0.5)
 
@@ -86,7 +72,9 @@ def test_skipped_recordings_dont_break_the_report():
     assert "Not used: x.zst" in render_html(r)
 
 
-def test_daily_report_only_when_due(data_dir, entry, monkeypatch):
+def test_daily_report_only_when_due(data_dir, entry, monkeypatch, tmp_path):
+    shared, data_dir = data_dir, tmp_path / "data"      # a copy: this test adds a session
+    shutil.copytree(shared, data_dir)
     cfg = Config(data_dir=data_dir)
     monkeypatch.setattr(daily, "html_to_pdf", lambda html, pdf: False)   # no browser in tests
     assert daily.due(cfg)                                # a recording, no report yet
@@ -105,6 +93,7 @@ def test_daily_report_only_when_due(data_dir, entry, monkeypatch):
 
 def test_a_failed_analysis_is_retried_on_a_later_day(tmp_path, monkeypatch):
     import json as _json
+
     from engineer.report import analysis
     from engineer.report.analysis import AnalysisCache
 

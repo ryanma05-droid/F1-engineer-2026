@@ -177,9 +177,9 @@ def test_a_lap_re_driven_after_a_flashback_is_not_announced_twice():
 def test_a_long_battle_gets_encouragement():
     # 7 Nov: "more encouragement when it seems like there's a battle that is consistent".
     # Behind Norris, eight tenths, lap after lap (no closing, so no "catching" call).
-    race = FakeRace({0: [30000] * 11, 1: [30000] * 11}, positions={0: 2, 1: 1},
+    race = FakeRace({0: [30000] * 8, 1: [30000] * 8}, positions={0: 2, 1: 1},
                     names=["PLAYER", "NORRIS"], extra_packets=False, gap_ahead_ms={0: 800})
-    _, radio = run(race, duration_ms=335000)
+    _, radio = run(race, duration_ms=215000)          # battle laps 2-7: calls after 4 and 7
     battle = [r for r in radio if "gearbox" in r]
     assert battle and battle[0].startswith("Three laps on Norris's gearbox."), radio
     assert 2 <= sum("Norris" in r and "laps" in r for r in radio) <= 4   # repeats, not every lap

@@ -19,7 +19,6 @@ from engineer.report.focus import (
 from engineer.report.insights import build_report
 from engineer.state.track_maps import TrackMap, detect_corners
 from tests.test_corners import profile, trace
-from tests.test_report import data_dir, entry  # noqa: F401  (fixtures)
 
 FOCUS = CoachingFocus("2026-11-04T00:00:00+00:00",
                       {10: [FocusCorner(2, 0.18, 12, "early_braking", ("brake_early",))]},
@@ -27,7 +26,7 @@ FOCUS = CoachingFocus("2026-11-04T00:00:00+00:00",
                         "radio": "braking"}])
 
 
-def test_focus_from_a_real_report_and_back(entry, tmp_path):  # noqa: F811
+def test_focus_from_a_real_report_and_back(entry, tmp_path):
     r = build_report([entry], datetime.fromisoformat(entry["recorded_at"]) + timedelta(days=1))
     f = focus_from_report(r)
     for c in f.for_track(17):

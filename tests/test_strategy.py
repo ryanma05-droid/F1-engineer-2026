@@ -343,7 +343,7 @@ def test_no_more_calls_after_the_planned_stop():
     race = FakeRace({0: [30000] * 12}, wear_per_lap=[4, 4, 6, 8], extra_packets=False,
                     tyre_sets=SETS, fuel_per_lap=1.0, pit_laps={0: stop.lap},
                     compound_after_pit=stop.compound)
-    eng, radio = run(race)
+    eng, radio = run(race, duration_ms=(stop.lap + 3) * 30000)   # the stop and three laps on
     calls = [r for _, r in strategy_calls(radio)]
     assert sum(r.startswith("Box this lap") for r in calls) == 1
     assert sum(r.startswith("Box box") for r in calls) == 1
@@ -383,7 +383,7 @@ def test_short_races_and_disabled_strategy_stay_quiet():
     assert strategy_calls(radio) == []
     race = FakeRace({0: [30000] * 12}, wear_per_lap=[4, 4, 6, 8], extra_packets=False,
                     tyre_sets=SETS)
-    _, radio = run(race, Strategy(enabled=False))
+    _, radio = run(race, Strategy(enabled=False), duration_ms=100000)   # past the plan (~65 s)
     assert strategy_calls(radio) == []
 
 

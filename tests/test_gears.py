@@ -8,7 +8,6 @@ from engineer.state.race_state import SessionInfo
 from engineer.state.track_maps import TrackMap, detect_corners
 from engineer.tools.queries import corner_deltas
 from tests.test_corners import profile, trace
-from tests.test_report import data_dir, entry  # noqa: F401  (fixtures)
 
 
 def _geared(speed, brake, throttle, apex_gear, lap=1):
@@ -65,7 +64,7 @@ def test_report_habit_and_its_live_cause():
     assert THEMES["low_gear"]([corner(9, 0.5, 0.0, 0.1)])[0] is None
 
 
-def test_automatic_gears_in_the_real_recording(entry):  # noqa: F811
+def test_automatic_gears_in_the_real_recording(entry):
     """The fixture race was driven on the automatic gearbox: your apex gears aren't recorded as
     a choice, so the report has no gear habit."""
     assert entry["manual_gears"] is False

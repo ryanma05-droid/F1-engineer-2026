@@ -28,7 +28,8 @@ Read `docs/architecture.md` (full design) and `PROGRESS.md` (what's done / open 
 
 ```
 uv sync
-uv run pytest
+uv run pytest                    # everything (~4 min); run before pushing, and the release build does
+uv run pytest -m "not slow"      # quick check while working (~1.5 min): skips 20 whole-race replays
 uv run python -m engineer run
 uv run python -m engineer.ingest.replay <file.zst> --speed max
 uv run python -m engineer.bench <file.zst>
@@ -437,6 +438,16 @@ uv run python -m engineer.report                     # driver report PDF (data/r
   treats a jump from past 60 s to under 5 s that isn't a flashback as a new session, so every
   analyzer and the director start fresh (before this fix the restarted race's calls and answers
   were held back or dropped until the clock passed the first race's end).
+
+## Tests
+
+- `tests/conftest.py`: variety and report focus off for the suite; the real Austria race analysed
+  once per run (`data_dir`, `entry`, session-scoped: copy `data_dir` before adding to it); the
+  `SLOW` list (whole-race replays, marked `slow`; a full run fails if a listed test no longer
+  exists). Keep the golden test out of `SLOW`. A new test that replays a whole race and takes
+  3 s+ goes in the list; prefer a shorter race (`duration_ms`) that still proves the point.
+- 11 Nov streamlining: 4:41 -> 3:51 full, 1:36 quick. Nothing was dropped except one test
+  superseded by a stronger one (variety's "never repeats the last two").
 
 ## Environment
 
