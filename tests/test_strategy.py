@@ -578,3 +578,35 @@ def test_your_undercut_push_in_push_out_and_whether_it_worked():
     assert box and box[0].endswith("Push in, it's the undercut on Norris."), radio
     assert any(r.startswith("Push now, big out lap. Norris hasn't stopped yet") for r in radio)
     assert any(r.startswith("Undercut worked!") for r in radio), [r for r in radio if "ndercut" in r]
+
+
+def test_undercut_target_survives_the_pit_lane_shuffle():
+    # Miami, 11 Nov: you boxed 2.1 s behind Antonelli, who hadn't stopped. At your pit entry the
+    # car "just ahead" was Russell coming out of the pits (gap 0), so no undercut was tracked and
+    # the out lap push call never came. The car ahead last seen on track counts.
+    from engineer.ingest.formats.f1_2025 import PacketId
+    eng = build_engine(Config(data_dir="/nonexistent-test-dir"), out=io.StringIO(),
+                       priors=WearPriors(), strategy_runner=InlineRunner(None))
+    st, sa = eng.pipeline.state, eng.strategy
+    st.session_uid, st.player_index, st.session_time = 1, 0, 500.0
+    st.session.session_type, st.session.total_laps, st.session.safety_car_status = 15, 14, 0
+    c = st.cars
+    c.active[:3] = True
+    c.names[:3] = ["PLAYER", "ANTONELLI", "RUSSELL"]
+    c.position[:3] = [8, 7, 1]
+    c.delta_to_car_in_front_ms[:3] = [2100, 1000, 0]
+    c.delta_to_leader_ms[:3] = [20000, 17900, 0]
+    c.pit_status[:3] = 0
+    c.num_pit_stops[:3] = 0
+    sa.after_packet(PacketId.LAP_DATA)
+    assert sa._undercut_target() == (1, 0)
+    # Into the pit lane: Russell, out of his stop, now "just ahead" at a gap of 0.
+    st.session_time = 510.0
+    c.pit_status[[0, 2]] = 1
+    c.position[:3] = [8, 6, 7]
+    c.delta_to_car_in_front_ms[0] = 0
+    c.num_pit_stops[2] = 1
+    sa.after_packet(PacketId.LAP_DATA)
+    assert sa._undercut_target() == (1, 0)
+    st.session_time = 530.0                           # seen too long ago: not a target
+    assert sa._undercut_target() is None

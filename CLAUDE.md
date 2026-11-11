@@ -175,6 +175,11 @@ uv run python -m engineer.overlay --replay <file.zst> --locked   # ... fed by a 
   ends "Push in, it's the undercut on Norris"; at your pit exit, if they're still out, "Push
   now, big out lap..."; at their pit exit, "Undercut worked!" or "Norris stayed in front ...".
   A box call you don't follow forgets the target (worked out again at your real pit entry).
+  The target is the nearest car ahead ON TRACK (cars in the pit lane skipped, gap from the
+  leader gaps when not adjacent), remembered on every Lap Data packet while you're on track
+  (`undercut_seen`); from the pit lane `_undercut_target` uses that if it's under
+  UNDERCUT_SEEN_S (15 s) old (Miami, 11 Nov: at your pit entry Russell, out of his stop, was
+  "just ahead" at a gap of 0, so the undercut on Antonelli 2.1 s ahead was never tracked).
   The car behind pitting (undercut on you) now adds "Push now, big laps on these."
 - Weather, rivals' penalties, rival information (12 Nov; the real radio's most common
   unprompted topics, see docs/gp-radio-study.md). Shared logic in `tools/rivals.py` (calls and
@@ -196,6 +201,12 @@ uv run python -m engineer.overlay --replay <file.zst> --locked   # ... fed by a 
   ahead/behind. State also has `total_warnings`, `corner_cutting_warnings` per car. Answers:
   weather adds the forecast; "How's Norris looking?" / "what tyres is the car ahead on" (rival);
   "any penalties?" / "how many warnings?" (penalties).
+  Miami, 11 Nov (8 of 13 questions got "Say again"): "is this an undercut opportunity?" /
+  "undercut Kimi?" (undercut: the car ahead on track, gap, tyres, pace vs you, close enough or
+  not (`undercut_push_gap_s`), where you'd come out, the plan's lap; from the pit lane "big out
+  lap"); "do you think Ocon will pit?", "how am I looking to Kimi?", "battle with / progress to
+  / what about <driver>" (rival; asked about pitting and no stops yet in the dry adds "They still
+  have to stop."); "chatty mode" / "quiet mode" by name; "will I need to pit again?" (plan).
 - Passes: a car in the pit lane when the pass settles (4 s on) wasn't passed on track, so no call
   (Baku, 7 Nov: OVTK came on the pit entry road, before pit status changed; Antonelli's stop
   became "Good move, P two"). The "pace dropping" call is skipped on an in-lap.

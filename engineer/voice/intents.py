@@ -103,6 +103,9 @@ RULES: list[tuple[str, list[str]]] = [
     # 29 Oct Imola: "Repeat that."
     ("repeat", [r"\brepeat\b", r"\bsay (that|it) again\b", r"\bcome again\b",
                 r"\bwhat did you (just )?say\b", r"\bdidn't (catch|hear) that\b"]),
+    # 11 Nov Miami: "Go chatty mode." The modes by name (Quiet is the app's name for terse).
+    ("tempo_terse", [r"\b(quiet|terse) mode\b", r"\b(go|switch|change|put me)( back)? (to |in ?to )?(quiet|terse)\b"]),
+    ("tempo_chatty", [r"\bchatty mode\b", r"\b(go|switch|change|put me)( back)? (to |in ?to )?chatty\b"]),
     ("quiet", [r"\b(be )?quiet\b", r"\bstop talking\b", r"\bshut up\b", r"\bsilence\b",
                r"\bleave me alone\b", r"\bno more (calls|talking)\b"]),
     ("detail_specific", [r"\bgive me (the )?(numbers|specifics|exact numbers)\b",
@@ -203,13 +206,24 @@ RULES: list[tuple[str, list[str]]] = [
     # 12 Nov (from the real radio): penalties, and what a rival is doing.
     ("penalties", [r"\bpenalt(y|ies)\b", r"\b(track limits?|warnings?)\b.*\b(how many|do i have|count)\b",
                    r"\bhow many (track limits?|warnings|strikes)\b", r"\bany warnings\b"]),
+    # 11 Nov Miami: "Is this an undercut opportunity?", "Undercut Kimi?" (heard "Lie undercut,
+    # Kimmy").
+    ("undercut", [r"\bunder ?cut\b"]),
     ("rival", [r"\bhow('s| is| are)\b.*" + _DRIVER + r".*\b(looking|doing|going|getting on)\b",
                r"\bhow('s| is)\b.*\b(car|guy) (ahead|in front|behind)\b.*\b(looking|doing|going)\b",
                r"\bwhat tyres? (is|are|has|have) " + _DRIVER + r"\b",
                r"\bwhat (is|are) " + _DRIVER + r" on\b",
                r"\bwhat tyres? (is|are) the (car|guy) (ahead|in front|behind)\b",
                r"\b(intel|info|anything) on " + _DRIVER + r"\b",
-               r"\bhow old are (his|her|their|" + _DRIVER[3:-3] + r"'s) tyres\b"]),
+               r"\bhow old are (his|her|their|" + _DRIVER[3:-3] + r"'s) tyres\b",
+               # 11 Nov Miami: "Do you think Ocon will pit?", "How am I looking to Kimi?",
+               # "What about this battle with Kimmy?", "Progress to Kimmy." all got "Say again".
+               _DRIVER + r".*\b(will|gonna|going to|planning to|need to|have to|due to)\b.*"
+               r"\b(pit|box|stop)", r"\b(will|is|does)\b " + _DRIVER + r".*\b(pit|box|stop)",
+               r"\bhow (am i|are we)\b.*\b(looking|doing|going)\b.*\b(to|at|against|on|with|"
+               r"versus|vs|compared to)\b.*" + _DRIVER,
+               r"\b(battle|fight|scrap|progress|dice)\b.*" + _DRIVER,
+               r"\bwhat about " + _DRIVER + r"\b"]),
     ("driver_pitted", [r"\b(has|did|is|have) " + _DRIVER + r" (pitted|pit|boxed|box|stopped|been in)\b",
                        r"\b" + _DRIVER + r" (pitted|boxed|stopped)\b"]),
     # "Can I catch the leader?", "Will I catch Norris?"
@@ -244,7 +258,7 @@ RULES: list[tuple[str, list[str]]] = [
               r"\b(when|what) (am|are) (i|we) (pitting|boxing|stopping)\b",
               r"\bwhen\b.*\b(pitting|boxing|stopping)\b",
               r"\bwhere should (i|we) (pit|box|stop)\b",
-              r"\bdo (i|we) (have|need) to (stop|pit|box)( again)?\b",
+              r"\b(do|will) (i|we) (have|need) to (stop|pit|box)( again)?\b",
               r"\b(what|which) tyres? should (i|we) (pit|box|stop|go) (for|on|onto)\b",
               r"\b(what|which) tyres? should (i|we) be on\b",
               r"\bwe('re| are) on (the )?(hards|mediums|softs|new tyres|fresh tyres)\b",

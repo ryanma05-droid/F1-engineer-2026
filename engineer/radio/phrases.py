@@ -1117,6 +1117,49 @@ def rival_answer_phrase(name: str | None, r, limit_pct: float) -> str:
     return " ".join(out)
 
 
+def undercut_answer_phrase(name: str | None, r, close_s: float, position: int | None,
+                           rejoin, plan_lap: int | None, lap: int | None) -> str:
+    """'Antonelli ahead, two point one, six-lap-old mediums, no stops yet. Five tenths a lap
+    slower than you lately. Close enough to undercut. Box now and you come out P eleven. Plan
+    is box end of lap eight.'"""
+    who = name or "The car ahead"
+    if r.gap_s is None or r.gap_s > 0:
+        return _sentence(f"{who} isn't ahead of you")
+    gap = abs(r.gap_s)
+    head = f"{who} ahead, {say_gap(int(gap * 1000))}"
+    if r.compound is not None:
+        comp = say_compound(r.compound)
+        head += f", {number_words(r.tyre_age)}-lap-old {comp}" if r.tyre_age else f", {comp}"
+    out = [_sentence(head)]
+    if r.stops > 0 and r.tyre_age is not None and r.tyre_age <= 2:
+        out.append(_sentence("they've just stopped, no undercut there"))
+        return " ".join(out)
+    if r.pace_vs_you_s is not None and abs(r.pace_vs_you_s) >= 0.05:
+        quick = "slower" if r.pace_vs_you_s > 0 else "quicker"
+        line = f"{say_gap(int(abs(r.pace_vs_you_s) * 1000))} a lap {quick} than you lately"
+        if r.trend_s is not None and r.trend_s >= 0.2:
+            line += ", and dropping off"
+        out.append(_sentence(line))
+    out.append(_sentence("close enough to undercut, it's all in the out lap" if gap <= close_s
+                         else "too far back to undercut, you'd need to be within "
+                              f"{say_gap(int(close_s * 1000))}"))
+    if position is not None:
+        out.append(_sentence(f"box now and you come out {say_position(position)}"))
+        if rejoin is not None and rejoin_phrase(rejoin):
+            out.append(rejoin_phrase(rejoin))
+    if plan_lap is not None:
+        out.append(_sentence("plan is box this lap" if plan_lap == lap
+                             else f"plan is box end of lap {number_words(plan_lap)}"))
+    return " ".join(out)
+
+
+def undercut_in_pits_phrase(name: str | None) -> str:
+    """Asked from the pit lane: 'You're in. Antonelli hasn't stopped, so it's the out lap:
+    push from the line.'"""
+    return _sentence("you're in", f"{name or 'the car ahead'} hasn't stopped",
+                     "big out lap, push from the pit exit")
+
+
 def penalties_answer_phrase(my_warnings: int, my_penalty: int, others: list) -> str:
     """'You've got two track limit warnings, no penalty. Leclerc ahead has five seconds.'"""
     if my_penalty:

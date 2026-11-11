@@ -860,3 +860,14 @@ From the real radio study's most common unprompted topics.
       split, Bahnschrift). The demo works on Windows (14 Nov)
 - [ ] Still to do: reference choice in Settings, full-screen page for console players
 - [ ] Step 4: try it in the game (borderless windowed) and pick the screen area
+
+## Miami race review (11 Nov)
+
+- [x] Reviewed the 14-lap Miami race: 38 calls, 3 dropped; 8 of 13 questions got "Say again"
+- [x] Undercut on Antonelli now tracked through the pit-lane shuffle ("Push now, big out lap",
+      then whether it worked); before, nothing was said
+- [x] New questions understood: undercut, "will <driver> pit?", "how am I looking to <driver>",
+      battle / progress with a driver, "chatty mode" / "quiet mode"
+- [ ] Proposed, not built: a call when the stops shake out, the gap you need after a time
+      penalty, gap updates every lap in a battle, chatty mode saying more often (it now only
+      changes the wording: 39 calls vs 38 on this race)

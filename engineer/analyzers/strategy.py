@@ -72,6 +72,7 @@ log = logging.getLogger(__name__)
 SC_LATE_IN_LAP = 0.85        # SC out after 85% of the lap: too late for this lap's pit entry
 RAIN = 3                     # session weather: 3 light rain and above
 QUALIFYING = set(range(5, 10))   # Q1, Q2, Q3, short and one-shot qualifying
+UNDERCUT_SEEN_S = 15.0     # at your pit entry, the car ahead seen on track this recently
 
 
 @dataclass(frozen=True)
@@ -167,6 +168,7 @@ class StrategyAnalyzer:
         self.latest = None
         self.gap_to_leader_ms: float | None = None      # yours, from before any pit entry
         self.position_before_pit: int | None = None     # ... and your position then
+        self.undercut_seen: tuple[int, int, float] | None = None  # (car, stops, when) on track
         self.pending_change = None
         self.box_lap = None
         self.half_said = False
@@ -385,6 +387,9 @@ class StrategyAnalyzer:
                 if not np.isnan(g) and (g > 0 or c.position[p] == 1):   # 0 = not a real gap
                     self.gap_to_leader_ms = g
                     self.position_before_pit = int(c.position[p])
+                target = self._undercut_candidate()
+                if target is not None:
+                    self.undercut_seen = (*target, self.state.session_time or 0.0)
 
     # -- results ---------------------------------------------------------------------------------
 
@@ -742,19 +747,44 @@ class StrategyAnalyzer:
         return 0 if np.isnan(n) else int(n)
 
     def _undercut_target(self) -> tuple[int, int] | None:
-        """The car just ahead, within `undercut_push_gap_s`, that hasn't made the stop you're
-        making (no more stops than you so far): (car, its stops)."""
+        """The car just ahead on track, within `undercut_push_gap_s`, that hasn't made the stop
+        you're making (no more stops than you so far): (car, its stops).
+
+        From the pit lane (at your pit entry) it's the one seen last on track, if recent: by
+        then the order is shuffled by the pit lane (Miami, 11 Nov: you boxed a lap before
+        Antonelli, 2.1 s ahead, but Russell was coming out of the pits "just ahead" at a gap
+        of 0, so no undercut was tracked and nothing was said)."""
+        s, c, p = self.state, self.state.cars, self.state.player_index
+        if p is not None and c.pit_status[p] > 0:
+            seen = self.undercut_seen
+            if seen is None or (s.session_time or 0.0) - seen[2] > UNDERCUT_SEEN_S:
+                return None
+            car, stops, _ = seen
+            if c.pit_status[car] > 0 or self._stops_of(car) > stops:
+                return None
+            return car, stops
+        return self._undercut_candidate()
+
+    def _undercut_candidate(self) -> tuple[int, int] | None:
         s, c, p = self.state, self.state.cars, self.state.player_index
         if not self.cfg.undercut_push or p is None or not s.session.is_race \
                 or s.session.safety_car_status in (1, 2) or np.isnan(c.position[p]) \
-                or c.position[p] <= 1:
+                or c.position[p] <= 1 or c.pit_status[p] > 0:
             return None
-        ahead = np.flatnonzero(c.active & (c.position == c.position[p] - 1))
-        gap = c.delta_to_car_in_front_ms[p]
-        if not ahead.size or np.isnan(gap) or gap > self.cfg.undercut_push_gap_s * 1000:
+        # The nearest car ahead that's on track (a car in the pit lane isn't the one to beat).
+        ahead = [j for j in np.flatnonzero(c.active) if j != p and c.pit_status[j] == 0
+                 and not np.isnan(c.position[j]) and c.position[j] < c.position[p]]
+        if not ahead:
             return None
-        car = int(ahead[0])
-        if c.pit_status[car] > 0 or self._stops_of(car) > self._stops_made():
+        car = int(max(ahead, key=lambda j: c.position[j]))
+        if c.position[car] == c.position[p] - 1:
+            gap = c.delta_to_car_in_front_ms[p]
+        else:
+            lead = lambda j: 0.0 if c.position[j] == 1 else float(c.delta_to_leader_ms[j])
+            gap = lead(p) - lead(car)
+        if np.isnan(gap) or gap <= 0 or gap > self.cfg.undercut_push_gap_s * 1000:
+            return None
+        if self._stops_of(car) > self._stops_made():
             return None
         return car, self._stops_of(car)
 

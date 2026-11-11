@@ -187,3 +187,61 @@ def test_the_answers_through_the_engine():
     assert said[2].startswith("Leclerc, P one, one point five seconds ahead. Twelve-lap-old "
                               "mediums, no stops yet.")
     assert said[2].endswith("Carrying a five second penalty.")
+
+
+def test_miami_questions_that_got_say_again():
+    # 11 Nov Miami: eight of thirteen questions got "Say again".
+    assert match("Is this an undercut opportunity?").name == "undercut"
+    assert match("Lie undercut, Kimmy.").name == "undercut"
+    assert match("Do you think Ocon will pit?").name == "rival"
+    assert match("Is Norris going to pit?").name == "rival"
+    assert match("How am I looking to Kimmy Antone?").name == "rival"
+    assert match("What about this battle with Kimmy?").name == "rival"
+    assert match("Progress to Kimmy.").name == "rival"
+    assert match("Go chatty mode.").name == "tempo_chatty"
+    assert match("Quiet mode.").name == "tempo_terse"
+    assert match("Will I need to pit again?").name == "plan"
+    # ... and these still mean what they meant.
+    assert match("How are we looking?").name == "status"
+    assert match("Be quiet.").name == "quiet"
+    assert match("Less chatty.").name == "tempo_terse"
+    assert match("Has Albon pitted?").name == "driver_pitted"
+
+
+def test_undercut_and_will_they_pit_answers():
+    import io
+
+    from engineer.app import build_engine
+    from engineer.config import Config
+    from engineer.features.priors import WearPriors
+    eng = build_engine(Config(data_dir="/nonexistent-test-dir"), out=io.StringIO(),
+                       priors=WearPriors())
+    st = eng.pipeline.state
+    st.session_uid, st.player_index = 1, 0
+    st.session.session_type, st.session.total_laps, st.session.weather = 15, 14, 0
+    c = st.cars
+    c.active[:3] = True
+    c.position[:3] = [2, 1, 3]
+    c.delta_to_car_in_front_ms[:3] = [2100, 0, 4000]
+    c.delta_to_leader_ms[:3] = [2100, 0, 6100]
+    c.pit_status[:3] = 0
+    c.lap[:3], c.last_lap_time_ms[:3] = 6, 90000
+    c.names[:3] = ["PLAYER", "ANTONELLI", "OCON"]
+    c.visual_compound[:3], c.tyre_age_laps[:3], c.num_pit_stops[:3] = 17, 5, 0
+    said = []
+    eng.pipeline.bus.subscribe(ev.RadioMessage, lambda e: said.append(e.text)
+                               if e.topic == "answer" else None)
+    for q in ("Is this an undercut opportunity?", "Do you think Ocon will pit?"):
+        st.session_time = (st.session_time or 0) + 30
+        eng.pipeline.bus.publish(ev.QuestionAsked(1, st.session_time, text=q, stt_ms=1000))
+        eng.director.after_packet(None)
+    assert said[0].startswith("Antonelli ahead, two point one seconds, five-lap-old mediums. "
+                              "Close enough to undercut"), said
+    assert said[1].startswith("Ocon, P three") and said[1].endswith("They still have to stop.")
+    # From the pit lane: the out lap is what counts.
+    eng.strategy.undercut_on = (1, 0)
+    c.pit_status[0] = 1
+    st.session_time += 30
+    eng.pipeline.bus.publish(ev.QuestionAsked(1, st.session_time, text="Undercut?", stt_ms=1000))
+    eng.director.after_packet(None)
+    assert said[2] == "You're in, Antonelli hasn't stopped, big out lap, push from the pit exit."

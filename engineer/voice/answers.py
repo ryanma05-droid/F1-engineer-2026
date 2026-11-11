@@ -1225,7 +1225,43 @@ class QuestionAnswerer:
             return phrases._sentence("which car")
         self._last_driver = car
         r = rival_report(self.state, self.engine.history, car)
-        return phrases.rival_answer_phrase(self._name(car), r, self.engine.tyres.cfg.limit_pct)
+        text = phrases.rival_answer_phrase(self._name(car), r, self.engine.tyres.cfg.limit_pct)
+        # "Do you think Ocon will pit?" (Miami, 11 Nov): in the dry everyone has to run two
+        # compounds, so a car that hasn't stopped still has to.
+        if r.stops == 0 and re.search(r"\b(pit|box|stop)", self.heard.lower()) \
+                and (self.state.session.weather or 0) < 3:
+            text += " " + phrases._sentence("they still have to stop")
+        return text
+
+    def _a_undercut(self) -> str:
+        """"Is this an undercut opportunity?" (Miami, 11 Nov: "Say again" twice, then logged):
+        the car ahead on track, how far, its tyres and pace, and where you'd come out. Asked
+        from the pit lane: the car you're undercutting and that the out lap is what counts."""
+        from engineer.tools.rivals import car_at, rival_report
+        sa, c, p = self.engine.strategy, self.state.cars, self._player()
+        if p is None or np.isnan(c.position[p]):
+            return phrases._sentence("no timing yet")
+        named = self._named_driver()
+        if c.pit_status[p] > 0:
+            target = sa.undercut_on or sa._undercut_target()
+            if target is None:
+                return phrases._sentence("nobody close enough ahead to undercut")
+            return phrases.undercut_in_pits_phrase(self._name(target[0]))
+        car = named
+        if car is None:
+            target = sa._undercut_candidate()
+            car = target[0] if target is not None else car_at(self.state, c.position[p] - 1)
+        if car is None:
+            return phrases._sentence("nobody ahead to undercut")
+        self._last_driver = car
+        r = rival_report(self.state, self.engine.history, car)
+        rejoin = sa._rejoin(self.state.session.safety_car_status in (1, 2)) \
+            if sa.latest is not None else None
+        pos = int(c.position[p]) + rejoin.positions_lost if rejoin is not None else None
+        stop = sa.announced.next_stop if sa.announced is not None else None
+        plan_lap = stop.lap if stop is not None else None
+        return phrases.undercut_answer_phrase(self._name(car), r, sa.cfg.undercut_push_gap_s,
+                                              pos, rejoin, plan_lap, self._lap())
 
     def _a_penalties(self) -> str:
         """"Any penalties?": yours and your track-limit warnings, then the cars near you (or the
