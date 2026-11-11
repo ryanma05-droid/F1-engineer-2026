@@ -298,6 +298,8 @@ class FakeRace:
                     "pitStatus": st["pit"], "currentLapInvalid": st["invalid"],
                     "carPosition": self.positions.get(car, car + 1), "gridPosition": car,
                     "driverStatus": 4, "deltaToCarInFrontMSPart": self.gap_ahead_ms.get(car, 0),
+                    "numPitStops": int(self.pit_laps.get(car) is not None
+                                       and st["lap"] > self.pit_laps[car] and st["pit"] != 1),
                 }
                 if st.get("finished") and self.chequered_flag:
                     lap[car]["resultStatus"] = 3

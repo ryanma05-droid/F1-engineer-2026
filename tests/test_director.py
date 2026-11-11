@@ -243,3 +243,11 @@ def test_urgent_race_craft_goes_before_a_corner_tip():
     r.d.submit(RadioCall("racecraft_countdown", "Last lap, P two.", max_wait_s=30))
     r.drive(t=2.0, dist=200)
     assert r.texts() == ["Last lap, P two."]
+
+
+def test_quiet_tempo_leaves_out_battle_push_but_keeps_the_undercut_push():
+    r = Rig()
+    r.d.tempo = "terse"
+    r.d.submit(RadioCall("racecraft_push", "Push now! Norris ahead."))
+    r.d.submit(RadioCall("undercut_push", "Push now, big out lap."))
+    assert r.texts() == ["Push now, big out lap."]

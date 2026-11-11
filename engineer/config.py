@@ -128,6 +128,9 @@ class RaceCraft(BaseModel):
     clear_gap_s: float = Field(default=2.0, gt=0)      # ... until it drops back past this
     attack_gap_s: float = Field(default=4.0, gt=0)     # car ahead within this ...
     min_closing_s: float = Field(default=0.15, gt=0)   # ... and you close this much a lap
+    push: bool = True                                   # "Push now!" closing in on a battle
+    push_gap_s: float = Field(default=2.0, gt=0)       # ... the car ahead/behind within this
+    push_closing_s: float = Field(default=0.2, gt=0)   # ... and the gap closing this much a lap
     battle_gap_s: float = Field(default=1.0, gt=0)     # a battle: the same car within this ...
     battle_laps: int = Field(default=3, ge=2)          # ... at the line this many laps running
     battle_repeat_laps: int = Field(default=3, ge=1)   # encouragement again this often
@@ -154,6 +157,8 @@ class Strategy(BaseModel):
     assume_sets_per_compound: int = Field(default=2, ge=1)   # if the game sends no tyre sets
     undercut_reminder: bool = True
     undercut_gap_s: float = Field(default=3.0, ge=0)
+    undercut_push: bool = True      # push in / out when your stop undercuts the car just ahead
+    undercut_push_gap_s: float = Field(default=3.0, ge=0)   # ... that car within this
     rejoin_traffic_s: float = Field(default=1.5, ge=0)   # "you'll come out behind X" within this
     max_wait_s: float = Field(default=20.0, gt=0)
     # Committing to a pit lap: within commit_laps of the stop, it only moves if the new best is

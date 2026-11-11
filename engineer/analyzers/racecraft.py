@@ -22,6 +22,11 @@ Races only. Each call is said once per situation, with its own rules so it isn't
   still hasn't got by. Brilliant work, stay calm."), again every `battle_repeat_laps` (3) while
   it lasts, at most BATTLE_MAX_CALLS per car; "back and forth" wording once you've swapped places
   twice. Not on a lap that already had a defend/attack/DRS/pass call about it.
+- Push (12 Nov): closing in on a battle, the car ahead or behind inside `push_gap_s` (2 s) but
+  outside DRS range (`battle_gap_s`), the gap down `push_closing_s` (0.2 s) on the last lap:
+  "Push now! Norris is one point four ahead and you're catching. Big lap, get into DRS." /
+  "Push now, Russell is one point six back and coming. Keep them out of DRS." Once per car per
+  PUSH_REPEAT_LAPS, not right after another race craft call, not in Quiet.
 - Countdown: five laps to go (with the gap ahead) and the last lap.
 - Finish: the flag, your position and places gained from the grid.
 - Fastest lap of the race: when you take it from someone else (not every time you improve it).
@@ -59,6 +64,7 @@ ATTACK_REPEAT_LAPS = 4
 SC_IN_REPEAT_S = 30.0
 PASS_GROUP_S = 8.0
 BATTLE_MAX_CALLS = 4         # encouragement per car per race
+PUSH_REPEAT_LAPS = 4         # "push now" again for the same car after this many laps
 BATTLE_QUIET_S = 15.0        # not right after another race craft call
 
 
@@ -112,6 +118,7 @@ class RaceCraftAnalyzer:
         self.lost_calls = 0                                  # wording rotation
         self.fights_said = 0
         self.pit_laps = 0                                    # in lap + out lap: no lost calls
+        self.push_said: dict[tuple[int, str], int] = {}      # (car, ahead/behind) -> your lap
         self.battles: dict[int, tuple[int, int]] = {}        # car -> (first lap, last lap) close
         self.battle_swaps: dict[int, list[float]] = {}       # car -> when places swapped
         self.battle_said: dict[int, int] = {}                # car -> lap encouragement was said
@@ -294,7 +301,9 @@ class RaceCraftAnalyzer:
         # A lap re-driven after a flashback replaces its earlier gap (Brazil, 7 Nov: one lap
         # three times made the closing rate divide by zero laps).
         kept = [x for x in self.ahead_gaps if x[1] == ahead and x[0] < e.lap]
+        prev_gap = kept[-1][2] if kept and kept[-1][0] == e.lap - 1 else None
         self.ahead_gaps = kept[-2:] + [(e.lap, ahead, gap)]
+        self._push(ahead, "ahead", gap, prev_gap, e.lap)
         name = self._name(ahead)
         if gap <= 1000:
             if ahead not in self.drs_said and len(self.ahead_gaps) >= 2:
@@ -343,10 +352,36 @@ class RaceCraftAnalyzer:
                 self._say("racecraft_defend", phrases.breathing_room_phrase(name, gap),
                           Priority.LOW, max_wait_s=15.0)
             return
+        mine = self.state.cars.lap[me]
+        if not np.isnan(mine):
+            self._push(e.car_idx, "behind", gap, prev, int(mine) - 1)
         if prev is not None and gap <= self.cfg.defend_gap_s * 1000 and gap < prev - 50 \
                 and e.lap >= 2:
             self.defending = e.car_idx
             self._say("racecraft_defend", phrases.defend_phrase(name, gap))
+
+    def _push(self, car: int, side: str, gap: float, prev: float | None, lap: int) -> None:
+        """"Push now" closing in on a battle (see the module notes)."""
+        cfg = self.cfg
+        if not cfg.push or prev is None or lap < 2 or self.pit_laps or self._under_sc():
+            return
+        if not (cfg.battle_gap_s * 1000 < gap <= cfg.push_gap_s * 1000):
+            return                          # too far, or already in DRS (defend/DRS calls)
+        if prev - gap < cfg.push_closing_s * 1000 or self.state.cars.pit_status[car] > 0:
+            return
+        last = self.push_said.get((car, side))
+        if last is not None and lap - last < PUSH_REPEAT_LAPS:
+            return
+        t = self.state.session_time or 0.0
+        recent = max(self.director.last_said.get(k, -math.inf) for k in
+                     ("racecraft_defend", "racecraft_attack", "racecraft_pass", "racecraft_push"))
+        if t - recent < BATTLE_QUIET_S:
+            return
+        self.push_said[(car, side)] = lap
+        name = self._name(car)
+        text = phrases.push_attack_phrase(name, gap) if side == "ahead" \
+            else phrases.push_defend_phrase(name, gap)
+        self._say("racecraft_push", text, Priority.NORMAL, max_wait_s=12.0)
 
     # -- game events -----------------------------------------------------------------------------
 

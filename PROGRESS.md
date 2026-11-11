@@ -784,3 +784,16 @@ load (only additions since 0.1.3); no library changes since 0.1.3. Found and fix
       installer-side close applies from the next setup file)
 - [ ] Need from the friend: what they saw, and %LOCALAPPDATA%\RaceEngineer\logs\race-engineer.log
 
+## Push calls (12 Nov)
+
+- [x] Undercut: "Push in, it's the undercut on Norris" on the box call when the car just ahead
+      (within 3 s) hasn't stopped; "Push now, big out lap" while they're still out; "Undercut
+      worked!" / "Norris stayed in front, ..." when they come out
+- [x] Undercut on you: "... watch the undercut. Push now, big laps on these."
+- [x] Closing in on a battle (ahead or behind, 1-2 s and closing 0.2 s+ a lap): "Push now!"
+      hype; once per car per 4 laps; not in Quiet
+- Last night's races, replayed: one battle push (Jeddah, Russell), one undercut cover (Bahrain),
+  one push-in (Brazil, a stop you then skipped). Gaps at the line jump around (1.8 s one lap,
+  0.45 s the next), so pushes stay rare; widen `push_gap_s` if you want more of them.
+- [ ] Not tried in a live race yet
+

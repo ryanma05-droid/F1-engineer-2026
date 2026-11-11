@@ -295,7 +295,8 @@ def test_strategy_phrases():
         "Safety car, box this lap, box this lap. Mediums, it's a cheap stop."
     assert phrases.safety_car_stay_phrase("virtual safety car") == \
         "Virtual safety car, stay out. Stopping now doesn't pay."
-    assert phrases.undercut_phrase("Norris") == "Norris behind has pitted, watch the undercut."
+    assert phrases.undercut_phrase("Norris") == \
+        "Norris behind has pitted, watch the undercut. Push now, big laps on these."
 
 
 # -- the analyzer, end to end through the packets ----------------------------------------------
@@ -356,7 +357,8 @@ def test_undercut_reminder_when_the_car_behind_pits():
                     extra_packets=False, tyre_sets=SETS, fuel_per_lap=1.0, pit_laps={1: 3},
                     gap_ahead_ms={1: 1500}, names=["PLAYER", "NORRIS"])
     _, radio = run(race, duration_ms=100000)
-    assert any(r == "Norris behind has pitted, watch the undercut." for _, r in radio)
+    assert any(r.startswith("Norris behind has pitted, watch the undercut. Push now")
+               for _, r in radio)
     _, radio = run(race, Strategy(undercut_reminder=False), duration_ms=100000)
     assert not any("undercut" in r for _, r in radio)
 
@@ -548,3 +550,31 @@ def test_a_tight_plan_gives_way_to_the_safe_one_only_when_its_gain_changes_nothi
     unsure = Decision(N(safe=False, tightest=N(end_wear=45.0), plan=None),
                       safe_alternative=safe, gain_s=20.0)
     assert sa._buffer_check(unsure) is unsure                 # not tight, just early: no stop
+
+
+def test_your_undercut_push_in_push_out_and_whether_it_worked():
+    # 12 Nov: "a mode push if you're looking for me to make up time for an undercut". You run
+    # 1.5 s behind Norris and stop first; Norris stops a lap later and comes out behind.
+    probe, _ = run(FakeRace({0: [30000] * 12, 1: [29900] * 12}, wear_per_lap=[4, 4, 6, 8],
+                            extra_packets=False, tyre_sets=SETS, fuel_per_lap=1.0,
+                            positions={0: 2, 1: 1}, gap_ahead_ms={0: 1500},
+                            names=["PLAYER", "NORRIS"]), duration_ms=100000)
+    stop = probe.strategy.committed().stops[0]
+    race = FakeRace({0: [30000] * 12, 1: [29900] * 12}, wear_per_lap=[4, 4, 6, 8],
+                    extra_packets=False, tyre_sets=SETS, fuel_per_lap=1.0,
+                    positions={0: 2, 1: 1}, gap_ahead_ms={0: 1500}, names=["PLAYER", "NORRIS"],
+                    pit_laps={0: stop.lap, 1: stop.lap + 1}, compound_after_pit=stop.compound)
+    swap = (stop.lap + 1) * 29.9 - 1.0              # Norris pits: drops behind you
+    cfg = Config(data_dir="/nonexistent-test-dir", strategy=Strategy())
+    out = io.StringIO()
+    eng = build_engine(cfg, out=out, priors=WearPriors(), strategy_runner=InlineRunner(None))
+    for t_ns, raw in race.frames(duration_ms=(stop.lap + 3) * 30000):
+        if (eng.pipeline.state.session_time or 0) >= swap:
+            race.positions = {0: 1, 1: 2}
+        eng.pipeline.feed(raw, t_ns)
+    radio = [line.split("s  ", 1)[1].split("  (held")[0]
+             for line in out.getvalue().splitlines() if line.startswith("RADIO")]
+    box = [r for r in radio if r.startswith("Box this lap")]
+    assert box and box[0].endswith("Push in, it's the undercut on Norris."), radio
+    assert any(r.startswith("Push now, big out lap. Norris hasn't stopped yet") for r in radio)
+    assert any(r.startswith("Undercut worked!") for r in radio), [r for r in radio if "ndercut" in r]

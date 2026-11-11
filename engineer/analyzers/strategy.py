@@ -126,6 +126,7 @@ class StrategyAnalyzer:
         self.pending_change: Plan | None = None
         self.box_lap: int | None = None          # committed: "box this lap" said for this lap
         self.half_said = False
+        self.undercut_on: tuple[int, int] | None = None   # (car, its stops) you're undercutting
         self.sc_status = 0
         self.applied_seq = -1
 
@@ -278,6 +279,7 @@ class StrategyAnalyzer:
             return
         if self.box_lap is not None and e.lap >= self.box_lap and not e.pit_in_lap:
             self.box_lap = None                  # the stop didn't happen: back to planning
+            self.undercut_on = None              # ... worked out again when you do stop
         total = self.state.session.total_laps or 0
         if e.lap < self.cfg.announce_after_lap or e.lap >= total:
             return
@@ -290,6 +292,8 @@ class StrategyAnalyzer:
     def on_pit_entry(self, e: ev.PitEntry) -> None:
         p = self.state.player_index
         if e.car_idx == p:
+            if self.undercut_on is None:
+                self.undercut_on = self._undercut_target()     # stopped without a box call
             self.box_lap = None
             self.half_said = False
             # The plan from here is announced again after the stop ("Copy, softs. Plan is no
@@ -312,8 +316,12 @@ class StrategyAnalyzer:
         """Out of the pits: confirm the tyres and give the plan for the rest of the race now,
         not a lap later."""
         s, c, p = self.state, self.state.cars, self.state.player_index
+        if self.undercut_on is not None and e.car_idx == self.undercut_on[0] and self._active():
+            self._undercut_result()
+            return
         if e.car_idx != p or not self._active() or np.isnan(c.lap[p]):
             return
+        self._undercut_out_lap()
         comp = c.visual_compound[p]
         self.copy_compound = int(comp) if not np.isnan(comp) else None
         lap = int(c.lap[p])
@@ -528,8 +536,12 @@ class StrategyAnalyzer:
                           max_wait_s=10.0, must_say=True)
             else:
                 rejoin = self._rejoin(self._sc_stop(stop))
-                self._say("box", phrases.box_phrase(stop.compound, rejoin, self.verbosity),
-                          Priority.HIGH, must_say=True)
+                text = phrases.box_phrase(stop.compound, rejoin, self.verbosity)
+                target = self._undercut_target()
+                if target is not None:
+                    self.undercut_on = target
+                    text += " " + phrases.undercut_push_in_phrase(_name(c.names[target[0]]))
+                self._say("box", text, Priority.HIGH, must_say=True)
             return
         if (self.box_lap == lap and not self.half_said and not in_pits and length
                 and not math.isnan(dist) and dist >= length / 2):
@@ -630,6 +642,57 @@ class StrategyAnalyzer:
         if np.isnan(gap) or gap > self.cfg.undercut_gap_s * 1000:
             return
         self._say("undercut", phrases.undercut_phrase(_name(c.names[car])), Priority.NORMAL)
+
+    # -- your undercut: push in, push out, did it work (12 Nov) ----------------------------------
+
+    def _stops_of(self, car: int) -> int:
+        n = self.state.cars.num_pit_stops[car]
+        return 0 if np.isnan(n) else int(n)
+
+    def _undercut_target(self) -> tuple[int, int] | None:
+        """The car just ahead, within `undercut_push_gap_s`, that hasn't made the stop you're
+        making (no more stops than you so far): (car, its stops)."""
+        s, c, p = self.state, self.state.cars, self.state.player_index
+        if not self.cfg.undercut_push or p is None or not s.session.is_race \
+                or s.session.safety_car_status in (1, 2) or np.isnan(c.position[p]) \
+                or c.position[p] <= 1:
+            return None
+        ahead = np.flatnonzero(c.active & (c.position == c.position[p] - 1))
+        gap = c.delta_to_car_in_front_ms[p]
+        if not ahead.size or np.isnan(gap) or gap > self.cfg.undercut_push_gap_s * 1000:
+            return None
+        car = int(ahead[0])
+        if c.pit_status[car] > 0 or self._stops_of(car) > self._stops_made():
+            return None
+        return car, self._stops_of(car)
+
+    def _undercut_out_lap(self) -> None:
+        """Out of your stop: push while the car you're undercutting is still out."""
+        if self.undercut_on is None:
+            return
+        car, stops = self.undercut_on
+        c = self.state.cars
+        if self._stops_of(car) > stops or c.pit_status[car] > 0 or not c.active[car]:
+            self.undercut_on = None                         # they stopped too: covered it
+            return
+        self._say("undercut_push", phrases.undercut_push_out_phrase(_name(c.names[car])),
+                  Priority.NORMAL, max_wait_s=20.0)
+
+    def _undercut_result(self) -> None:
+        """The car you undercut is out of its stop: did it work?"""
+        car, _ = self.undercut_on
+        self.undercut_on = None
+        c, p = self.state.cars, self.state.player_index
+        if p is None or np.isnan(c.position[p]) or np.isnan(c.position[car]):
+            return
+        worked = c.position[p] < c.position[car]
+        gap = None
+        if not worked and c.position[car] == c.position[p] - 1:
+            g = c.delta_to_car_in_front_ms[p]
+            gap = None if np.isnan(g) else float(g)
+        self._say("undercut_push", phrases.undercut_result_phrase(_name(c.names[car]), worked,
+                                                                  gap), Priority.NORMAL,
+                  max_wait_s=20.0)
 
     # -- pre-race --------------------------------------------------------------------------------
 

@@ -773,10 +773,76 @@ def safety_car_stay_phrase(kind: str) -> str:
 
 
 def undercut_phrase(name: str | None) -> str:
-    """'Norris behind has pitted, watch the undercut.'"""
+    """'Norris behind has pitted, watch the undercut. Push now, big laps on these.' (12 Nov: a
+    push call, not just a warning: the way to beat an undercut is laps on the old tyres.)"""
     who = f"{name} behind" if name else "the car behind"
-    return _sentence(f"{who} has pitted", pick("undercut", [
-        "watch the undercut", "they're trying the undercut", "push now, undercut is on"]))
+    return _sentence(f"{who} has pitted", "watch the undercut") + " " + pick("undercut", [
+        "Push now, big laps on these.", "Push now, every tenth counts until we box.",
+        "Hammer time, push on these tyres.", "Push push, make these laps count."])
+
+
+# -- push calls (12 Nov: "a mode push for undercuts and when I'm close to a battle") ------------
+
+def _cap(text: str) -> str:
+    return text[:1].upper() + text[1:]
+
+
+def undercut_push_in_phrase(name: str | None) -> str:
+    """Added to the box call when the car just ahead hasn't stopped: 'Push in, it's the undercut
+    on Norris.'"""
+    who = name or "the car ahead"
+    return pick("push_in", [f"Push in, it's the undercut on {who}.",
+                            f"Big in-lap, we're undercutting {who}.",
+                            f"Push all the way in, this is the undercut on {who}."])
+
+
+def undercut_push_out_phrase(name: str | None) -> str:
+    """The out-lap after your stop, the car you're undercutting still out on old tyres."""
+    who = name or "the car ahead"
+    return pick("push_out", [
+        f"Push now, big out lap. {who} hasn't stopped yet, the undercut's on.",
+        f"Out lap, push push. {who} is still out on old tyres, every tenth counts.",
+        f"Go go go, flat out on this out lap. We're undercutting {who}.",
+        f"This is the lap, push. {who} still has to stop."])
+
+
+def undercut_result_phrase(name: str | None, worked: bool, gap_ms: float | None) -> str:
+    """When the car you undercut comes out of its stop."""
+    who = name or "the car you undercut"
+    if worked:
+        return pick("undercut_worked", [f"Undercut worked! You're ahead of {who}.",
+                                        f"That's the undercut done, {who} comes out behind you.",
+                                        f"Brilliant, {who} is behind you now. Undercut worked."])
+    gap = f", {say_gap(int(gap_ms))} ahead" if gap_ms is not None and gap_ms > 0 else ""
+    return _sentence(f"{who} stayed in front{gap}") + " " + pick("undercut_missed", [
+        "Fresher tyres, keep pushing.", "Not done yet, you've got the tyres.",
+        "Stay with them, the tyres are on your side."])
+
+
+def push_attack_phrase(name: str | None, gap_ms: float) -> str:
+    """Closing in on the car ahead, just outside DRS: 'Push now! Norris is one point four
+    ahead and you're catching. Big lap, get into DRS.'"""
+    who = name or "the car ahead"
+    gap = say_gap(int(gap_ms))
+    return _cap(pick("push_attack", [
+        f"Push now! {who} is {gap} ahead and you're catching. Big lap, get into DRS.",
+        f"Come on, {who} is {gap} up the road and coming back to you. Push push.",
+        f"You're quicker than {who}, {gap} now. One more push and you're in DRS.",
+        f"{gap} to {who} and closing. This is it, go get them.",
+        f"Hunt {who} down, {gap} and falling. Big lap now."]))
+
+
+def push_defend_phrase(name: str | None, gap_ms: float) -> str:
+    """The car behind closing, just outside DRS: 'Push now, Russell's one point six back and
+    coming. Keep him out of DRS.'"""
+    who = name or "the car behind"
+    gap = say_gap(int(gap_ms))
+    return _cap(pick("push_defend", [
+        f"Push now, {who} is {gap} back and coming. Keep them out of DRS.",
+        f"{who} closing, {gap}. Big lap, don't let them in the DRS.",
+        f"Head down, {who} is {gap} behind and pushing. Hit your marks.",
+        f"Pick it up, {who} is reeling you in, {gap} now. Push.",
+        f"{who} {gap} back and closing. Clean, fast lap, keep them out of range."]))
 
 
 # -- push-to-talk answers (Phase 6) ------------------------------------------------------------

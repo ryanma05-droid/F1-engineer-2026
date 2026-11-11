@@ -81,6 +81,9 @@ racecraft:              # the human side: battles, passes, start/finish, penalti
   clear_gap_s: 2.0      # ... until it drops back past this: "Good defending."
   attack_gap_s: 4.0     # car ahead within this, and
   min_closing_s: 0.15   # you're closing this much a lap, and you'd catch it before the flag
+  push: true            # "Push now! Norris is one point four ahead and you're catching."
+  push_gap_s: 2.0       # ... the car ahead or behind within this (and outside DRS range)
+  push_closing_s: 0.2   # ... and the gap closed this much on the last lap
   battle_gap_s: 1.0     # a long battle: the same car within this at the line ...
   battle_laps: 3        # ... this many laps running: "Third lap with Russell on you, ..."
   battle_repeat_laps: 3 # encouragement again this often while it lasts
@@ -105,8 +108,10 @@ strategy:               # pit strategy (Phase 5): the plan, box calls, safety ca
   two_compound_rule: auto     # auto: races of two_compound_min_laps or more; or on / off
   two_compound_min_laps: 10
   assume_sets_per_compound: 2 # if the game sends no tyre sets
-  undercut_reminder: true     # "Norris behind has pitted, watch the undercut."
+  undercut_reminder: true     # "Norris behind has pitted, watch the undercut. Push now, ..."
   undercut_gap_s: 3.0
+  undercut_push: true         # your stop undercuts the car just ahead: "push in", "big out lap",
+  undercut_push_gap_s: 3.0    # then whether it worked (that car within this when you stop)
   rejoin_traffic_s: 1.5 # "you'll come out behind X" when within this
   max_wait_s: 20
   commit_laps: 3        # within 3 laps of the stop the pit lap is locked...

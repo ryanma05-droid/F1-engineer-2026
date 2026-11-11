@@ -162,6 +162,18 @@ uv run python -m engineer.report                     # driver report PDF (data/r
   2+ swaps in this battle; not within 15 s of a defend/attack/pass call (next lap instead).
   Counted as said only once on the radio: a flashback or an expired wait puts it back (Brazil,
   7 Nov: the Russell battle call was cleared by a flashback and never came back).
+- Push calls (12 Nov, "a mode push for undercuts and when I'm close to a battle"):
+  `_push` (racecraft, topic racecraft_push, NORMAL, rank 2, left out in Quiet via
+  `TERSE_DROPS`): the car ahead or behind inside `push_gap_s` (2 s) but outside DRS range
+  (`battle_gap_s`), gap down `push_closing_s` (0.2 s) on the last lap -> "Push now! Norris is
+  ... and you're catching" / "Push now, Russell is ... back and coming". Once per car and side
+  per PUSH_REPEAT_LAPS (4), not within 15 s of another race craft call. Undercut (strategy,
+  topic undercut_push, kept in Quiet): your stop with the car just ahead within
+  `undercut_push_gap_s` (3 s) and no more stops than you (`_undercut_target`) -> the box call
+  ends "Push in, it's the undercut on Norris"; at your pit exit, if they're still out, "Push
+  now, big out lap..."; at their pit exit, "Undercut worked!" or "Norris stayed in front ...".
+  A box call you don't follow forgets the target (worked out again at your real pit entry).
+  The car behind pitting (undercut on you) now adds "Push now, big laps on these."
 - Passes: a car in the pit lane when the pass settles (4 s on) wasn't passed on track, so no call
   (Baku, 7 Nov: OVTK came on the pit entry road, before pit status changed; Antonelli's stop
   became "Good move, P two"). The "pace dropping" call is skipped on an in-lap.

@@ -209,3 +209,44 @@ def test_a_battle_call_lost_to_a_flashback_is_made_again():
     rc.battle_pending["Norris has been on you."] = (1, None, 0)
     eng.pipeline.bus.publish(ev.Flashback(0, 100.0, to_frame=0, to_session_time=95.0))
     assert 1 not in rc.battle_said and rc.battle_calls[1] == 0 and not rc.battle_pending
+
+
+def _closing(race, car, gaps_by_lap, duration_ms):
+    """Feed the race with car's gap to the car in front set per lap (ms, from gaps_by_lap)."""
+    cfg = Config(data_dir="/nonexistent-test-dir")
+    out = io.StringIO()
+    eng = build_engine(cfg, out=out, priors=WearPriors(), strategy_runner=InlineRunner(None))
+    for t_ns, raw in race.frames(duration_ms=duration_ms):
+        lap = int((eng.pipeline.state.session_time or 0) // 30) + 1
+        race.gap_ahead_ms[car] = gaps_by_lap.get(lap, race.gap_ahead_ms.get(car, 0))
+        eng.pipeline.feed(raw, t_ns)
+    return [line.split("s  ", 1)[1].split("  (held")[0]
+            for line in out.getvalue().splitlines() if line.startswith("RADIO")]
+
+
+def test_push_now_closing_on_the_car_ahead_and_the_car_behind():
+    # 12 Nov: "general hype up when I am close to a battle".
+    race = FakeRace({0: [30000] * 6, 1: [30000] * 6}, positions={0: 2, 1: 1},
+                    names=["PLAYER", "NORRIS"], extra_packets=False, gap_ahead_ms={0: 2600})
+    radio = _closing(race, 0, {2: 2300, 3: 1900, 4: 1500, 5: 1100}, 150000)
+    push = [r for r in radio if r.startswith("Push now!")]
+    assert push == ["Push now! Norris is one point nine seconds ahead and you're catching. "
+                    "Big lap, get into DRS."], radio          # once, not every lap
+    # Russell all over you instead: closing from behind, still outside DRS range.
+    race = FakeRace({0: [30000] * 6, 1: [30000] * 6}, positions={0: 1, 1: 2},
+                    names=["PLAYER", "RUSSELL"], extra_packets=False, gap_ahead_ms={1: 2500})
+    radio = _closing(race, 1, {3: 2100, 4: 1700}, 150000)
+    assert any(r.startswith("Push now, Russell is") and "Keep them out of DRS." in r
+               for r in radio), radio
+    # Steady gaps: no push.
+    race = FakeRace({0: [30000] * 6, 1: [30000] * 6}, positions={0: 2, 1: 1},
+                    names=["PLAYER", "NORRIS"], extra_packets=False, gap_ahead_ms={0: 1500})
+    assert not any(r.startswith("Push") for r in _closing(race, 0, {}, 150000))
+
+
+def test_push_phrases():
+    assert phrases.push_defend_phrase(None, 1600).startswith("Push now, the car behind is")
+    assert phrases.undercut_result_phrase("Norris", False, 800) == \
+        "Norris stayed in front, eight tenths ahead. Fresher tyres, keep pushing."
+    assert phrases.undercut_push_out_phrase("Norris") == \
+        "Push now, big out lap. Norris hasn't stopped yet, the undercut's on."
