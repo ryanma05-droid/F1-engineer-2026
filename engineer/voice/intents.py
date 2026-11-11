@@ -161,6 +161,16 @@ RULES: list[tuple[str, list[str]]] = [
     ("stints_end", [r"\b(what|how) will (they|these|the tyres?|my tyres?) (be|look)\b",
                     r"\bend of the (first |second |next |last |final |third )?stint\b"]),
     # "Has Albon pitted?" (also heard "As Albon pitted?")
+    # 12 Nov (from the real radio): penalties, and what a rival is doing.
+    ("penalties", [r"\bpenalt(y|ies)\b", r"\b(track limits?|warnings?)\b.*\b(how many|do i have|count)\b",
+                   r"\bhow many (track limits?|warnings|strikes)\b", r"\bany warnings\b"]),
+    ("rival", [r"\bhow('s| is| are)\b.*" + _DRIVER + r".*\b(looking|doing|going|getting on)\b",
+               r"\bhow('s| is)\b.*\b(car|guy) (ahead|in front|behind)\b.*\b(looking|doing|going)\b",
+               r"\bwhat tyres? (is|are|has|have) " + _DRIVER + r"\b",
+               r"\bwhat (is|are) " + _DRIVER + r" on\b",
+               r"\bwhat tyres? (is|are) the (car|guy) (ahead|in front|behind)\b",
+               r"\b(intel|info|anything) on " + _DRIVER + r"\b",
+               r"\bhow old are (his|her|their|" + _DRIVER[3:-3] + r"'s) tyres\b"]),
     ("driver_pitted", [r"\b(has|did|is|have) " + _DRIVER + r" (pitted|pit|boxed|box|stopped|been in)\b",
                        r"\b" + _DRIVER + r" (pitted|boxed|stopped)\b"]),
     # "Can I catch the leader?", "Will I catch Norris?"

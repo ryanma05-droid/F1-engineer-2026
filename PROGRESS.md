@@ -806,3 +806,19 @@ load (only additions since 0.1.3); no library changes since 0.1.3. Found and fix
 - [x] Checked on the 7 Nov Interlagos race (68 calls)
 - [ ] Not heard live yet; tune by ear (how often the name and the add-ons come)
 
+## Weather, penalties, rival information (12 Nov)
+
+From the real radio study's most common unprompted topics.
+- [x] Weather: "Rain expected in about ten minutes, around lap twelve. Sixty percent chance.",
+      a five-minute reminder, rain starting, rain easing, forecast cleared; "Will it rain?"
+      answers with the forecast
+- [x] Penalties: your track-limit warnings counted ("that's two"); a time penalty on a car within
+      two places and what it means for you; repeated in the countdown; "Any penalties?" /
+      "How many warnings?"
+- [x] Rivals: the car ahead/behind struggling or about to pit; "How's Norris looking?" (tyres,
+      age, wear, stops, pace vs you, penalty)
+- Replays of the 7 and 9 Nov races: one or two rival calls a race; your real track-limit
+  warnings counted. No rain or rival time penalty in any recording yet: those are tested on
+  simulated data only.
+- [ ] Not heard live yet; wet-weather strategy (when to box for inters) is still open
+

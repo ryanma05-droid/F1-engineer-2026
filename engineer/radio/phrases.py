@@ -781,6 +781,160 @@ def undercut_phrase(name: str | None) -> str:
         "Hammer time, push on these tyres.", "Push push, make these laps count."])
 
 
+# -- weather, rivals' penalties, rival information (12 Nov) -----------------------------------
+
+def rain_coming_phrase(minutes: int, pct: int, lap: int | None, weather: int,
+                       soon: bool = False) -> str:
+    """'Rain expected in about ten minutes, around lap fourteen. Sixty percent chance.'"""
+    when = f"in about {number_words(minutes)} minutes" if minutes > 1 else "any minute now"
+    if lap is not None:
+        when += f", around lap {number_words(lap)}"
+    what = "heavy rain" if weather >= 4 else "rain"
+    head = (f"{what} about {number_words(minutes)} minutes away" if soon and minutes > 1
+            else f"{what} expected {when}")
+    return _sentence(head) + " " + _sentence(f"{number_words(pct)} percent chance")
+
+
+def rain_easing_phrase(minutes: int, lap: int | None) -> str:
+    """'Rain easing in about five minutes, around lap twelve. Drying from there.'"""
+    when = f"in about {number_words(minutes)} minutes"
+    if lap is not None:
+        when += f", around lap {number_words(lap)}"
+    return _sentence(f"rain easing {when}") + " " + pick("rain_easing", [
+        "Should dry from there.", "Track should come back to us.", "Keep an eye on the dry line."])
+
+
+def rain_started_phrase(weather: int) -> str:
+    return _sentence("heavy rain now" if weather >= 4 else "rain's starting",
+                     pick("rain_started", ["careful on the white lines", "grip's going to drop",
+                                           "take it steady while we see how bad"]))
+
+
+def forecast_cleared_phrase() -> str:
+    return _sentence(pick("forecast_cleared", ["forecast's cleared, no rain expected now",
+                                               "rain's gone from the forecast"]))
+
+
+def weather_forecast_answer(current: str, change, lap: int | None) -> str:
+    """'Dry, track thirty-two degrees. Rain expected in about ten minutes, sixty percent.'"""
+    if change is None:
+        return current + " " + _sentence("nothing changing in the next half hour")
+    if change.kind == "rain":
+        return current + " " + rain_coming_phrase(change.minutes, change.rain_pct, lap,
+                                                  change.weather)
+    return current + " " + rain_easing_phrase(change.minutes, lap)
+
+
+def track_limits_warning_phrase(count: int) -> str:
+    """Your track-limit warnings, counted: 'Track limits warning, that's two.'"""
+    if count <= 1:
+        return _sentence("warning for track limits", "that's the first")
+    n = number_words(count)
+    if count >= 3:
+        return _sentence(f"track limits, that's {n} warnings") + " " + _sentence(
+            pick("tl_careful", ["careful, the next one could be a penalty",
+                                "you can't afford another one", "tidy it up now"]))
+    return _sentence(f"track limits warning, that's {n}") + " " + _sentence(
+        pick("tl_two", ["watch the white lines", "keep it inside", "careful on the exits"]))
+
+
+def rival_penalty_phrase(name: str | None, side: str, seconds: int, gap_s: float | None) -> str:
+    """Another car's time penalty, and what it means for you. side: ahead/behind."""
+    who = f"{name or 'the car'} {side}"
+    head = _sentence(f"{who} has a {number_words(seconds)} second penalty")
+    if side == "ahead":
+        if gap_s is not None and abs(gap_s) < seconds:
+            return head + " " + _sentence(f"you're {say_gap(int(abs(gap_s) * 1000))} behind, "
+                                          f"inside it. Stay there and you're ahead")
+        return head + " " + _sentence(f"get within {number_words(seconds)} seconds by the "
+                                      f"flag and you're ahead")
+    return head + " " + _sentence(f"even if they get by, stay within {number_words(seconds)} "
+                                  f"seconds and you finish ahead")
+
+
+def penalty_reminder_phrase(name: str | None, side: str, seconds: int, gap_s: float | None) -> str:
+    """Added to the countdown: 'Leclerc's five seconds: you're inside it.'"""
+    who = name or "they"
+    if side == "ahead":
+        inside = gap_s is not None and abs(gap_s) < seconds
+        return _sentence(f"{who} ahead still has {number_words(seconds)} seconds",
+                         "you're inside it" if inside else "close it to within that")
+    return _sentence(f"{who} behind has {number_words(seconds)} seconds",
+                     "stay within that if they pass")
+
+
+def rival_struggling_phrase(name: str | None, side: str, drop_s: float, age: int | None,
+                            compound: str | None) -> str:
+    """'Norris ahead is struggling, losing three tenths a lap on fifteen-lap-old mediums.'"""
+    who = f"{name or 'the car'} {side}"
+    on = ""
+    if compound:
+        on = f" on {number_words(age)}-lap-old {compound}" if age else f" on {compound}"
+    drop = say_gap(int(drop_s * 1000))
+    if side == "ahead":
+        return _sentence(f"{who} is struggling, losing {drop} a lap{on}") + " " + pick(
+            "rival_struggling", ["He's coming back to you.", "Keep the pressure on.",
+                                 "Tyres are going on that car."])
+    return _sentence(f"{who} is dropping off, {drop} a lap{on}") + " " + pick(
+        "rival_dropping", ["Breathing room coming.", "You're pulling away.", "Keep it tidy."])
+
+
+def rival_pit_soon_phrase(name: str | None, side: str, wear_pct: float) -> str:
+    """'Expect Norris ahead to pit soon, his tyres are at fifty percent.'"""
+    who = f"{name or 'the car'} {side}"
+    return _sentence(f"expect {who} to pit soon", f"tyres at {say_percent(wear_pct)}")
+
+
+def rival_answer_phrase(name: str | None, r, limit_pct: float) -> str:
+    """'Norris, P three, one point two ahead. Fifteen-lap-old mediums at forty percent, one stop
+    made. Two tenths a lap slower than you, and losing time.'"""
+    who = name or "That car"
+    parts = [who]
+    if r.position:
+        parts.append(say_position(r.position))
+    if r.gap_s is not None:
+        parts.append(f"{say_gap(int(abs(r.gap_s) * 1000))} {'behind' if r.gap_s > 0 else 'ahead'}")
+    out = [_sentence(", ".join(parts))]
+    tyre = []
+    if r.compound is not None:
+        comp = say_compound(r.compound)
+        tyre.append(f"{number_words(r.tyre_age)}-lap-old {comp}" if r.tyre_age else comp)
+    if r.wear_pct is not None:
+        tyre.append(f"at {say_percent(r.wear_pct)}")
+    stops = "no stops yet" if r.stops == 0 else \
+        f"{number_words(r.stops)} stop{'s' if r.stops > 1 else ''} made"
+    out.append(_sentence(" ".join(tyre) + (", " if tyre else "") + stops))
+    if r.pace_vs_you_s is not None and abs(r.pace_vs_you_s) >= 0.05:
+        quick = "slower" if r.pace_vs_you_s > 0 else "quicker"
+        line = f"{say_gap(int(abs(r.pace_vs_you_s) * 1000))} a lap {quick} than you lately"
+        if r.trend_s is not None and r.trend_s >= 0.2:
+            line += ", and dropping off"
+        out.append(_sentence(line))
+    if r.wear_pct is not None and r.wear_pct >= limit_pct - 15 and r.stops >= 0:
+        out.append(_sentence("they'll need to stop soon"))
+    if r.penalty_s:
+        out.append(_sentence(f"carrying a {number_words(r.penalty_s)} second penalty"))
+    return " ".join(out)
+
+
+def penalties_answer_phrase(my_warnings: int, my_penalty: int, others: list) -> str:
+    """'You've got two track limit warnings, no penalty. Leclerc ahead has five seconds.'"""
+    if my_penalty:
+        mine = f"you've got a {number_words(my_penalty)} second penalty"
+    elif my_warnings:
+        mine = (f"you've got {number_words(my_warnings)} track limit warning"
+                f"{'s' if my_warnings > 1 else ''}, no penalty")
+    else:
+        mine = "you're clean, no warnings"
+    out = [_sentence(mine)]
+    if others:
+        out += [_sentence(f"{name} {side} has {number_words(sec)} seconds")
+                for name, side, sec in others[:3]]
+    else:
+        out.append(_sentence("nobody near you has a penalty"))
+    return " ".join(out)
+
+
 # -- push calls (12 Nov: "a mode push for undercuts and when I'm close to a battle") ------------
 
 def _cap(text: str) -> str:

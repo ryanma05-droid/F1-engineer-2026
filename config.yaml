@@ -88,6 +88,19 @@ racecraft:              # the human side: battles, passes, start/finish, penalti
   battle_laps: 3        # ... this many laps running: "Third lap with Russell on you, ..."
   battle_repeat_laps: 3 # encouragement again this often while it lasts
 
+weather:                # forecast calls: "Rain expected in about ten minutes, around lap fourteen."
+  enabled: true
+  rain_pct: 40          # a forecast rain chance this high counts as rain coming
+  horizon_min: 30       # look this far ahead (minutes)
+
+rivals:                 # the cars around you
+  enabled: true
+  penalties: true       # "Leclerc ahead has a five second penalty. You're inside it."
+  penalty_positions: 2  # ... for cars within this many places
+  near_gap_s: 5.0       # "Norris ahead is struggling ..." / "Expect Norris to pit soon ...":
+  pace_drop_s: 0.3      #   the car just ahead or behind within this, slowing this much a lap
+  pit_soon_margin_pct: 15   # ... or its worst tyre this close to your tyre limit
+
 strategy:               # pit strategy (Phase 5): the plan, box calls, safety car stops
   enabled: true
   min_race_laps: 8      # no strategy calls in shorter races

@@ -174,6 +174,26 @@ uv run python -m engineer.report                     # driver report PDF (data/r
   now, big out lap..."; at their pit exit, "Undercut worked!" or "Norris stayed in front ...".
   A box call you don't follow forgets the target (worked out again at your real pit entry).
   The car behind pitting (undercut on you) now adds "Push now, big laps on these."
+- Weather, rivals' penalties, rival information (12 Nov; the real radio's most common
+  unprompted topics, see docs/gp-radio-study.md). Shared logic in `tools/rivals.py` (calls and
+  answers agree): `gap_between` (intervals summed), `next_weather_change` (the Session packet's
+  forecast, now in `state.session.forecast` as (session type, minutes, weather, rain %): rain
+  when weather >= 3 or rain % >= `weather.rain_pct` 40 within `horizon_min` 30; "dry" when wet
+  now), `minutes_to_lap`, `rival_report` (position, gap, compound, tyre age, stops, worst wear
+  (None for online players), pace vs you over common clean laps, lap-time trend this stint,
+  penalty), `penalised_near`. `analyzers/weather.py` (on Session packets, topic weather,
+  NORMAL): rain coming, again at <= 5 min, rain starting, rain easing, "forecast's cleared" only
+  once the chance is CLEAR_MARGIN (15) under the threshold. `analyzers/rivals.py` (your lap,
+  races, lap 3+, no SC, one call a lap): a new time penalty on a car within 2 places (topic
+  rival_penalty, NORMAL, rank 2, once per car and total, with what it means: "you're inside
+  it" / "even if they get by, stay within five seconds"); the car just ahead/behind within 5 s
+  slowing 0.3 s+ a lap ("struggling" / "dropping off", once per car per stint); or its worst
+  tyre within 15 of your limit ("expect ... to pit soon"); both topic rivals, LOW. Racecraft:
+  your track-limit warnings counted from PENA (infringements 7, 27-29: "that's two", from three
+  "careful, the next one could be a penalty"); the countdown adds a penalty on the car just
+  ahead/behind. State also has `total_warnings`, `corner_cutting_warnings` per car. Answers:
+  weather adds the forecast; "How's Norris looking?" / "what tyres is the car ahead on" (rival);
+  "any penalties?" / "how many warnings?" (penalties).
 - Passes: a car in the pit lane when the pass settles (4 s on) wasn't passed on track, so no call
   (Baku, 7 Nov: OVTK came on the pit entry road, before pit status changed; Antonelli's stop
   became "Good move, P two"). The "pace dropping" call is skipped on an in-lap.

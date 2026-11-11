@@ -74,7 +74,7 @@ def test_penalty_fastest_lap_and_safety_car_in():
         95: ("FTLP", {"vehicleIdx": 0, "lapTime": 30.0}),       # taken from someone else
         100: scar, 100.5: scar,                                 # sent twice: said once
     }, duration_ms=110000)
-    assert "Warning for track limits." in radio
+    assert "Warning for track limits, that's the first." in radio
     assert "Fastest lap of the race, thirty zero." in radio
     assert radio.count("Safety car in this lap, get the tyres ready.") == 1
 

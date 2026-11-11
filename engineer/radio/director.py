@@ -172,7 +172,7 @@ class QuietZones:
 # line, and "Got it back from Russell" and "Last lap" expired behind it.
 _RANK = {"box": 3, "safety_car": 3, "racecraft_countdown": 2, "racecraft_pass": 2,
          "racecraft_defend": 2, "racecraft_attack": 2, "racecraft_penalty": 2,
-         "racecraft_damage": 2, "racecraft_push": 2, "undercut_push": 2,
+         "racecraft_damage": 2, "racecraft_push": 2, "undercut_push": 2, "rival_penalty": 2,
          "racecraft_battle": 1}
 
 # Holding the other calls for your answer: while the button is down (and the question takes up to

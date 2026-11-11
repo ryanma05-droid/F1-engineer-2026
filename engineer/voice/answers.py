@@ -1185,8 +1185,65 @@ class QuestionAnswerer:
         return phrases.best_lap_phrase(best.lap_time_ms, best.lap)
 
     def _a_weather(self) -> str:
+        """Now, and (12 Nov) what the forecast says is coming: rain, or rain easing."""
+        from engineer.tools.rivals import minutes_to_lap, next_weather_change
         s = self.state.session
-        return phrases.weather_phrase(s.weather, s.track_temp_c, s.air_temp_c)
+        now = phrases.weather_phrase(s.weather, s.track_temp_c, s.air_temp_c)
+        if not s.forecast:
+            return now
+        w = self.engine.weather.cfg if self.engine.weather is not None else None
+        change = next_weather_change(self.state, w.rain_pct if w else 40,
+                                     w.horizon_min if w else 30)
+        lap = minutes_to_lap(self.state, change.minutes) if change and s.is_race else None
+        return phrases.weather_forecast_answer(now, change, lap)
+
+    def _rival_car(self) -> int | None:
+        """The car a rival question is about: a named driver, else "ahead" / "behind"."""
+        from engineer.tools.rivals import car_at
+        car = self._named_driver()
+        if car is not None:
+            return car
+        c, p = self.state.cars, self._player()
+        if p is None or np.isnan(c.position[p]):
+            return None
+        low = self.heard.lower()
+        if re.search(r"\b(behind|back)\b", low):
+            return car_at(self.state, c.position[p] + 1)
+        if re.search(r"\b(ahead|in front)\b", low):
+            return car_at(self.state, c.position[p] - 1)
+        return None
+
+    def _a_rival(self) -> str:
+        """"How's Norris looking?": position, gap, tyres, stops, pace vs you, will they stop."""
+        from engineer.tools.rivals import rival_report
+        car = self._rival_car()
+        if car is None:
+            return phrases._sentence("which car")
+        self._last_driver = car
+        r = rival_report(self.state, self.engine.history, car)
+        return phrases.rival_answer_phrase(self._name(car), r, self.engine.tyres.cfg.limit_pct)
+
+    def _a_penalties(self) -> str:
+        """"Any penalties?": yours and your track-limit warnings, then the cars near you (or the
+        one named)."""
+        from engineer.tools.rivals import penalised_near
+        c, p = self.state.cars, self._player()
+        if p is None:
+            return phrases._sentence("no timing yet")
+        named = self._named_driver()
+        if named is not None:
+            sec = 0 if np.isnan(c.penalties_s[named]) else int(c.penalties_s[named])
+            who = self._name(named) or "they"
+            return phrases._sentence(f"{who} has a {phrases.number_words(sec)} second penalty"
+                                     if sec else f"{who} has no penalty")
+        rc = self.engine.racecraft
+        warn = rc.track_warnings if rc is not None else 0
+        if not np.isnan(c.corner_cutting_warnings[p]):
+            warn = max(warn, int(c.corner_cutting_warnings[p]))
+        mine = 0 if np.isnan(c.penalties_s[p]) else int(c.penalties_s[p])
+        others = [(self._name(car) or "a car", "ahead" if c.position[car] < c.position[p]
+                   else "behind", sec) for car, sec in penalised_near(self.state, p, 3)]
+        return phrases.penalties_answer_phrase(warn, mine, others)
 
     def _a_fuel(self) -> str:
         p = self._player()

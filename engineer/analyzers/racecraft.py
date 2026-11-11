@@ -63,6 +63,7 @@ COUNTDOWN_LAPS = 5
 ATTACK_REPEAT_LAPS = 4
 SC_IN_REPEAT_S = 30.0
 PASS_GROUP_S = 8.0
+TRACK_LIMITS = {7, 27, 28, 29}   # infringement IDs (spec): corner cutting, track limits
 BATTLE_MAX_CALLS = 4         # encouragement per car per race
 PUSH_REPEAT_LAPS = 4         # "push now" again for the same car after this many laps
 BATTLE_QUIET_S = 15.0        # not right after another race craft call
@@ -118,6 +119,7 @@ class RaceCraftAnalyzer:
         self.lost_calls = 0                                  # wording rotation
         self.fights_said = 0
         self.pit_laps = 0                                    # in lap + out lap: no lost calls
+        self.track_warnings = 0                              # your track-limit warnings
         self.push_said: dict[tuple[int, str], int] = {}      # (car, ahead/behind) -> your lap
         self.battles: dict[int, tuple[int, int]] = {}        # car -> (first lap, last lap) close
         self.battle_swaps: dict[int, list[float]] = {}       # car -> when places swapped
@@ -220,9 +222,10 @@ class RaceCraftAnalyzer:
             if to_go in (COUNTDOWN_LAPS, 1):
                 ahead = self._car_at(c.position[me] - 1)
                 gap = c.delta_to_car_in_front_ms[me]
-                self._say("racecraft_countdown", phrases.laps_to_go_phrase(
-                    to_go, int(c.position[me]), self._name(ahead),
-                    None if np.isnan(gap) else float(gap)),
+                text = phrases.laps_to_go_phrase(to_go, int(c.position[me]), self._name(ahead),
+                                                 None if np.isnan(gap) else float(gap))
+                text += self._penalty_reminder(me)
+                self._say("racecraft_countdown", text,
                     Priority.NORMAL if to_go == 1 else Priority.LOW, max_wait_s=30.0,
                     must_say=to_go == 1)        # Jeddah, 9 Nov: "Last lap" was dropped
 
@@ -279,6 +282,18 @@ class RaceCraftAnalyzer:
         text = phrases.battle_phrase(self._name(car), near[car], laps, swaps)
         self.battle_pending[text] = before
         self._say("racecraft_battle", text, Priority.LOW, max_wait_s=15.0)
+
+    def _penalty_reminder(self, me: int) -> str:
+        """For the countdown: a time penalty on the car just ahead or behind (12 Nov)."""
+        from engineer.tools.rivals import car_at, gap_between
+        c = self.state.cars
+        for side, off in (("ahead", -1), ("behind", 1)):
+            car = car_at(self.state, c.position[me] + off)
+            if car is not None and not np.isnan(c.penalties_s[car]) and c.penalties_s[car] > 0:
+                return " " + phrases.penalty_reminder_phrase(
+                    self._name(car), side, int(c.penalties_s[car]),
+                    gap_between(self.state, me, car))
+        return ""
 
     def _finish(self, e: ev.LapCompleted) -> None:
         if self.finished or not self.cfg.finish or e.position is None:
@@ -417,8 +432,13 @@ class RaceCraftAnalyzer:
                 self._say("racecraft_fastest", phrases.fastest_lap_phrase(d["lapTime"]),
                           Priority.LOW, max_wait_s=15.0)
         elif e.code == "PENA" and self.cfg.penalties and d["vehicleIdx"] == me:
-            self._say("racecraft_penalty", phrases.penalty_phrase(
-                d["penaltyType"], d["infringementType"], d["time"]), max_wait_s=15.0)
+            if d["penaltyType"] == 5 and d["infringementType"] in TRACK_LIMITS:
+                # Counted (12 Nov, from the real radio: "track limit strike, turn two").
+                self.track_warnings += 1
+                text = phrases.track_limits_warning_phrase(self.track_warnings)
+            else:
+                text = phrases.penalty_phrase(d["penaltyType"], d["infringementType"], d["time"])
+            self._say("racecraft_penalty", text, max_wait_s=15.0)
         elif e.code == "SCAR" and self.cfg.safety_car and d["eventType"] == 1:
             # The game can send the same SCAR twice (18-lap Austria race: both at 321.6 s).
             if e.session_time - self.sc_in_said < SC_IN_REPEAT_S:

@@ -20,7 +20,7 @@ Wheel arrays (shape (22, 4)) are ordered RL, RR, FL, FR, as in the game.
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import numpy as np
 
@@ -56,6 +56,11 @@ class SessionInfo:
     network_game: bool | None = None
     formula: int | None = None
     gearbox_assist: int | None = None      # 1 manual, 2 manual + suggested, 3 auto
+    # Weather forecast (Session packet): (session type, minutes ahead, weather 0-5, rain %),
+    # in the game's order. Weather: 0 clear, 1 light cloud, 2 overcast, 3 light rain,
+    # 4 heavy rain, 5 storm.
+    forecast: list = field(default_factory=list)
+    forecast_approximate: bool | None = None
 
     @property
     def manual_gears(self) -> bool:
@@ -113,6 +118,8 @@ class Cars:
         self.pit_stop_timer_ms = _nan()    # time stationary in the box so far
         self.num_pit_stops = _nan()
         self.penalties_s = _nan()
+        self.total_warnings = _nan()
+        self.corner_cutting_warnings = _nan()
         self.grid_position = _nan()
         self.driver_status = _nan()
         self.delta_to_car_in_front_ms = _nan()
@@ -334,6 +341,10 @@ class RaceState:
         s.total_laps = int(r["m_totalLaps"])
         s.track_length_m = int(r["m_trackLength"])
         s.weather = int(r["m_weather"])
+        n = int(r["m_numWeatherForecastSamples"])
+        s.forecast = [(int(w["m_sessionType"]), int(w["m_timeOffset"]), int(w["m_weather"]),
+                       int(w["m_rainPercentage"])) for w in r["m_weatherForecastSamples"][:n]]
+        s.forecast_approximate = bool(r["m_forecastAccuracy"])
         s.track_temp_c = int(r["m_trackTemperature"])
         s.air_temp_c = int(r["m_airTemperature"])
         s.pit_speed_limit_kph = int(r["m_pitSpeedLimit"])
@@ -384,6 +395,8 @@ class RaceState:
         put("pit_stop_timer_ms", ld["m_pitStopTimerInMS"])
         put("num_pit_stops", ld["m_numPitStops"])
         put("penalties_s", ld["m_penalties"])
+        put("total_warnings", ld["m_totalWarnings"])
+        put("corner_cutting_warnings", ld["m_cornerCuttingWarnings"])
         put("grid_position", ld["m_gridPosition"])
         put("driver_status", ld["m_driverStatus"])
         put("delta_to_car_in_front_ms",

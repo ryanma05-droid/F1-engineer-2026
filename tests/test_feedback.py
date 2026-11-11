@@ -72,13 +72,13 @@ def test_log_that_flags_the_last_question_with_the_race(tmp_path):
 
 def test_dismiss_and_matches_now(tmp_path):
     fb = FeedbackLog(tmp_path)
-    a = fb.add({"question": "what tyres is Norris on", "session_uid": "1", "lap": 4,
+    a = fb.add({"question": "is Norris struggling with his tyres", "session_uid": "1", "lap": 4,
                 "intent_then": "tyres"})
     b = fb.add({"question": "how are the tyres", "session_uid": "1", "lap": 5,
                 "intent_then": "unknown"})
     assert a != b
     assert matches_now("how are the tyres", "unknown") == "tyres"     # newly handled
-    assert matches_now("what tyres is Norris on", "tyres") is None    # still the wrong answer
+    assert matches_now("is Norris struggling with his tyres", "tyres") is None    # still the wrong answer
     assert matches_now("blah blah blah") is None
     assert fb.dismiss(a) and not fb.dismiss("nope")
     assert [e["id"] for e in fb.open_entries()] == [b]

@@ -135,7 +135,7 @@ def test_logged_questions_in_the_window(tmp_path):
     cfg.ui.port = 21910
     engine = _engine(cfg)
     fb = engine.answers.feedback
-    keep = fb.add({"question": "what tyres is Norris on", "lap": 4, "track": "Imola",
+    keep = fb.add({"question": "is Norris struggling with his tyres", "lap": 4, "track": "Imola",
                    "intent_then": "tyres"})
     drop = fb.add({"question": "how are the tyres", "lap": 5, "track": "Imola",
                    "intent_then": "unknown"})

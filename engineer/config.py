@@ -137,6 +137,24 @@ class RaceCraft(BaseModel):
     battle_repeat_laps: int = Field(default=3, ge=1)   # encouragement again this often
 
 
+class Weather(BaseModel):
+    """Weather calls from the game's forecast (analyzers/weather.py)."""
+    enabled: bool = True
+    rain_pct: int = Field(default=40, ge=0, le=100)   # a rain chance this high counts as rain
+    horizon_min: int = Field(default=30, ge=1)        # look this far ahead in the forecast
+
+
+class Rivals(BaseModel):
+    """The cars around you (analyzers/rivals.py)."""
+    enabled: bool = True
+    penalties: bool = True            # time penalties on cars near you
+    penalty_positions: int = Field(default=2, ge=1)   # ... within this many places
+    near_gap_s: float = Field(default=5.0, gt=0)      # struggling / pit soon: the car just
+    pace_drop_s: float = Field(default=0.3, gt=0)     # ahead or behind within this, slowing
+    pit_soon_margin_pct: float = Field(default=15.0, ge=0)   # ... worst tyre this close to
+                                                             # your tyre limit
+
+
 class Strategy(BaseModel):
     enabled: bool = True
     min_race_laps: int = Field(default=8, ge=1)       # no strategy calls in shorter races
@@ -243,6 +261,8 @@ class Config(BaseModel):
     corners: Corners = Corners()
     strategy: Strategy = Strategy()
     racecraft: RaceCraft = RaceCraft()
+    weather: Weather = Weather()
+    rivals: Rivals = Rivals()
     voice: Voice = Voice()
     upload: Upload = Upload()
     report: Report = Report()
