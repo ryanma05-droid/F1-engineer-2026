@@ -171,6 +171,18 @@ button { font: inherit; color: inherit; }
 .btn:hover { border-color: #444862; }
 .btn.primary { background: var(--red); border-color: var(--red); color: #fff; }
 .btn:disabled { opacity: .5; cursor: default; }
+/* on/off switch */
+.toggle { display: flex; align-items: center; gap: 12px; cursor: pointer; font-size: 14px; }
+.toggle input { appearance: none; -webkit-appearance: none; margin: 0; flex: none; width: 44px;
+  height: 24px; border-radius: 99px; background: var(--panel-2); border: 1px solid var(--line);
+  position: relative; cursor: pointer; transition: background .15s, border-color .15s; }
+.toggle input::after { content: ""; position: absolute; top: 2px; left: 2px; width: 18px;
+  height: 18px; border-radius: 50%; background: var(--ink-3); transition: transform .15s, background .15s; }
+.toggle input:checked { background: var(--red); border-color: var(--red); }
+.toggle input:checked::after { transform: translateX(20px); background: #fff; }
+.toggle input:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+.toggle input:disabled { opacity: .5; cursor: default; }
+.ovrow { display: flex; align-items: center; gap: 12px; margin-top: 14px; flex-wrap: wrap; }
 .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 16px; }
 .kpi .v { font-size: 26px; font-weight: 750; }
 .kpi .k { font-size: 11px; color: var(--ink-3); text-transform: uppercase; letter-spacing: .1em; }
@@ -305,6 +317,8 @@ ul.good li::before { content: "\2713"; position: absolute; left: 0; top: 1px; wi
       <div class="seg two" id="detailSettings"></div>
       <div class="tip">Say <span class="say">“give me the numbers”</span> or
         <span class="say">“keep it simple”</span> to switch mid-race.</div></div>
+    <div class="card" style="margin-bottom:16px"><h3><span class="grow">Lap delta overlay</span><span class="muted small" id="ovNote"></span></h3>
+      <div id="ovSettings"></div></div>
     <div class="card" style="margin-bottom:16px"><h3><span class="grow">Updates</span><span class="muted small" id="updVer"></span></h3>
       <div id="updSettings"></div></div>
     <div class="card"><h3>Game telemetry</h3><div class="small" id="telemetry"></div></div>
@@ -762,7 +776,35 @@ function renderUpdate() {
   }
 }
 
+/* ---- lap delta overlay ---- */
+const OV_NOTE = {off: "", starting: "opening…", on: "on", moving: "moving", failed: ""};
+async function overlayAction(body, path) { S = await post(path || "/api/settings", body); render(); }
+function renderOverlay() {
+  const o = S.overlay || {available: false}, el = $("#ovSettings");
+  $("#ovNote").textContent = OV_NOTE[o.state] ?? "";
+  if (!o.available) {
+    paint(el, `<p class="muted small" style="margin:0">The overlay sits over the game on a Windows PC. ` +
+      (S.console_player ? "For console players a full-screen version is coming." : "It isn't available on this computer.") + `</p>`);
+    return;
+  }
+  const moving = o.state === "moving", live = o.state === "on" || moving;
+  const hint = moving ? "Drag it into place, scroll on it to resize, then double-click it or press Lock here."
+    : o.state === "starting" ? "Opening the overlay…"
+    : o.error ? esc(o.error) + "." : live ? "Locked: clicks go straight through to the game." : "Turn it on to place it.";
+  if (paint(el, `<label class="toggle"><input type="checkbox" id="ovOn" role="switch" ${o.enabled ? "checked" : ""}
+        ${o.state === "starting" ? "disabled" : ""}> Show my live delta over the game</label>
+      <div class="ovrow"><button class="btn${moving ? " primary" : ""}" id="ovMove" ${o.enabled && o.state !== "starting" ? "" : "disabled"}>
+        ${moving ? "Lock here" : "Move overlay"}</button><span class="muted small" id="ovHint">${hint}</span></div>
+      <div class="tip">Your time against your last clean lap at every point of the lap:
+        <b style="color:var(--loss)">red</b> slower, <b style="color:#3ddc84">green</b> quicker, plus what each corner gained or lost.
+        Needs F1 25 in <b>Borderless Windowed</b> (in the game's graphics settings): full screen hides it.</div>`)) {
+    $("#ovOn").onchange = e => overlayAction({overlay: e.target.checked});
+    $("#ovMove").onclick = () => overlayAction({action: moving ? "lock" : "move"}, "/api/overlay");
+  }
+}
+
 function renderSettings() {
+  renderOverlay();
   controllerButtons($("#ctrlSettings"), S.controller.type, setController, S.console_player);
   const del = $("#detailSettings");
   if (paint(del, DETAILS.map(([k, n, d]) => `<button class="opt" data-k="${k}"

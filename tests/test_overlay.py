@@ -132,3 +132,123 @@ def test_the_window(tk_ok):
     inbox.put(None)
     w._poll()                                                    # destroys the window
     assert not w.running
+
+
+# -- on/off and moving from the app window (overlay/control.py, /api/settings, /api/overlay) ----
+
+class FakeWindowProcess:
+    """Stands in for OverlayProcess: records what it was told, never opens a window."""
+
+    def __init__(self, settings, on_placed=None):
+        self.settings, self.on_placed = settings, on_placed
+        self.locked, self.sent, self.running, self.saves = None, [], False, 0
+
+    def start(self, locked=True):
+        self.running, self.locked = True, locked
+        return True
+
+    def send(self, reading):
+        self.sent.append(reading)
+
+    def set_locked(self, locked, save=False):
+        self.locked = locked
+        if save:                       # the window reports where it is, like a double-click
+            self.on_placed({"x": 300, "y": 20, "scale": 1.2})
+
+    def poll(self):
+        pass
+
+    def close(self):
+        self.running = False
+
+
+def _engine(cfg):
+    import io
+
+    from engineer.app import build_engine
+    from engineer.features.priors import WearPriors
+    return build_engine(cfg, out=io.StringIO(), priors=WearPriors())
+
+
+def test_switching_and_moving_it(tmp_path):
+    import asyncio
+
+    from engineer.config import Config
+    from engineer.overlay.control import OverlayControl
+    cfg = Config(data_dir=tmp_path / "data")
+    (tmp_path / "config.yaml").write_text("{}\n")
+    engine = _engine(cfg)
+    ctl = OverlayControl(cfg, engine, tmp_path / "config.yaml",
+                         process_factory=FakeWindowProcess, platform="win32")
+
+    async def run():
+        assert ctl.status() == {"available": True, "enabled": False, "state": "off",
+                                "error": None}
+        ctl.send(reading(0.1))                         # off: nothing to send to
+        await ctl.set_enabled(True)
+        proc = ctl.process
+        assert ctl.state == "on" and proc.locked is True and cfg.overlay.enabled
+        ctl.send(reading(0.1))
+        assert proc.sent
+        await ctl.move()
+        assert ctl.state == "moving" and proc.locked is False
+        ctl.lock()                                     # "Lock here": locked, spot saved
+        assert ctl.state == "on" and proc.locked and (cfg.overlay.x, cfg.overlay.y) == (300, 20)
+        await ctl.set_enabled(False)
+        assert ctl.state == "off" and ctl.process is None and not proc.running
+        await ctl.move()                               # Move while off turns it on first
+        assert ctl.state == "moving" and cfg.overlay.enabled
+        ctl.process.running = False                    # the window closed by itself
+        ctl.poll()
+        assert ctl.state == "failed" and ctl.error
+    asyncio.run(run())
+    local = yaml.safe_load((tmp_path / "config.local.yaml").read_text())
+    assert local["overlay"] == {"x": 300, "y": 20, "scale": 1.2}
+    # Not on Windows: offered as unavailable, never started.
+    other = OverlayControl(cfg, engine, None, process_factory=FakeWindowProcess, platform="darwin")
+    asyncio.run(other.set_enabled(True))
+    assert other.process is None and other.state == "failed" and not other.status()["available"]
+
+
+def test_the_settings_switch_and_move_button(tmp_path):
+    import asyncio
+    import json
+
+    from engineer.config import Config
+    from engineer.overlay.control import OverlayControl
+    from engineer.ui.app import AppWindow
+    from tests.test_ui import _http
+    cfg = Config(data_dir=tmp_path / "data")
+    cfg.ui.port = 21893
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text("{}\n")
+    engine = _engine(cfg)
+    ctl = OverlayControl(cfg, engine, config_path, process_factory=FakeWindowProcess,
+                         platform="win32")
+    window = AppWindow(cfg, engine, config_path=config_path, overlay=ctl)
+
+    async def run():
+        await window.start()
+        port = window.server.port
+        st, body = await _http(port, "GET", "/")
+        assert b"Lap delta overlay" in body
+        st, body = await _http(port, "POST", "/api/settings", {"overlay": True})
+        assert st == 200 and json.loads(body)["overlay"]["state"] == "on"
+        st, body = await _http(port, "POST", "/api/overlay", {"action": "move"})
+        assert json.loads(body)["overlay"]["state"] == "moving"
+        st, body = await _http(port, "POST", "/api/overlay", {"action": "lock"})
+        assert json.loads(body)["overlay"]["state"] == "on"
+        st, _ = await _http(port, "POST", "/api/overlay", {"action": "spin"})
+        assert st == 400
+        st, _ = await _http(port, "POST", "/api/settings", {"overlay": "yes"})
+        assert st == 400
+        st, body = await _http(port, "POST", "/api/settings", {"overlay": False})
+        assert json.loads(body)["overlay"] == {"available": True, "enabled": False,
+                                               "state": "off", "error": None}
+        window.close()
+    asyncio.run(run())
+    local = yaml.safe_load((tmp_path / "config.local.yaml").read_text())
+    assert local["overlay"] == {"enabled": False, "x": 300, "y": 20, "scale": 1.2}
+    # Without a control (replays, tests): shown as not available.
+    plain = AppWindow(cfg, engine)
+    assert plain.snapshot()["overlay"]["available"] is False

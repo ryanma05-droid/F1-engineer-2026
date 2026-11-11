@@ -67,9 +67,10 @@ class OverlayProcess:
         self._inbox.put({"reading": msg})
         self.poll()
 
-    def set_locked(self, locked: bool) -> None:
+    def set_locked(self, locked: bool, save: bool = False) -> None:
+        """save: also report the spot back (a "placed" message), as double-clicking does."""
         if self._inbox is not None:
-            self._inbox.put({"locked": locked})
+            self._inbox.put({"locked": locked, "save": save})
 
     def update_settings(self, **changes) -> None:
         self.settings.update(changes)

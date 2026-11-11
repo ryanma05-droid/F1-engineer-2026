@@ -855,5 +855,8 @@ From the real radio study's most common unprompted topics.
       move mode (drag, scroll to resize, double-click to lock, spot saved); hidden with
       nothing to show. `python -m engineer.overlay --demo` / `--replay <file>` to try it.
       Rendered and replayed here under a virtual display; not yet seen on Windows
-- [ ] Step 3: the Settings switch, reference choice, and a full-screen page for console players
+- [x] Step 3 (part): Settings switch and "Move overlay" / "Lock here" button, live; the overlay
+      restyled to the app's F1 look (red edge and stripes, header strip, timing-chip corner
+      split, Bahnschrift). The demo works on Windows (14 Nov)
+- [ ] Still to do: reference choice in Settings, full-screen page for console players
 - [ ] Step 4: try it in the game (borderless windowed) and pick the screen area

@@ -53,13 +53,16 @@ def _laptime(ms: float | None) -> str | None:
 
 class AppWindow:
     def __init__(self, cfg: Config, engine, listener=None, recorder=None, ptt=None,
-                 config_path: Path | None = None, voice=None, uploader=None, updater=None):
+                 config_path: Path | None = None, voice=None, uploader=None, updater=None,
+                 overlay=None):
         """ptt: the push-to-talk control (cli.PushToTalkControl) or None (replays, tests).
-        voice: radio.switch.VoiceControl (picks the engineer); None = personality only."""
+        voice: radio.switch.VoiceControl (picks the engineer); None = personality only.
+        overlay: overlay.control.OverlayControl (the lap delta overlay); None = not offered."""
         from engineer.radio.switch import VoiceControl
         self.voice = voice or VoiceControl(cfg, engine, None)
         self.uploader = uploader                 # ingest.uploader.BackgroundUploader (live only)
         self.updater = updater                   # updates.Updater (live only)
+        self.overlay = overlay
         self._voice_task = None
         self.cfg, self.engine, self.listener, self.recorder = cfg, engine, listener, recorder
         self.ptt, self.config_path = ptt, config_path
@@ -87,6 +90,7 @@ class AppWindow:
             ("POST", "/api/prerace"): self._api_prerace,
             ("POST", "/api/upload"): self._api_upload,
             ("POST", "/api/update"): self._api_update,
+            ("POST", "/api/overlay"): self._api_overlay,
         })
         self._prerace_busy = False
 
@@ -225,6 +229,8 @@ class AppWindow:
             "update": self.updater.status() if self.updater is not None
             else {"current": VERSION, "enabled": False, "available": False},
             "console_player": self.cfg.platform == "console",
+            "overlay": self.overlay.status() if self.overlay is not None
+            else {"available": False, "enabled": False, "state": "off", "error": None},
         }
 
     # -- routes -------------------------------------------------------------------------------
@@ -327,6 +333,24 @@ class AppWindow:
                 log.warning("could not save settings (%s)", exc)
         return Response(200, self.snapshot())
 
+    async def _api_overlay(self, body: dict) -> Response:
+        """The Move overlay / Lock here button."""
+        if self.overlay is None:
+            return Response(400, {"error": "the overlay isn't available here"})
+        action = body.get("action")
+        if action == "move":
+            await self.overlay.move()
+            if self.overlay.cfg.overlay.enabled:
+                try:
+                    save_local({"overlay": {"enabled": True}}, self.config_path)
+                except OSError as exc:
+                    log.warning("could not save settings (%s)", exc)
+        elif action == "lock":
+            self.overlay.lock()
+        else:
+            return Response(400, {"error": "action must be move or lock"})
+        return Response(200, self.snapshot())
+
     async def _api_settings(self, body: dict) -> Response:
         save: dict = {}
         tempo = body.get("tempo")
@@ -382,6 +406,14 @@ class AppWindow:
                         part.console = not v.enabled
             if self.ptt is not None:
                 await self.ptt.apply(self.cfg)
+        if "overlay" in body:
+            on = body["overlay"]
+            if not isinstance(on, bool):
+                return Response(400, {"error": "overlay must be true or false"})
+            if self.overlay is None:
+                return Response(400, {"error": "the overlay isn't available here"})
+            await self.overlay.set_enabled(on)
+            save["overlay"] = {"enabled": on}
         if body.get("setup_done") and not self.cfg.ui.setup_done:
             self.cfg.ui.setup_done = True
             save["ui"] = {"setup_done": True}

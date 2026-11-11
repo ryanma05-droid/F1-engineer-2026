@@ -183,24 +183,6 @@ async def _idle_loop(engine, overlay=None) -> None:
             overlay.poll()
 
 
-def start_overlay(cfg: Config, engine, config_path: Path | None = None):
-    """The lap delta overlay window (overlay.enabled; Windows: it sits over the game)."""
-    if not cfg.overlay.enabled or sys.platform != "win32":
-        return None
-    from engineer.overlay.process import (
-        OverlayFeed,
-        OverlayProcess,
-        save_placed,
-        settings_of,
-    )
-    overlay = OverlayProcess(settings_of(cfg.overlay), on_placed=save_placed(config_path))
-    if not overlay.start():
-        return None
-    engine.pipeline.after_packet.append(OverlayFeed(engine.live_delta, overlay).after_packet)
-    print("Lap delta overlay on (needs the game in borderless windowed mode).")
-    return overlay
-
-
 async def _run(cfg: Config, record: bool | None, voice: bool, ptt_on: bool = True,
                config_path: Path | None = None, ui: bool = True) -> None:
     if record is not None:
@@ -258,7 +240,13 @@ async def _run(cfg: Config, record: bool | None, voice: bool, ptt_on: bool = Tru
     await listener.start()
     if recorder:
         uploader.start()
-    overlay = start_overlay(cfg, engine, config_path)
+    # The lap delta overlay (Windows): on and off, and moved, from the Settings tab.
+    from engineer.overlay.control import OverlayControl
+    overlay = OverlayControl(cfg, engine, config_path)
+    if cfg.overlay.enabled:
+        await overlay.set_enabled(True)
+        if overlay.state == "on":
+            print("Lap delta overlay on (needs the game in borderless windowed mode).")
     idle = asyncio.create_task(_idle_loop(engine, overlay))
     window = None
     if ui and cfg.ui.enabled:
@@ -266,7 +254,7 @@ async def _run(cfg: Config, record: bool | None, voice: bool, ptt_on: bool = Tru
         from engineer.ui.app import AppWindow, open_window
         window = AppWindow(cfg, engine, listener, recorder, ptt, config_path,
                            voice=VoiceControl(cfg, engine, audio), uploader=uploader,
-                           updater=updater)
+                           updater=updater, overlay=overlay)
         if audio and wait_for_setup:
             window.on_setup_done = lambda: welcome(cfg, audio, ptt.wanted(cfg))
         try:

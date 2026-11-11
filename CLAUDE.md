@@ -207,7 +207,7 @@ uv run python -m engineer.overlay --replay <file.zst> --locked   # ... fed by a 
   data/once.json), not on the grid: a race session starts only ~6 s before lights out, and the
   game's session time stays 0.0 until lights out (real recordings).
 
-## Lap delta overlay (14 Nov; steps 1-2 of 4: the calculation and the window)
+## Lap delta overlay (14 Nov: the calculation, the window, the Settings switch)
 
 - `state/live_delta.py` `LiveDelta` (wired in `build_engine` after traces, features and
   corners; `Engine.live_delta`): on every Lap Data packet, your current lap time minus the
@@ -238,12 +238,24 @@ uv run python -m engineer.overlay --replay <file.zst> --locked   # ... fed by a 
   process.py (`OverlayProcess`: `send` never blocks, ~15 Hz and at once when the reading
   appears/disappears or a corner split comes; `OverlayFeed` after Lap Data packets;
   `save_placed` -> config.local.yaml). Wall-clock only for display, never for the race model.
-- Live: `cli.start_overlay` when `overlay.enabled` (Windows only), the idle loop blanks it in
-  menus. Needs the game in borderless windowed (fullscreen hides overlays). Packaging keeps
-  tkinter on Windows; `--check` opens a hidden Tk window. Tested: view/feed/saving always, the
-  real window where Tk has a display (xvfb-run here; the container needed python3.12-tk).
-- Next: step 3, the Settings switch, reference choice, "Move overlay" button, and a full-screen
-  page for console players; step 4, try it in the game.
+- Look (14 Nov, "use F1 themes"): matches the app window: near-black panel, F1 red edge and the
+  logo's diagonal stripes, a header strip "DELTA  VS L4" with the corner split as a timing-chip
+  (white "T3" box + coloured gain; the "VS L4" label drops out when they'd touch), Bahnschrift
+  (Windows 10/11's DIN face) picked from the installed fonts, bar ticks at half scale.
+- Live (`overlay/control.py` `OverlayControl`, made in cli, passed to AppWindow and the idle
+  loop): `set_enabled` starts/stops the window process off the loop (`asyncio.to_thread`), states
+  off / starting / on / moving / failed; `move()` unlocks (turning it on first if off); `lock()`
+  = {"locked": True, "save": True} -> the window reports its spot like a double-click
+  (`_placed` updates cfg and config.local.yaml). The feed is wired once and does nothing while
+  off. Windows only (`available`). Settings tab card "Lap delta overlay": switch
+  (`/api/settings {"overlay": bool}`, saved), "Move overlay" / "Lock here" (`/api/overlay
+  {"action": "move"|"lock"}`), status line; snapshot["overlay"]. The idle loop blanks it in
+  menus and notices a window that closed. Needs the game in borderless windowed. Packaging keeps
+  tkinter on Windows; `--check` opens a hidden Tk window. Tested: view/feed/control/API always
+  (a fake window process), the real window where Tk has a display (xvfb-run here; the container
+  needed python3.12-tk).
+- Next: the reference choice (previous/best) in Settings, a full-screen page for console
+  players, and trying it in the game.
 
 ## Driver report
 
