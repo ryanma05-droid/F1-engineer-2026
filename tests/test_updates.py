@@ -163,9 +163,10 @@ def test_window_buttons_and_settings(tmp_path):
 
 def test_installer_waits_for_the_app_to_exit_and_logs(tmp_path):
     # 11 Nov: a fixed 4 s wait, and the daily report process holding the app's files.
-    from pathlib import Path
+    from pathlib import PureWindowsPath
     from engineer.updates import SILENT_ARGS, installer_command
-    exe = Path(r"C:\Users\o'neil\AppData\Local\RaceEngineer\data\updates\RaceEngineer-Setup-0.1.7.exe")
+    # A Windows path on every platform (the release build runs this on Windows: 11 Nov, v0.1.7).
+    exe = PureWindowsPath(r"C:\Users\o'neil\AppData\Local\RaceEngineer\data\updates\RaceEngineer-Setup-0.1.7.exe")
     log = exe.with_name("install.log")
     cmd = installer_command(exe, log, 4242)
     assert cmd[0] == "powershell" and "-WindowStyle" in cmd
@@ -173,7 +174,8 @@ def test_installer_waits_for_the_app_to_exit_and_logs(tmp_path):
     assert script.startswith("Wait-Process -Id 4242 ")
     assert "'C:\\Users\\o''neil\\" in script                     # quotes escaped
     assert "/CLOSEAPPLICATIONS" in SILENT_ARGS and "'/CLOSEAPPLICATIONS'" in script
-    assert f"'/LOG=\"{log}\"'" in script
+    escaped = str(log).replace("'", "''")                       # PowerShell's quote doubling
+    assert f"'/LOG=\"{escaped}\"'" in script
 
 
 def test_a_failed_install_is_reported_next_start(tmp_path):
