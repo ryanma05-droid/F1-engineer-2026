@@ -65,6 +65,40 @@ RULES: list[tuple[str, list[str]]] = [
                       r"^(please |can you |could you )?lock (that|this|it|the following|the last|"
                       r"the previous|my|a|question)\b",
                       r"\b(log|add|put) (that|this|it) (to|in|on) (the |my )?(feedback|log|list)\b"]),
+    # 13 Nov: strategy as a dialogue. Your preferences steer the plan (voice/dialogue.py reads
+    # them); offers are answered yes / no; "why?", "are you sure?"; race pace.
+    ("prefs_clear", [r"\bback to (your|the|our|original) (plan|strategy|call)\b",
+                     r"\b(reset|clear|forget|scrap) (the |my |that |those )?(strategy|plan|"
+                     r"preferences|requests?|that)\b", r"^(your call|you decide)\W*$"]),
+    ("prefs", [r"\b(finish|end|last stint|final stint)\w* on (the )?(softs?|mediums?|hards?)\b",
+               r"\b(max|maximum|limit|no more than|up to|don't go (past|over|above)|"
+               r"(run|take) (them|it|these|the tyres) to)\b.*\b(\d+|" + _NUM_WORDS + r")\s*(%|percent)",
+               r"\b(\d+|" + _NUM_WORDS + r")\s*(%|percent)\s*(max|maximum|limit|tops)\b",
+               r"\bno more stops\b",
+               r"\b(only|make it|do a|let's do|lets do|i want|go for|switch to|i'd like|change to)"
+               r"\b.*\b(one|two|three|1|2|3)[ -]?stop", r"\b(one|two|three|1|2|3)[ -]?stop(per)? only\b",
+               r"^(no|avoid( the)?|not the|skip( the)?) (softs?|mediums?|hards?)\b",
+               r"\b(don't (want|give me|put me on)|avoid|without)( the)? (softs?|mediums?|hards?)\b",
+               r"\b(go|going|stay out|run|stretch)(ing)? (a bit )?long(er)?\b",
+               r"\bextend (the |this )?stint\b",
+               r"\b(box|pit|stop|come in)(ing)? (early|earlier|short|sooner)\b", r"\bgo(ing)? short\b",
+               r"\b(i want to|i'll|let's|lets|i'm going to|we'll|i'd like to|plan to) (box|pit|stop)"
+               r"\w* (on |at |end of )?lap\b"]),
+    ("accept", [r"^(yes|yeah|yep|yup|ok|okay|sure|go on|affirmative)\W*(please|mate)?\W*$",
+                r"\b(do it|go for it|take it|let's do (it|that)|go with (it|that)|sounds good|"
+                r"deal|let's go for it|yes please)\b"]),
+    ("decline", [r"^(no|nope|nah|negative)\W*(thanks|mate)?\W*$",
+                 r"\b(stick with|keep) (it|that)\W*$",
+                 r"\b(stick with|keep) (the plan|our plan|the current( plan)?|what we have)\b",
+                 r"\bno thanks\b"]),
+    ("pace_save", [r"\bhow much (do|should) (i|we) (need to )?(save|manage)\b",
+                   r"\bdo (i|we) need to (save|manage|look after)\b",
+                   r"\bhow much (tyre )?(saving|management)\b"]),
+    ("pace_push", [r"\b(can|could|should) (i|we) (push|attack|go faster|go flat out|send it)\b",
+                   r"\bhow hard can (i|we) push\b"]),
+    ("pace_mode", [r"\bi('m| am) (managing|saving|pushing|attacking|going to push|going to manage|"
+                   r"going to save)\b", r"\b(push|manage|management) mode\b",
+                   r"\bi('ll| will) (push|manage|save)\b"]),
     ("radio_check", [r"\bradio check\b", r"\bcan you hear me\b", r"\bdo you (read|copy)\b"]),
     # 29 Oct Imola: "Repeat that."
     ("repeat", [r"\brepeat\b", r"\bsay (that|it) again\b", r"\bcome again\b",
@@ -156,6 +190,11 @@ RULES: list[tuple[str, list[str]]] = [
                  r".*\b(hards?|mediums?|softs?)\b"]),
     # "Will hards make it to the end?" (a new set of them, not the fitted ones); "What will they
     # be by the end?", "How will they be at the end of the second stint?" (the plan's stints)
+    ("why", [r"^why\b(?!.*\b(hards?|mediums?|softs?)\b)", r"\bwhy (is that|that|this|the plan|are we|the change|"
+             r"did (we|you|it) change)\b", r"\bexplain (that|the plan|the strategy|why)\b"]),
+    ("sure", [r"^(are you|you) sure\W*$", r"\bare you sure (about )?(that|this|the plan|it)\b",
+              r"\bhow (sure|confident) are you\b", r"\bis (that|it|this|the plan) safe\b",
+              r"\bhow risky\b", r"\byou sure (you )?like this (strategy|plan)\b"]),
     ("compound_to_end", [r"\b(hards?|mediums?|softs?)\b.*\b(make it|last|hold up|get) (to )?the (end|finish|flag)\b",
                          r"\bwill (the )?(hards?|mediums?|softs?) (last|make it|hold)\b"]),
     ("stints_end", [r"\b(what|how) will (they|these|the tyres?|my tyres?) (be|look)\b",

@@ -65,6 +65,9 @@ class StrategyRequest:
     two_compound: tuple[str, int] = ("auto", 10)  # strategy.two_compound_rule, ..._min_laps
     # This session's stops timed by the game's pit lane timer: (green, safety car) losses.
     pit_samples: tuple[tuple[float, ...], tuple[float, ...]] = ((), ())
+    # Your preferences are on `situation`; this is the same race without them, so the read-back
+    # can say what they cost (13 Nov).
+    free_situation: RaceSituation | None = None
 
 
 @dataclass
@@ -81,6 +84,8 @@ class StrategyResult:
     situation: RaceSituation | None = None   # what was solved (wear, sets, laps) after the model
     options: tuple = ()                  # candidate plans: each stop count, each next tyre
     hold: Plan | None = None             # hold_lap: the best plan keeping the committed stop
+    free: SimResult | None = None        # the best plan without your preferences
+    free_situation: RaceSituation | None = None   # ... and the race it was priced on
     starts: tuple = ()                   # pre-race: (start compound, StrategyResult), each
     race_length: RaceLength | None = None    # pre-race: the laps planned for, and why
 
@@ -173,18 +178,22 @@ def solve(req: StrategyRequest, history: list[dict],
         # Candidates for the call (decision.py): the best plan for each number of stops, and the
         # best plan for each tyre you could fit at the next stop.
         options = list(sim.by_stops.values())
-        if req.what_if_box_lap is None:
+        free_sit = replace(req.free_situation, pit_loss_s=sit.pit_loss_s,
+                           sc_pit_loss_s=sit.sc_pit_loss_s) \
+            if req.free_situation is not None else None
+        free = simulate(free_sit, model) if free_sit is not None else None
+        if req.what_if_box_lap is None and sit.first_stop_compound is None:
             for c, left in sorted(sit.sets.items()):
-                if left:
+                if left and c not in sit.avoid:
                     options.append(simulate(replace(sit, first_stop_compound=c), model).best)
         # Careful versions (stopping before the tyres get near the limit), priced at the real
         # limit, so there's a safe plan to compare a tight one with.
         for lim in req.safe_limits:
             careful = replace(sit, limit_pct=lim)
             found = list(simulate(careful, model).by_stops.values())
-            if req.what_if_box_lap is None:
+            if req.what_if_box_lap is None and sit.first_stop_compound is None:
                 for c, left in sorted(sit.sets.items()):
-                    if left:
+                    if left and c not in sit.avoid:
                         found.append(simulate(replace(careful, first_stop_compound=c), model).best)
             for p in found:
                 if p is not None:
@@ -195,7 +204,8 @@ def solve(req: StrategyRequest, history: list[dict],
                                     first_stop_compound=req.hold_compound), model).best
         return StrategyResult(req.seq, req.reason, sit.lap_done, model, sim, green,
                               sc_laps=sit.sc_laps, what_if=what_if, situation=sit,
-                              options=tuple(p for p in options if p is not None), hold=hold)
+                              options=tuple(p for p in options if p is not None), hold=hold,
+                              free=free, free_situation=free_sit)
     except Exception as exc:
         log.exception("strategy solve failed")
         return StrategyResult(req.seq, req.reason, req.situation.lap_done, None, SimResult(None),

@@ -73,6 +73,11 @@ class RaceSituation:
     min_gain_s: float = 3.0      # an extra stop must save at least this much to be the plan
     first_stop_lap: int | None = None   # "what if I box now?": force the first stop on this lap
     first_stop_compound: int | None = None   # ... and onto this compound ("pit for hards")
+    # Your preferences (strategy/prefs.py, 13 Nov): rules every plan must follow.
+    avoid: frozenset[int] = frozenset()          # never fit these ("no hards")
+    final_compound: int | None = None            # the last stint on this ("finish on softs")
+    min_stops: int = 0                           # at least this many stops ("two stop")
+    first_stop_range: tuple[int, int] | None = None   # first stop between these laps
 
 
 @dataclass
@@ -101,7 +106,7 @@ def simulate(sit: RaceSituation, model: StrategyModel) -> SimResult:
     R = sit.total_laps - sit.lap_done           # laps still to drive
     if R <= 0 or sit.compound not in model.compounds:
         return SimResult(None)
-    comps = [c for c in DRY if c in model.compounds and sit.sets.get(c)]
+    comps = [c for c in DRY if c in model.compounds and sit.sets.get(c) and c not in sit.avoid]
     sets = {c: sorted(sit.sets[c]) for c in comps}
     curves: dict[tuple[int, int], np.ndarray] = {}     # (compound, set index) -> costs
 
@@ -165,10 +170,16 @@ def simulate(sit: RaceSituation, model: StrategyModel) -> SimResult:
             key = (counts, ci)
             if key not in V:
                 c = comps[ci]
-                V[key] = best_from(curve(c, counts[ci] - 1), G(counts)[0])
+                if sum(counts) == k and sit.final_compound is not None \
+                        and c != sit.final_compound:          # the last stint must be on it
+                    V[key] = (np.full(R + 1, math.inf), np.zeros(R + 1, dtype=int))
+                else:
+                    V[key] = best_from(curve(c, counts[ci] - 1), G(counts)[0])
             return V[key]
 
         zero = (0,) * len(comps)
+        if k == 0 and sit.final_compound is not None and sit.compound != sit.final_compound:
+            return None                                  # no stop: you'd finish on these
         g0 = G(zero)[0]
         forced = None
         if sit.first_stop_compound is not None:
@@ -179,6 +190,12 @@ def simulate(sit: RaceSituation, model: StrategyModel) -> SimResult:
             first = tuple(int(i == forced) for i in range(len(comps)))
             g0 = pit + Vs(first, forced)[0]
             g0[0] = g0[R] = math.inf
+        if sit.first_stop_range is not None and k > 0:
+            lo, hi = (q - sit.lap_done for q in sit.first_stop_range)
+            keep = np.full(R + 1, math.inf)
+            keep[max(1, lo):min(R - 1, hi) + 1] = 0.0
+            keep[R] = 0.0
+            g0 = g0 + keep
         if sit.first_stop_lap is not None:
             # Only the forced lap may end the first stint (no stop at all isn't allowed either).
             keep = np.full(R + 1, math.inf)
@@ -216,7 +233,8 @@ def simulate(sit: RaceSituation, model: StrategyModel) -> SimResult:
             window = (sit.lap_done + lo, sit.lap_done + hi)
         return Plan(tuple(stops), float(total), window)
 
-    by_stops = {k: p for k in range(0, sit.max_stops + 1) if (p := solve(k)) is not None}
+    by_stops = {k: p for k in range(sit.min_stops, sit.max_stops + 1)
+                if (p := solve(k)) is not None}
     if not by_stops:
         return SimResult(None)
     # Fewer stops wins unless more stops save at least min_gain_s: a stop that gains a second on

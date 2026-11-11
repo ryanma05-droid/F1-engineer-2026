@@ -50,6 +50,9 @@ class Radio(BaseModel):
     # The engineer picked in the app window (radio/engineers.py): their voice and manner.
     engineer: str | None = None
     driver_name: str | None = None  # what GP calls you on the radio (unset: "mate")
+    # Console only: no push-to-talk, so the engineer volunteers more (alternatives with pros
+    # and cons, push / manage signals, gaps). None = on whenever push-to-talk is off.
+    console_only: bool | None = None
 
     @property
     def gain(self) -> float:
@@ -137,6 +140,15 @@ class RaceCraft(BaseModel):
     battle_repeat_laps: int = Field(default=3, ge=1)   # encouragement again this often
 
 
+class Pace(BaseModel):
+    """Save or push, from your tyres against the plan (analyzers/pace.py)."""
+    enabled: bool = True
+    manage_min_save_pct: float = Field(default=0.3, ge=0)   # "manage": save this much a lap+
+    manage_every_laps: int = Field(default=3, ge=1)         # ... again this often (2 console)
+    push_margin_pct: float = Field(default=12.0, ge=0)      # console: "you can push"
+    status_every_laps: int = Field(default=3, ge=1)         # console: gaps ahead / behind
+
+
 class Weather(BaseModel):
     """Weather calls from the game's forecast (analyzers/weather.py)."""
     enabled: bool = True
@@ -157,6 +169,10 @@ class Rivals(BaseModel):
 
 class Strategy(BaseModel):
     enabled: bool = True
+    offer_gain_s: float = Field(default=3.0, ge=0)    # offer the gamble ("want it?") when it's
+                                                      # this much quicker
+    alt_every_laps: int = Field(default=5, ge=1)      # console: an alternative this often
+    alt_window_s: float = Field(default=10.0, ge=0)   # ... within this much of the plan
     min_race_laps: int = Field(default=8, ge=1)       # no strategy calls in shorter races
     announce_after_lap: int = Field(default=2, ge=1)  # first plan once a wear rate is measured
     max_stops: int = Field(default=3, ge=1, le=5)
@@ -262,6 +278,7 @@ class Config(BaseModel):
     strategy: Strategy = Strategy()
     racecraft: RaceCraft = RaceCraft()
     weather: Weather = Weather()
+    pace: Pace = Pace()
     rivals: Rivals = Rivals()
     voice: Voice = Voice()
     upload: Upload = Upload()

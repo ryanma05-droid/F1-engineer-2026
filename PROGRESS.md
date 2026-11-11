@@ -822,3 +822,18 @@ From the real radio study's most common unprompted topics.
   simulated data only.
 - [ ] Not heard live yet; wet-weather strategy (when to box for inters) is still open
 
+## Strategy as a dialogue; console-only mode (13 Nov)
+
+- [x] Preferences steer the plan: finish on a tyre, max wear, number of stops, avoid a tyre, go
+      long / box early / box on lap N; read back with the time against our plan; pushback when
+      risky ("past our limit ... puncture risk, but it's your call"); "back to your plan"
+- [x] Offers ("Want it?") when the gamble is 3 s+ quicker; yes / no
+- [x] "Why?", "Are you sure?"
+- [x] Pace: "How much do I need to save?", "Can I push?", manage calls, "I'm managing / pushing"
+      measured two laps later
+- [x] Console only: options with pros and cons, push / manage calls, gaps; the controller choice
+      "Console only (no push to talk)"
+- Real Bahrain race (9 Nov): a "finish on softs" dialogue re-planned and the box calls followed;
+  console-only mode added about six calls over 20 laps.
+- [ ] Not tried live yet
+

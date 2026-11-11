@@ -12,6 +12,7 @@ from typing import TextIO
 from engineer.analyzers.coaching import CoachingSummary
 from engineer.analyzers.corners import CornerAnalyzer
 from engineer.analyzers.lap_delta import LapDeltaAnalyzer
+from engineer.analyzers.pace import PaceAnalyzer
 from engineer.analyzers.racecraft import RaceCraftAnalyzer
 from engineer.analyzers.rivals import RivalsAnalyzer
 from engineer.analyzers.weather import WeatherAnalyzer
@@ -51,6 +52,7 @@ class Engine:
     racecraft: RaceCraftAnalyzer | None = None
     weather: object = None          # analyzers/weather.py
     rivals: object = None           # analyzers/rivals.py
+    pace: object = None             # analyzers/pace.py
     coaching: CoachingSummary | None = None
     default_tempo: str = "normal"        # what "back to normal" returns to (radio.verbosity)
     tempo: str = "normal"                # "terse" (shown as Quiet), "normal", "chatty", "coaching"
@@ -144,6 +146,11 @@ def build_engine(cfg: Config, out: TextIO | None = None,
     weather = WeatherAnalyzer(bus, state, director, cfg.weather)
     pipeline.after_packet.append(weather.after_packet)
     rivals = RivalsAnalyzer(bus, state, history, director, cfg.rivals, cfg.tyres.limit_pct)
+    # Console only (no push-to-talk, 13 Nov): the engineer volunteers what you can't ask for.
+    console = cfg.radio.console_only if cfg.radio.console_only is not None \
+        else not cfg.voice.enabled
+    strategy.console = console
+    pace = PaceAnalyzer(bus, state, features, tyres, strategy, director, cfg.pace, console)
     # After race craft: on the last lap the finish call comes first, then the coaching summary.
     coaching = CoachingSummary(bus, state, corners, director)
     engine = Engine(pipeline, history, director, analyzer, features, tyres, traces, corners,
@@ -152,7 +159,7 @@ def build_engine(cfg: Config, out: TextIO | None = None,
     # process; in tests published directly), so they're answered the same way everywhere.
     log_path = cfg.ptt_path / "questions.jsonl" if cfg.voice.log else None
     engine.racecraft = racecraft
-    engine.weather, engine.rivals = weather, rivals
+    engine.weather, engine.rivals, engine.pace = weather, rivals, pace
     engine.coaching = coaching
     engine.default_tempo = cfg.radio.verbosity
     # "Log that" on the radio: the feedback log (data/feedback/). Off when the question log is

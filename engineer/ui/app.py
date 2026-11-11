@@ -376,6 +376,10 @@ class AppWindow:
             if v.enabled:
                 v.controller_type = controller
             save["voice"] = {"enabled": v.enabled, "controller_type": v.controller_type}
+            if self.cfg.radio.console_only is None:      # console only follows push-to-talk
+                for part in (self.engine.strategy, getattr(self.engine, "pace", None)):
+                    if part is not None:
+                        part.console = not v.enabled
             if self.ptt is not None:
                 await self.ptt.apply(self.cfg)
         if body.get("setup_done") and not self.cfg.ui.setup_done:

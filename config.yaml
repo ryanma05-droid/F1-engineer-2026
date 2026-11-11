@@ -18,6 +18,8 @@ radio:
   enabled: true         # speak calls (python -m engineer run --no-voice turns it off for one run)
   verbosity: normal     # terse (Quiet) | normal | chatty | coaching (where to find speed vs the fastest car)
   detail: plain         # plain ("brake slightly later") | specific ("braking fifteen metres earlier")
+  console_only: null    # null = when push-to-talk is off. Console only: options with pros and
+                        # cons, push / manage calls and gaps volunteered (you can't ask)
   voice: en_GB-northern_english_male-medium   # Piper voice in data/voices/
   radio_effect: true    # squelch beeps + band-limited "team radio" sound
   volume_pct: 70        # the app window's volume slider, 0-100 (70 = the old loudness, 100 = about 3x)
@@ -88,6 +90,13 @@ racecraft:              # the human side: battles, passes, start/finish, penalti
   battle_laps: 3        # ... this many laps running: "Third lap with Russell on you, ..."
   battle_repeat_laps: 3 # encouragement again this often while it lasts
 
+pace:                   # save or push, from your tyres against the plan
+  enabled: true
+  manage_min_save_pct: 0.3   # "Manage the tyres, save about one percent a lap to make lap twelve."
+  manage_every_laps: 3       # ... again this often while it holds (every 2 in console-only mode)
+  push_margin_pct: 12        # console-only: "You've got about twelve percent in hand. You can push."
+  status_every_laps: 3       # console-only: gaps ahead and behind and which way they're going
+
 weather:                # forecast calls: "Rain expected in about ten minutes, around lap fourteen."
   enabled: true
   rain_pct: 40          # a forecast rain chance this high counts as rain coming
@@ -103,6 +112,9 @@ rivals:                 # the cars around you
 
 strategy:               # pit strategy (Phase 5): the plan, box calls, safety car stops
   enabled: true
+  offer_gain_s: 3.0     # offer the gamble ("Want it?") when it's this much quicker
+  alt_every_laps: 5     # console-only: an alternative plan with pros and cons this often
+  alt_window_s: 10.0    # ... when one is within this much of the plan
   min_race_laps: 8      # no strategy calls in shorter races
   announce_after_lap: 2 # first plan after this lap (once your wear rate is measured)
   max_stops: 3

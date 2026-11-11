@@ -11,6 +11,7 @@ the button at a moment you chose), and still said in quiet mode.
 
 from __future__ import annotations
 
+import copy
 import json
 import logging
 import math
@@ -26,7 +27,9 @@ from engineer.radio import phrases
 from engineer.radio.director import ANSWER_HOLD_S, Priority, RadioCall
 from engineer.state.track_maps import turn_name
 from engineer.strategy.decision import wear_at
+from engineer.strategy.sim import plan_cost
 from engineer.tools.queries import lap_delta
+from engineer.voice.dialogue import parse_prefs
 from engineer.voice.feedback import FeedbackLog
 from engineer.voice.intents import (
     driver_in,
@@ -47,6 +50,7 @@ DAMAGE_MIN_PCT = 10
 
 log = logging.getLogger(__name__)
 
+OFFER_TTL_S = 120.0          # "yes" to an offer this long after it was made
 ANSWER_MAX_WAIT_S = 15.0     # an answer is still worth hearing this late (it goes ahead of
                              # everything but box and safety car calls)
 LOG_LAST_WITHIN_S = 180.0    # "log that" means the question asked up to this long before
@@ -1320,6 +1324,121 @@ class QuestionAnswerer:
         others = [o.stop_s for o in meter.stops if o.car_idx != p and o.stop_s > 0 and not o.sc]
         typical = float(np.median(others)) if len(others) >= 3 else None
         return phrases.pit_stop_time_phrase(st.lane_s, st.stop_s, typical)
+
+    # -- 13 Nov: strategy as a dialogue ------------------------------------------------------
+
+    def _readback(self, said: list[str], intent: str, snapshot):
+        """The callback for a preferences change: the new plan read back with what it costs,
+        or "can't make a plan with that" (and your previous preferences come back)."""
+        sa = self.engine.strategy
+        total = int(self.state.session.total_laps or 0)
+
+        def done(res, dec) -> None:
+            if dec is None:
+                tried = sa.prefs
+                sa.prefs = snapshot
+                reason = None
+                if tried.stops == (0, 0) and sa._two_compound_rule() and len(
+                        {r.visual_compound for r in sa.features.for_car(self._player())
+                         if r.visual_compound in (16, 17, 18)}) < 2:
+                    reason = "the rules need a second compound, so one more stop at least"
+                self._say_followup(intent, phrases.prefs_failed_phrase(said, reason))
+                return
+            delta = None
+            if res.free is not None and res.free.best is not None \
+                    and res.free_situation is not None and res.model is not None:
+                delta = plan_cost(dec.call.plan, res.free_situation, res.model) \
+                    - res.free.best.cost_s
+            self._say_followup(intent, phrases.prefs_readback_phrase(
+                said, dec, total, delta, sa.tyres.limit_pct, sa.cfg.margin_pct, self.verbosity,
+                your_limit=sa.prefs.limit_pct))
+        return done
+
+    def _change_prefs(self, change: dict, said: list[str], intent: str) -> str | None:
+        sa = self.engine.strategy
+        snapshot = copy.deepcopy(sa.prefs)
+        if not sa.set_prefs(change, self._readback(said, intent, snapshot)):
+            return phrases._sentence("no strategy calls in this race") if not sa._active() \
+                else phrases._sentence("not while you're in the pits")
+        return None
+
+    def _a_prefs(self) -> str | None:
+        """'Finish on softs', 'max fifty percent', 'one stop only', 'no hards', 'go long'."""
+        sa = self.engine.strategy
+        c, p = self.state.cars, self._player()
+        if p is None or np.isnan(c.lap[p]) or not self.state.session.total_laps:
+            return phrases._sentence("no plan yet, I'll have one a couple of laps in")
+        plan = sa.announced
+        stop = plan.next_stop.lap if plan is not None and plan.next_stop is not None else None
+        parsed = parse_prefs(self.heard, int(c.lap[p]), stop, sa._stops_made(),
+                             int(self.state.session.total_laps))
+        if parsed is None:
+            return phrases._sentence("say again")
+        change, said = parsed
+        if "avoid" in change:
+            change["avoid"] = frozenset(sa.prefs.avoid | change["avoid"])
+        change["said"] = sa.prefs.said + said            # for "why?"
+        return self._change_prefs(change, said, "prefs")
+
+    def _a_prefs_clear(self) -> str | None:
+        return self._change_prefs({"clear": True}, ["back to our plan"], "prefs_clear")
+
+    def _a_accept(self) -> str | None:
+        """'Yes' to an offer: the offered plan becomes yours."""
+        sa = self.engine.strategy
+        offer = sa.offer
+        now = self.state.session_time or 0.0
+        if offer is None or now - sa.offer_at > OFFER_TTL_S:
+            return phrases._sentence("copy")
+        sa.offer = None
+        n = offer.n_stops
+        change = {"stops": (n, n),
+                  "next_compound": offer.stops[0].compound if offer.stops else None,
+                  "final_compound": offer.stops[-1].compound if offer.stops else None}
+        return self._change_prefs(change, ["going for it"], "accept")
+
+    def _a_decline(self) -> str:
+        sa = self.engine.strategy
+        if sa.offer is None:
+            return phrases._sentence("copy")
+        sa.offers_declined.add(sa.offer.key())
+        sa.offer = None
+        return phrases.offer_declined_phrase()
+
+    def _a_why(self) -> str:
+        sa = self.engine.strategy
+        if sa.decision is None:
+            return phrases._sentence("no plan yet, give me a couple of laps")
+        return phrases.why_phrase(sa.decision, int(self.state.session.total_laps or 0),
+                                  sa._limit(), sa.cfg.margin_pct, sa.last_reason,
+                                  sa.prefs.said if sa.prefs.active else None)
+
+    def _a_sure(self) -> str:
+        sa = self.engine.strategy
+        if sa.decision is None:
+            return phrases._sentence("no plan yet, give me a couple of laps")
+        return phrases.sure_phrase(sa.decision, sa._limit(), sa.cfg.margin_pct)
+
+    def _pace_target(self) -> dict | None:
+        return self.engine.pace.target() if self.engine.pace is not None else None
+
+    def _a_pace_save(self) -> str:
+        t = self._pace_target()
+        if t is None:
+            return phrases._sentence("give me a couple of laps on these to see the wear")
+        return phrases.save_answer_phrase(t["save"], t["to_lap"], t["flag"], t["margin"])
+
+    def _a_pace_push(self) -> str:
+        t = self._pace_target()
+        if t is None:
+            return phrases._sentence("give me a couple of laps on these to see the wear")
+        return phrases.push_answer_phrase(t["margin"], t["to_lap"], t["flag"])
+
+    def _a_pace_mode(self) -> str:
+        mode = "push" if re.search(r"\b(push|attack)", self.heard.lower()) else "manage"
+        if self.engine.pace is not None:
+            self.engine.pace.declare(mode)
+        return phrases.pace_mode_ack_phrase(mode)
 
     def _a_laps_left(self) -> str:
         n = self._laps_to_go()

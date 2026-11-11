@@ -378,7 +378,7 @@ function controllerButtons(el, current, onPick, consolePlayer) {
   }
   const opts = [["xbox", "Xbox controller", "LB", "Hold LB to talk"],
                 ["playstation", "PlayStation controller", "L1", "Hold L1 to talk"],
-                ["off", "No push to talk", "", "The engineer still calls everything"]];
+                ["off", "Console only (no push to talk)", "", "The engineer volunteers more: options with pros and cons, push and manage calls, gaps"]];
   if (!paint(el, `<div class="ctrls">` + opts.map(([k, n, key, d]) => `<button class="ctrl"
     data-k="${k}" aria-pressed="${k === current}">${key ? padSvg(key, false) :
     `<svg viewBox="0 0 120 76" aria-hidden="true"><circle cx="60" cy="38" r="22" fill="none"
@@ -426,8 +426,8 @@ function renderFeed() {
 function renderPtt() {
   const c = S.controller, el = $("#ptt");
   if (S.console_player || c.type === "off") {
-    el.innerHTML = `<p class="muted" style="margin:0">${S.console_player ? "Off on console: the controller is on the console, not this PC."
-      : "Off. Pick your controller in Settings to ask the engineer questions."}</p>`;
+    el.innerHTML = `<p class="muted" style="margin:0">${S.console_player ? "Off on console: the controller is on the console, not this PC. Console-only mode is on: the engineer volunteers options, push and manage calls and gaps."
+      : "Off: console-only mode, the engineer volunteers options, push and manage calls and gaps. Pick a controller in Settings to ask questions."}</p>`;
     return;
   }
   const status = {ready: c.connected ? "Controller connected" : "No controller found yet — plug it in",

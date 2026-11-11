@@ -781,6 +781,206 @@ def undercut_phrase(name: str | None) -> str:
         "Hammer time, push on these tyres.", "Push push, make these laps count."])
 
 
+# -- strategy dialogue (13 Nov) ------------------------------------------------------------------
+
+def _cost_words(delta_s: float) -> str:
+    """'about two seconds slower than our plan' / 'about the same as our plan'."""
+    if abs(delta_s) < 0.5:
+        return "about the same time as our plan"
+    words = say_gap(int(abs(delta_s) * 1000))
+    return f"about {words} {'slower' if delta_s > 0 else 'quicker'} than our plan"
+
+
+def prefs_readback_phrase(said: list[str], decision, total_laps: int, delta_s: float | None,
+                          real_limit: float, margin_pct: float, verbosity: str = "normal",
+                          your_limit: float | None = None) -> str:
+    """'Copy, finishing on softs. Plan is one stop, box end of lap eleven for softs. About two
+    seconds slower than our plan.' + pushback when it's risky: 'That's tight: softs at sixty
+    eight percent at the flag, past our limit. Puncture risk, but it's your call.'"""
+    head = _sentence("copy, " + ", ".join(said)) if said else _sentence("copy")
+    body = call_phrase(decision, total_laps, verbosity, limit_pct=real_limit,
+                       margin_pct=margin_pct)
+    out = [head, body]
+    if delta_s is not None:
+        out.append(_sentence(_cost_words(delta_s)))
+    worst = decision.call.tightest
+    if worst.end_wear > real_limit:
+        where = "at the flag" if worst.end_lap >= total_laps else \
+            f"by lap {number_words(worst.end_lap)}"
+        said_already = say_percent(worst.end_wear) in body
+        out.append((_sentence("that's past our limit") if said_already else
+                    _sentence(f"that's past our limit: {say_compound(worst.compound)} at "
+                              f"{say_percent(worst.end_wear)} {where}")) + " " +
+                   pick("prefs_risky", ["Puncture risk, but it's your call.",
+                                        "Big risk of a failure there. Your call.",
+                                        "I wouldn't, but we'll run it."]))
+    elif your_limit is not None and your_limit > real_limit:
+        out.append(_sentence(f"{number_words(int(your_limit))} is past our "
+                             f"{say_percent(real_limit)} limit, risky if we use it") + " " +
+                   _sentence("the plan doesn't need it yet"))
+    elif not decision.call.safe:
+        out.append(_sentence(pick("prefs_tight", ["it's tight, look after them",
+                                                  "not much margin in that one",
+                                                  "that's on the edge, manage them"])))
+    return " ".join(out)
+
+
+def prefs_failed_phrase(said: list[str], reason: str | None = None) -> str:
+    what = ", ".join(said) if said else "that"
+    head = _sentence(f"can't make a plan with {what}", reason) if reason else \
+        _sentence(f"can't make a plan with {what}")
+    return head + " " + _sentence("staying with the current plan")
+
+
+def offer_phrase() -> str:
+    """Added to a plan call when the gamble is worth asking about."""
+    return pick("offer", ["Want it?", "Want to go for it?", "Your call, want it?"])
+
+
+def offer_declined_phrase() -> str:
+    return _sentence(pick("offer_declined", ["copy, sticking with the plan",
+                                             "understood, we stay as we are",
+                                             "copy, plan stays"]))
+
+
+_REASON_GRAMMAR = {"tyres wearing": "the tyres are wearing", "tyres lasting": "the tyres are lasting",
+                   "saves a stop": "it saves a stop", "that plan doesn't": "the old plan doesn't"}
+
+
+def why_phrase(decision, total_laps: int, limit_pct: float, margin_pct: float,
+               last_reason: str | None, your_prefs: list[str] | None = None) -> str:
+    """'Why?': what the call is built on. 'Because the tyres are wearing faster than expected.
+    The softs would be at sixty four percent by lap twelve; this way the worst is forty five.'"""
+    call = decision.call
+    worst = call.tightest
+    out = []
+    if your_prefs:
+        out.append(_sentence("it's built on what you asked for: " + ", ".join(your_prefs)))
+    elif last_reason:
+        reason = last_reason
+        for k, v in _REASON_GRAMMAR.items():
+            reason = reason.replace(k, v)
+        out.append(_sentence(f"we changed it because {reason}"))
+    where = "at the flag" if worst.end_lap >= total_laps else \
+        f"at lap {number_words(worst.end_lap)}"
+    out.append(_sentence(f"it's the quickest plan that keeps every set under {say_percent(limit_pct - margin_pct)}"
+                         if call.safe else "it's the quickest plan we've got",
+                         f"worst is {say_compound(worst.compound)} at "
+                         f"{say_percent(worst.end_wear)} {where}"))
+    if decision.gamble is not None and decision.gain_s:
+        g = decision.gamble.tightest
+        out.append(_sentence(f"the quicker option saves about {say_gap(int(decision.gain_s * 1000))}"
+                             f" but runs {say_compound(g.compound)} to {say_percent(g.end_wear)}"))
+    elif decision.taken_gamble and decision.safe_alternative is not None:
+        out.append(_sentence(f"the safe option is about {say_gap(int(decision.gain_s * 1000))} "
+                             f"slower"))
+    return " ".join(out)
+
+
+def sure_phrase(decision, limit_pct: float, margin_pct: float) -> str:
+    """'Are you sure?': how safe the call is."""
+    worst = decision.call.tightest
+    if decision.call.safe:
+        return _sentence("yes, it's safe", f"the worst set ends at {say_percent(worst.end_wear)}, "
+                         f"{say_percent(limit_pct - worst.end_wear)} inside the limit")
+    if worst.end_wear <= limit_pct:
+        return _sentence("fairly", f"it's tight, {say_compound(worst.compound)} at "
+                         f"{say_percent(worst.end_wear)}") + " " + _sentence(
+            "the wear rate isn't settled yet, I'll keep checking")
+    return _sentence("no, it's on the edge", f"{say_compound(worst.compound)} at "
+                     f"{say_percent(worst.end_wear)}, past the limit") + " " + _sentence(
+        "manage them or we stop earlier")
+
+
+def save_answer_phrase(save_pct: float, to_lap: int, flag: bool, margin_pct: float = 0.0) -> str:
+    """'How much do I need to save?'"""
+    target = "the flag" if flag else f"lap {number_words(to_lap)}"
+    if save_pct <= 0.05:
+        return _sentence(f"you're fine to {target}",
+                         f"about {say_percent(margin_pct)} in hand" if margin_pct >= 1
+                         else "right on target")
+    return _sentence(f"you need to save about {say_small_percent(save_pct)} a lap to make "
+                     f"{target}") \
+        + " " + pick("save_how", ["Smooth on the throttle out of the slow corners.",
+                                  "Lift a touch before the big braking zones.",
+                                  "Less wheelspin on exit, that's where it goes."])
+
+
+def push_answer_phrase(margin_pct: float, to_lap: int, flag: bool) -> str:
+    """'Can I push?' What's in hand at the stop or the flag (what pushing costs is measured, not
+    assumed: ask again in a couple of laps)."""
+    target = "the flag" if flag else f"lap {number_words(to_lap)}"
+    if margin_pct < 3:
+        return _sentence("not really, no margin on these to " + target, "look after them")
+    return _sentence(f"yes, about {say_percent(margin_pct)} in hand to {target}", "you can push")
+
+
+def pace_mode_ack_phrase(mode: str) -> str:
+    return _sentence(f"copy, {'managing' if mode == 'manage' else 'pushing'}",
+                     "I'll tell you what it's doing in two laps")
+
+
+def pace_mode_result_phrase(mode: str, before: float, after: float) -> str:
+    """Two laps after "I'm managing" / "I'm pushing": what it changed."""
+    b, a = say_percent(before), say_percent(after)
+    if mode == "manage":
+        if after < before - 0.2:
+            return _sentence(f"managing's working, wear down from {b} to {a} a lap")
+        return _sentence(f"not much change yet, still about {a} a lap", "a bit more if you can")
+    if after > before + 0.2:
+        return _sentence(f"pushing's costing tyre, wear up from {b} to {a} a lap")
+    return _sentence(f"tyres are taking it, still about {a} a lap", "keep pushing")
+
+
+def say_small_percent(pct: float) -> str:
+    """Per-lap amounts: 'half a percent', 'one percent', 'two percent'."""
+    if pct < 0.75:
+        return "half a percent"
+    return say_percent(round(pct))
+
+
+def manage_signal_phrase(save_pct: float, to_lap: int, flag: bool) -> str:
+    """Proactive: 'Manage the tyres: save about one percent a lap to make lap twelve.'"""
+    target = "the flag" if flag else f"lap {number_words(to_lap)}"
+    return _sentence(f"manage the tyres, save about {say_small_percent(save_pct)} a lap to make "
+                     f"{target}")
+
+
+def push_signal_phrase(margin_pct: float) -> str:
+    """Proactive (console mode): 'You've got about eight percent in hand on these. You can
+    push.'"""
+    return _sentence(f"you've got about {say_percent(margin_pct)} in hand on these") + " " + \
+        pick("push_signal", ["You can push.", "Use it, push.", "No need to save, go."])
+
+
+def alternative_phrase(name: str, delta_s: float, pros: str, cons: str) -> str:
+    """Console mode: an option with its pros and cons. 'Option: two stops on softs, about three
+    seconds slower. Fresher tyres at the end, but more traffic.'"""
+    when = _cost_words(delta_s).replace("than our plan", "")
+    return _sentence(f"option: {name}, {when.strip()}") + " " + _sentence(
+        f"{pros}, but {cons}" if pros and cons else (pros or cons))
+
+
+def status_phrase(ahead: tuple | None, behind: tuple | None) -> str:
+    """Console mode, every few laps: 'Norris ahead one point eight, you're catching two tenths a
+    lap. Russell behind two point five, steady.'"""
+    out = []
+    for side, d in (("ahead", ahead), ("behind", behind)):
+        if d is None:
+            continue
+        name, gap_s, trend_s = d
+        line = f"{name} {side} {say_gap(int(gap_s * 1000))}"
+        if trend_s is not None and abs(trend_s) >= 0.1:
+            closing = trend_s < 0
+            who = "you're catching" if side == "ahead" and closing else \
+                "losing" if side == "ahead" else "closing" if closing else "dropping back"
+            line += f", {who} {say_gap(int(abs(trend_s) * 1000))} a lap"
+        else:
+            line += ", steady"
+        out.append(_sentence(line))
+    return " ".join(out)
+
+
 # -- weather, rivals' penalties, rival information (12 Nov) -----------------------------------
 
 def rain_coming_phrase(minutes: int, pct: int, lap: int | None, weather: int,

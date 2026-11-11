@@ -37,7 +37,7 @@ from __future__ import annotations
 
 import logging
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 import numpy as np
 
@@ -48,7 +48,7 @@ from engineer.ingest.formats import f1_2025 as f
 from engineer.radio import phrases
 from engineer.radio.director import Priority, RadioCall, RadioDirector
 from engineer.state.race_state import RaceState
-from engineer.strategy.decision import Decision, DecisionSettings, decide, wear_at
+from engineer.strategy.decision import Decision, DecisionSettings, assess, decide, wear_at
 from engineer.strategy.model import (
     DRY,
     GameTyreInfo,
@@ -64,6 +64,7 @@ from engineer.strategy.prerace import (
     usual_share,
 )
 from engineer.strategy.runner import HISTORY_COLUMNS, StrategyRequest, StrategyResult
+from engineer.strategy.prefs import DriverPrefs
 from engineer.strategy.sim import Plan, RaceSituation
 
 log = logging.getLogger(__name__)
@@ -103,6 +104,7 @@ class StrategyAnalyzer:
         self.prerace: PreRacePlan | None = None     # the latest pre-race plan (app window)
         self.prerace_auto = True                    # say it when qualifying ends
         self.pit_meter = None                       # features.pit_loss.PitLossMeter (build_engine)
+        self.console = False                        # console only: alternatives volunteered
         self._prerace_auto_done: tuple | None = None  # ... once per (session UID, track)
         self._reset()
         bus.subscribe(ev.LapCompleted, self.on_lap)
@@ -129,6 +131,33 @@ class StrategyAnalyzer:
         self.undercut_on: tuple[int, int] | None = None   # (car, its stops) you're undercutting
         self.sc_status = 0
         self.applied_seq = -1
+        self.prefs = DriverPrefs()               # your rules for this race (strategy/prefs.py)
+        self._prefs_callback = None
+        self.offer: Plan | None = None           # the gamble offered ("want it?")
+        self.offer_at = -math.inf
+        self.offers_declined: set = set()        # plan keys you said no to
+        self.last_reason: str | None = None      # why the plan last changed ("why?")
+        self.alt_said_lap = -99                  # console mode: the last alternative
+
+    def _limit(self) -> float:
+        """The wear limit plans are built on: yours if you set one, else tyres.limit_pct."""
+        return self.prefs.limit_pct if self.prefs.limit_pct is not None else self.tyres.limit_pct
+
+    def set_prefs(self, change: dict, callback) -> bool:
+        """Your preferences changed ("finish on softs", "max fifty", "back to your plan"):
+        re-plan with them, commit that plan, and callback(result, decision) for the read-back.
+        False if there's no strategy to change."""
+        s, c, p = self.state, self.state.cars, self.state.player_index
+        if not self._active() or p is None or np.isnan(c.lap[p]) or c.pit_status[p] > 0:
+            return False
+        if change.get("clear"):
+            self.prefs.clear()
+        else:
+            for k, v in change.items():
+                setattr(self.prefs, k, v)
+        self._prefs_callback = callback
+        self._submit("prefs", int(c.lap[p]) - 1)
+        return True
 
     def _on_flashback(self, e) -> None:
         if not self.plan_said and self.announced is not None:
@@ -242,12 +271,13 @@ class StrategyAnalyzer:
         wear = float(np.nanmax(wear_now)) if not np.isnan(wear_now).all() else 0.0
         compound = int(c.visual_compound[p])
         used = {r.visual_compound for r in mine if r.visual_compound in DRY} | {compound}
-        sit = RaceSituation(
+        base = RaceSituation(
             lap_done=lap_done, total_laps=int(s.session.total_laps), compound=compound,
             wear=wear, sets=sets, used=frozenset(used), require_two=self._two_compound_rule(),
-            limit_pct=self.tyres.limit_pct, pit_loss_s=self.cfg.pit_loss_s, sc_laps=sc_laps,
+            limit_pct=self._limit(), pit_loss_s=self.cfg.pit_loss_s, sc_laps=sc_laps,
             max_stops=self.cfg.max_stops, window_s=self.cfg.window_s,
             over_limit_s_per_pct=self.cfg.over_limit_s_per_pct, min_gain_s=self.cfg.min_gain_s)
+        sit = self.prefs.apply(base) if self.prefs.active else base
         self._seq += 1
         hold = self.announced.next_stop if self.announced is not None else None
         rows = self._session_rows()
@@ -261,11 +291,13 @@ class StrategyAnalyzer:
             sc_compare=sc_compare, what_if_box_lap=what_if_box_lap,
             what_if_compound=what_if_compound,
             hold_lap=hold.lap if hold is not None else None,
-            safe_limits=(self.tyres.limit_pct - self.cfg.margin_pct,
-                         self.tyres.limit_pct - 2 * self.cfg.margin_pct) if reason != "box_now"
+            safe_limits=(self._limit() - self.cfg.margin_pct,
+                         self._limit() - 2 * self.cfg.margin_pct) if reason != "box_now"
             else (),
             hold_compound=hold.compound if hold is not None else None,
-            pit_samples=self._pit_samples())
+            pit_samples=self._pit_samples(),
+            free_situation=replace(base, limit_pct=self.tyres.limit_pct)
+            if self.prefs.active else None)
         if callback is not None:
             self._callbacks[self._seq] = callback
         self.runner.submit(req)
@@ -288,6 +320,8 @@ class StrategyAnalyzer:
             return
         sc_laps = (e.lap + 1,) if self.state.session.safety_car_status in (1, 2) else ()
         self._submit("lap", e.lap, sc_laps=sc_laps)
+        if self.console and self.box_lap is None:
+            self._alternative(self.latest, self.decision)
 
     def on_pit_entry(self, e: ev.PitEntry) -> None:
         p = self.state.player_index
@@ -356,6 +390,9 @@ class StrategyAnalyzer:
 
     def _drain(self) -> None:
         for res in self.runner.poll():
+            if res.reason == "prefs":
+                self._on_prefs(res)
+                continue
             callback = self._callbacks.pop(res.seq, None)
             if callback is not None:             # a question: answer it, the plan is untouched
                 # The pre-race plan reads the error itself ("no_laps": ask for the laps).
@@ -371,6 +408,21 @@ class StrategyAnalyzer:
                 self._on_plan(res)
             self._box_check()
 
+    def _on_prefs(self, res: StrategyResult) -> None:
+        """A re-plan for changed preferences: commit it quietly (the answer is the read-back)."""
+        callback, self._prefs_callback = self._prefs_callback, None
+        dec = self._decide(res) if not res.error and res.sim.best is not None else None
+        if dec is not None:
+            self.applied_seq = max(self.applied_seq, res.seq)
+            self.latest = res
+            self.announced, self.decision, self.pending_change = dec.call.plan, dec, None
+            self.commit_rate = self._rate_now(res)
+            self.announced_at = self.state.session_time
+            self.plan_said = True
+            self.box_lap = None
+        if callback is not None:
+            callback(res, dec)
+
     def _decide(self, res: StrategyResult) -> Decision | None:
         if res.situation is None or res.model is None:
             return None
@@ -379,7 +431,7 @@ class StrategyAnalyzer:
                                     gamble_min_s=cfg.gamble_min_s, gamble_take_s=cfg.gamble_take_s,
                                     min_gain_s=cfg.min_gain_s)
         dec = decide(list(res.options) + [res.sim.best], res.situation, res.model, settings,
-                     self.tyres.limit_pct)
+                     self._limit())
         return self._buffer_check(dec)
 
     def _buffer_check(self, dec: Decision | None) -> Decision | None:
@@ -392,7 +444,7 @@ class StrategyAnalyzer:
             return dec
         # Only a plan that's really tight (expected within margin of the limit), not one that's
         # only unsafe because the wear rate isn't sure yet: that one costs a needless stop.
-        if dec.call.tightest.end_wear <= self.tyres.limit_pct - self.cfg.margin_pct:
+        if dec.call.tightest.end_wear <= self._limit() - self.cfg.margin_pct:
             return dec
         c, p = self.state.cars, self.state.player_index
         if p is None or np.isnan(c.position[p]):
@@ -434,10 +486,50 @@ class StrategyAnalyzer:
                                    change_reason=reason, previous=previous, copy_compound=copy,
                                    after_stop=res.reason == "stop" or copy is not None
                                    or bool(self._stops_made()), ahead=self._ahead(),
-                                   limit_pct=self.tyres.limit_pct, margin_pct=self.cfg.margin_pct)
+                                   limit_pct=self._limit(), margin_pct=self.cfg.margin_pct)
+        self.last_reason = reason or self.last_reason
+        # 13 Nov: a worthwhile gamble is offered ("want it?"); "yes" makes it the plan.
+        if not self.console and dec.gamble is not None and dec.gain_s >= self.cfg.offer_gain_s \
+                and dec.gamble.plan.key() not in self.offers_declined:
+            self.offer, self.offer_at = dec.gamble.plan, self.state.session_time or 0.0
+            text += " " + phrases.offer_phrase()
         # NORMAL: the plan matters more than coaching or battle chatter (29 Oct Abu Dhabi: the
         # first plan, at LOW, waited behind them and expired unsaid).
         self._say("strategy_plan", text, Priority.NORMAL)
+        if self.console:
+            self._alternative(res, dec, force=True)
+
+    def _alternative(self, res: StrategyResult, dec: Decision, force: bool = False) -> None:
+        """Console mode: the closest different plan, with what it's good and bad for."""
+        if res is None or dec is None or res.situation is None or res.model is None:
+            return
+        if not force and res.lap_done - self.alt_said_lap < self.cfg.alt_every_laps:
+            return
+        call = dec.call.plan
+        shape = lambda p: (p.n_stops, tuple(st.compound for st in p.stops))   # noqa: E731
+        alts = [p for p in res.options if p is not None and shape(p) != shape(call)
+                and abs(p.cost_s - call.cost_s) <= self.cfg.alt_window_s]
+        if not alts:
+            return
+        alt = min(alts, key=lambda p: abs(p.cost_s - call.cost_s))
+        settings = DecisionSettings(margin_pct=self.cfg.margin_pct,
+                                    rate_sd_one_lap=self.cfg.rate_sd_one_lap)
+        a = assess(alt, res.situation, res.model, settings, self._limit())
+        last, mine = a.stints[-1], dec.call.stints[-1]
+        wear = f"{phrases.say_compound(last.compound)} at {phrases.say_percent(last.end_wear)}"
+        if alt.n_stops > call.n_stops:
+            pros, cons = "fresher tyres for the end", "an extra stop and traffic to get through"
+        elif alt.n_stops < call.n_stops:
+            pros, cons = "one stop less, you keep track position", f"{wear} at the flag"
+        elif last.end_wear < mine.end_wear - 3:
+            pros, cons = f"more tyre left at the end, {wear} at the flag", ""
+        else:
+            pros, cons = "", f"less tyre at the end, {wear} at the flag"
+        name = phrases._stops_body(alt, self.verbosity, bool(self._stops_made()))
+        self.alt_said_lap = res.lap_done
+        self._say("strategy_alt", phrases.alternative_phrase(name, alt.cost_s - call.cost_s,
+                                                             pros, cons), Priority.NORMAL,
+                  max_wait_s=45.0)
 
     def _stops_made(self) -> int:
         c, p = self.state.cars, self.state.player_index
@@ -467,7 +559,7 @@ class StrategyAnalyzer:
         if keep is None:
             self._announce(res, dec, "that plan doesn't work any more", held)
             return
-        if stop is not None and wear_at(sit, model, stop.lap) > self.tyres.limit_pct:
+        if stop is not None and wear_at(sit, model, stop.lap) > self._limit():
             self._announce(res, dec, f"these won't make lap {phrases.number_words(stop.lap)}",
                            held)
             return
@@ -713,7 +805,7 @@ class StrategyAnalyzer:
         def said(plan: PreRacePlan) -> None:
             if plan.error is None:   # incl. "no tyre numbers for Texas yet"
                 self._say("prerace", phrases.prerace_phrase(
-                    plan, self.verbosity, self.tyres.limit_pct, self.cfg.margin_pct),
+                    plan, self.verbosity, self._limit(), self.cfg.margin_pct),
                     Priority.HIGH, max_wait_s=60.0, wait_for_straight=False)
         self.ask_prerace(said, track_id=self.last_track)
 

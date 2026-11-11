@@ -296,6 +296,37 @@ uv run python -m engineer.report                     # driver report PDF (data/r
   1 s (game time is frozen there, nothing would release the queue); `cli._idle_loop` calls
   `Engine.idle_tick` to pick up worker answers. Replays/tests keep the queued behaviour.
 
+## Strategy dialogue and console-only mode (13 Nov)
+
+- Your preferences (`strategy/prefs.py` DriverPrefs, read from speech by
+  `voice/dialogue.parse_prefs`): finishing tyre, tyres to avoid, number of stops (from here),
+  first-stop lap window ("go long" = 3+ laps after the engineer's stop; "box early" = 2+
+  before; "box on lap N"), your wear limit, the next tyre (an accepted offer). Kept for the race
+  until "back to your plan". They're rules in the simulator (`RaceSituation.avoid`,
+  `final_compound`, `min_stops`, `first_stop_range`; the limit and next tyre reuse existing
+  fields), applied to every solve (`StrategyAnalyzer._submit`); `_limit()` is your limit when
+  set. `set_prefs` re-plans (reason "prefs"), commits quietly (`_on_prefs`) and the answer is
+  the read-back: the plan + what it costs against the engineer's own plan (the worker also
+  solves `free_situation`, the race without your rules; the new plan is priced on it with
+  `plan_cost`) + pushback: past our limit ("Puncture risk, but it's your call"), tight, or a
+  limit set past ours ("risky if we use it"). A plan that can't be made restores your previous
+  preferences and says why (the two-compound rule for "no more stops").
+- Offers: a gamble `offer_gain_s` (3 s)+ quicker than the call ends the plan call with "Want
+  it?" (`StrategyAnalyzer.offer`, valid OFFER_TTL_S 120 s): "yes" = prefs for that plan's stops,
+  next and final tyre; "no" = never offered again this race. Not in console-only mode.
+- "Why?" (`why_phrase`: your preferences if set, else the last change's reason, the worst set,
+  the quicker option); "Are you sure?" (`sure_phrase`).
+- Race pace (`analyzers/pace.py` PaceAnalyzer): `target()` = the worst tyre against the planned
+  stop / flag at limit - margin: save needed a lap, margin in hand. "How much do I need to save?",
+  "Can I push?"; proactive "Manage the tyres, save about ... a lap to make lap N" (NORMAL, every
+  3 laps, 2 in console mode); "I'm managing / pushing" is measured over the next two laps, never
+  assumed (nothing about tyre behaviour hard-coded).
+- Console only (`radio.console_only`, None = on when push-to-talk is off; the window's controller
+  choice "Console only"; switched live): alternatives with pros and cons at each plan call and
+  every `alt_every_laps` (5) when within `alt_window_s` (10 s) (`StrategyAnalyzer._alternative`),
+  "you've got ... in hand, you can push" (12 %+, every 4 laps), gaps ahead/behind with their
+  trend every 3 laps; console extras wait 45 s for a gap (they can't ask again).
+
 ## Online lobbies and session boundaries (3 Nov)
 
 - After a session ends the game sends for a long time with session time = FLT_MAX (results
