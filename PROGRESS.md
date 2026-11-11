@@ -851,6 +851,9 @@ From the real radio study's most common unprompted topics.
 - [x] Step 1, the calculation: live delta to your previous (or best) fair lap at every point of
       the lap, plus a split per corner. On the real Austria race the delta at the line matches
       the real lap difference within 5-17 ms; flashbacks, pit laps and the flag handled
-- [ ] Step 2: the overlay window (see-through, click-through, move and lock)
+- [x] Step 2: the overlay window: always on top, see-through, click-through, never takes focus;
+      move mode (drag, scroll to resize, double-click to lock, spot saved); hidden with
+      nothing to show. `python -m engineer.overlay --demo` / `--replay <file>` to try it.
+      Rendered and replayed here under a virtual display; not yet seen on Windows
 - [ ] Step 3: the Settings switch, reference choice, and a full-screen page for console players
 - [ ] Step 4: try it in the game (borderless windowed) and pick the screen area

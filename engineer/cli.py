@@ -170,12 +170,35 @@ async def _ptt_loop(engine, ptt, speech) -> None:
         await asyncio.sleep(0.02)
 
 
-async def _idle_loop(engine) -> None:
-    """While the game sends nothing (menus, car setup), still pick up strategy answers."""
+async def _idle_loop(engine, overlay=None) -> None:
+    """While the game sends nothing (menus, car setup), still pick up strategy answers, and
+    clear the lap delta overlay (quit to the menu mid-lap: no more Lap Data to blank it)."""
     while True:
         await asyncio.sleep(0.1)
         if engine.director.idle():
             engine.idle_tick()
+            if overlay is not None:
+                overlay.send(None)
+        if overlay is not None:
+            overlay.poll()
+
+
+def start_overlay(cfg: Config, engine, config_path: Path | None = None):
+    """The lap delta overlay window (overlay.enabled; Windows: it sits over the game)."""
+    if not cfg.overlay.enabled or sys.platform != "win32":
+        return None
+    from engineer.overlay.process import (
+        OverlayFeed,
+        OverlayProcess,
+        save_placed,
+        settings_of,
+    )
+    overlay = OverlayProcess(settings_of(cfg.overlay), on_placed=save_placed(config_path))
+    if not overlay.start():
+        return None
+    engine.pipeline.after_packet.append(OverlayFeed(engine.live_delta, overlay).after_packet)
+    print("Lap delta overlay on (needs the game in borderless windowed mode).")
+    return overlay
 
 
 async def _run(cfg: Config, record: bool | None, voice: bool, ptt_on: bool = True,
@@ -235,7 +258,8 @@ async def _run(cfg: Config, record: bool | None, voice: bool, ptt_on: bool = Tru
     await listener.start()
     if recorder:
         uploader.start()
-    idle = asyncio.create_task(_idle_loop(engine))
+    overlay = start_overlay(cfg, engine, config_path)
+    idle = asyncio.create_task(_idle_loop(engine, overlay))
     window = None
     if ui and cfg.ui.enabled:
         from engineer.radio.switch import VoiceControl
@@ -285,6 +309,8 @@ async def _run(cfg: Config, record: bool | None, voice: bool, ptt_on: bool = Tru
             recorder.close()
         if audio:
             audio.close()
+        if overlay:
+            overlay.close()
         strategy_runner.close()
         if engine.answers is not None:
             # Stopped mid-race (no session end from the game): the feedback list still updates.

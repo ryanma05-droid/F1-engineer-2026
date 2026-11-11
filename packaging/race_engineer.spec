@@ -5,6 +5,7 @@
 # One folder, not a single .exe: a single file unpacks ~500 MB on every start (slow, and often
 # flagged by antivirus). The installer (packaging/installer.iss) wraps the folder.
 # -*- mode: python ; coding: utf-8 -*-
+import sys
 from pathlib import Path
 
 from PyInstaller.utils.hooks import collect_all, collect_submodules
@@ -46,7 +47,10 @@ a = Analysis(
     datas=datas,
     hiddenimports=hiddenimports,
     # duckdb is only for the developer's SQL command (python -m engineer.features query).
-    excludes=["tkinter", "matplotlib", "IPython", "pytest", "piper.train", "duckdb"],
+    # tkinter draws the lap delta overlay (engineer/overlay/), Windows only: the Mac build is
+    # console-only, so it leaves it out.
+    excludes=(["tkinter"] if sys.platform != "win32" else [])
+    + ["matplotlib", "IPython", "pytest", "piper.train", "duckdb"],
     noarchive=False,
 )
 pyz = PYZ(a.pure)

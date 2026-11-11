@@ -242,11 +242,22 @@ def self_check() -> int:
     import onnxruntime  # noqa: F401
     import piper  # noqa: F401
     import pyarrow  # noqa: F401
+
     from engineer.app import build_engine
     from engineer.strategy.runner import WorkerRunner
     from engineer.voice.controller import XInputButton
     if sys.platform == "win32":                # Windows bundles PortAudio and the SAPI voice
+        # The lap delta overlay draws with Tk: a real (hidden) window proves Tcl/Tk is bundled.
+        import tkinter
+
         import pyttsx3  # noqa: F401
+        try:
+            root = tkinter.Tk()
+            root.withdraw()
+            root.destroy()
+        except tkinter.TclError as exc:
+            print(f"CHECK FAILED: Tk for the overlay: {exc}")
+            return 1
     if sys.platform in ("win32", "darwin"):     # PortAudio ships inside sounddevice there
         import sounddevice  # noqa: F401
     cfg = load_config()

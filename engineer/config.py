@@ -150,8 +150,14 @@ class Pace(BaseModel):
 
 
 class Overlay(BaseModel):
-    """The lap delta overlay (state/live_delta.py; the window comes later)."""
+    """The lap delta overlay (state/live_delta.py; the window: overlay/)."""
+    enabled: bool = False             # show the window when `engineer run` starts (Windows)
     reference: Literal["previous", "best"] = "previous"   # your last fair lap, or your best
+    x: int | None = None              # where it sits (saved when you lock it after moving);
+    y: int | None = None              # unset = top centre of the main monitor
+    scale: float = Field(default=1.0, ge=0.6, le=3.0)
+    opacity: float = Field(default=0.85, ge=0.2, le=1.0)
+    bar_s: float = Field(default=1.0, gt=0)   # the bar is full at this delta
 
 
 class Weather(BaseModel):

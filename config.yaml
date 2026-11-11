@@ -97,8 +97,12 @@ pace:                   # save or push, from your tyres against the plan
   push_margin_pct: 12        # console-only: "You've got about twelve percent in hand. You can push."
   status_every_laps: 3       # console-only: gaps ahead and behind and which way they're going
 
-overlay:                # the live lap delta (the on-screen overlay comes later)
+overlay:                # the live lap delta, on screen over the game (borderless windowed only)
+  enabled: false        # show it when the engineer starts (Windows)
   reference: previous   # previous = your last fair lap, best = your fastest fair lap this session
+  scale: 1.0            # size (0.6-3); position saved to config.local.yaml when you lock it
+  opacity: 0.85
+  bar_s: 1.0            # the bar is full at this many seconds up or down
 
 weather:                # forecast calls: "Rain expected in about ten minutes, around lap fourteen."
   enabled: true

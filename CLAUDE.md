@@ -44,6 +44,8 @@ uv run python -m engineer.ingest.replay <file.zst> --questions   # replay with t
 uv run python -m engineer.ingest.share --upload      # push the newest recording to its own branch
 uv run python -m engineer.ingest.share --pending     # push every recording not uploaded yet
 uv run python -m engineer.report                     # driver report PDF (data/reports/), opens it
+uv run python -m engineer.overlay --demo             # the lap delta overlay, move mode (no game)
+uv run python -m engineer.overlay --replay <file.zst> --locked   # ... fed by a recording
 ```
 
 ## Radio rules (Phase 1)
@@ -205,7 +207,7 @@ uv run python -m engineer.report                     # driver report PDF (data/r
   data/once.json), not on the grid: a race session starts only ~6 s before lights out, and the
   game's session time stays 0.0 until lights out (real recordings).
 
-## Lap delta overlay (14 Nov; step 1 of 4: the calculation)
+## Lap delta overlay (14 Nov; steps 1-2 of 4: the calculation and the window)
 
 - `state/live_delta.py` `LiveDelta` (wired in `build_engine` after traces, features and
   corners; `Engine.live_delta`): on every Lap Data packet, your current lap time minus the
@@ -225,9 +227,23 @@ uv run python -m engineer.report                     # driver report PDF (data/r
   corner cost (delta at exit - at entry), held in `current.corner` for 3 s.
 - Checked in the golden test: delta at the line within 25 ms of the real lap difference (5-17 ms
   on the Austria race, the gap between the last sample and the line).
-- Next: the overlay window (own process, tkinter, see-through, click-through, move and lock;
-  needs borderless windowed), then the Settings switch and a full-screen page for console
-  players.
+- The window (`engineer/overlay/`): view.py (pure: `message` = the reading as a small dict,
+  `view` = text "+0.23", colour red/green/white within 0.02, bar -1..1 of `overlay.bar_s`,
+  "vs L4", "T3 +0.14"; `place` = the saved spot if still on a monitor, else top centre of the
+  main one), window.py (`overlay_main`, own process: tkinter, borderless, topmost, `-alpha`
+  `overlay.opacity`; on Windows click-through + no focus + no taskbar via WS_EX_TRANSPARENT /
+  NOACTIVATE / TOOLWINDOW, DPI aware, topmost re-asserted every 2 s; hidden (alpha 0) with
+  nothing to show; the number redrawn at most 10 Hz, the bar ~30 Hz; move mode = yellow outline,
+  sample reading, drag / scroll to resize / double-click to lock -> ("placed", x, y, scale)),
+  process.py (`OverlayProcess`: `send` never blocks, ~15 Hz and at once when the reading
+  appears/disappears or a corner split comes; `OverlayFeed` after Lap Data packets;
+  `save_placed` -> config.local.yaml). Wall-clock only for display, never for the race model.
+- Live: `cli.start_overlay` when `overlay.enabled` (Windows only), the idle loop blanks it in
+  menus. Needs the game in borderless windowed (fullscreen hides overlays). Packaging keeps
+  tkinter on Windows; `--check` opens a hidden Tk window. Tested: view/feed/saving always, the
+  real window where Tk has a display (xvfb-run here; the container needed python3.12-tk).
+- Next: step 3, the Settings switch, reference choice, "Move overlay" button, and a full-screen
+  page for console players; step 4, try it in the game.
 
 ## Driver report
 
