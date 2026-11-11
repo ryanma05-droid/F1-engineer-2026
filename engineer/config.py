@@ -149,6 +149,11 @@ class Pace(BaseModel):
     status_every_laps: int = Field(default=3, ge=1)         # console: gaps ahead / behind
 
 
+class Overlay(BaseModel):
+    """The lap delta overlay (state/live_delta.py; the window comes later)."""
+    reference: Literal["previous", "best"] = "previous"   # your last fair lap, or your best
+
+
 class Weather(BaseModel):
     """Weather calls from the game's forecast (analyzers/weather.py)."""
     enabled: bool = True
@@ -279,6 +284,7 @@ class Config(BaseModel):
     racecraft: RaceCraft = RaceCraft()
     weather: Weather = Weather()
     pace: Pace = Pace()
+    overlay: Overlay = Overlay()
     rivals: Rivals = Rivals()
     voice: Voice = Voice()
     upload: Upload = Upload()

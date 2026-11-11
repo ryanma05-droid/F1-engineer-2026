@@ -97,6 +97,9 @@ pace:                   # save or push, from your tyres against the plan
   push_margin_pct: 12        # console-only: "You've got about twelve percent in hand. You can push."
   status_every_laps: 3       # console-only: gaps ahead and behind and which way they're going
 
+overlay:                # the live lap delta (the on-screen overlay comes later)
+  reference: previous   # previous = your last fair lap, best = your fastest fair lap this session
+
 weather:                # forecast calls: "Rain expected in about ten minutes, around lap fourteen."
   enabled: true
   rain_pct: 40          # a forecast rain chance this high counts as rain coming

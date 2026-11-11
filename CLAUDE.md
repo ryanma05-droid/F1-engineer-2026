@@ -205,6 +205,30 @@ uv run python -m engineer.report                     # driver report PDF (data/r
   data/once.json), not on the grid: a race session starts only ~6 s before lights out, and the
   game's session time stays 0.0 until lights out (real recordings).
 
+## Lap delta overlay (14 Nov; step 1 of 4: the calculation)
+
+- `state/live_delta.py` `LiveDelta` (wired in `build_engine` after traces, features and
+  corners; `Engine.live_delta`): on every Lap Data packet, your current lap time minus the
+  reference lap's time at the same distance (`current`, a `DeltaReading`; `lap_end` = each
+  lap's furthest reading). + = slower. A reader of RaceState like TraceRecorder, game time
+  only, so replays give the same numbers; ~30 us a packet.
+- Reference (`overlay.reference`, `set_reference`): "previous" = your latest fair lap, "best" =
+  your fastest fair lap this session; fair = usable trace and not invalid / in lap / out lap /
+  standing start / safety car. Chosen when the lap starts and kept all lap. `Reference` pins the
+  trace at (0 m, 0 s) and (the line, the lap time): the trace's clamped ends put the delta at
+  the line 20-40 ms out.
+- No reading: no fair lap yet, in the pit lane and the rest of that lap, once you've finished
+  (result status 3+, or the distance going from the last 200 m back to the start on the same
+  lap: at the flag the lap number doesn't change and the status stays "active" a few packets).
+  A flashback (distance back 30 m+) re-measures corners after the rewound point.
+- Corner splits (with `corners.track_map`): at each corner's exit the running delta and what the
+  corner cost (delta at exit - at entry), held in `current.corner` for 3 s.
+- Checked in the golden test: delta at the line within 25 ms of the real lap difference (5-17 ms
+  on the Austria race, the gap between the last sample and the line).
+- Next: the overlay window (own process, tkinter, see-through, click-through, move and lock;
+  needs borderless windowed), then the Settings switch and a full-screen page for console
+  players.
+
 ## Driver report
 
 - `engineer/report/` (`python -m engineer.report`): analysis.py (per-recording corner runs vs

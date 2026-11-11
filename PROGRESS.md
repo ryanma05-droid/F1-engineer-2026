@@ -845,3 +845,12 @@ From the real radio study's most common unprompted topics.
       really 4.3; Jeddah had no history). Stints now split by track, session type and restart.
 - [x] Existing tables are fixed by themselves on the next start (re-summarised from the stored
       lap rows, once; no replays)
+
+## Lap delta overlay (14 Nov)
+
+- [x] Step 1, the calculation: live delta to your previous (or best) fair lap at every point of
+      the lap, plus a split per corner. On the real Austria race the delta at the line matches
+      the real lap difference within 5-17 ms; flashbacks, pit laps and the flag handled
+- [ ] Step 2: the overlay window (see-through, click-through, move and lock)
+- [ ] Step 3: the Settings switch, reference choice, and a full-screen page for console players
+- [ ] Step 4: try it in the game (borderless windowed) and pick the screen area

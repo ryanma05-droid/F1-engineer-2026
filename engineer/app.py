@@ -30,6 +30,7 @@ from engineer.radio.director import RadioDirector
 from engineer.radio.engineers import personality
 from engineer.radio.variety import VARIETY
 from engineer.report.focus import load_focus
+from engineer.state.live_delta import LiveDelta
 from engineer.state.traces import TraceRecorder
 from engineer.state.track_maps import TrackMaps
 from engineer.strategy.runner import InlineRunner
@@ -54,6 +55,7 @@ class Engine:
     rivals: object = None           # analyzers/rivals.py
     pace: object = None             # analyzers/pace.py
     coaching: CoachingSummary | None = None
+    live_delta: LiveDelta | None = None  # the delta to your reference lap, live (overlay)
     default_tempo: str = "normal"        # what "back to normal" returns to (radio.verbosity)
     tempo: str = "normal"                # "terse" (shown as Quiet), "normal", "chatty", "coaching"
 
@@ -130,6 +132,10 @@ def build_engine(cfg: Config, out: TextIO | None = None,
                              cfg.corners, verbosity=talk, features=features,
                              detail=cfg.radio.detail, focus=focus)
     pipeline.after_packet.append(corners.after_packet)
+    # The live lap delta (after traces, features and corners: it reads all three).
+    live_delta = LiveDelta(state, traces, features, corners, cfg.overlay.reference)
+    bus.subscribe(ev.SessionStarted, lambda e: live_delta.reset())
+    pipeline.after_packet.append(live_delta.after_packet)
     if strategy_runner is None:
         strategy_runner = InlineRunner(cfg.features_path)
     strategy = StrategyAnalyzer(bus, state, features, director, strategy_runner, cfg.strategy,
@@ -161,6 +167,7 @@ def build_engine(cfg: Config, out: TextIO | None = None,
     engine.racecraft = racecraft
     engine.weather, engine.rivals, engine.pace = weather, rivals, pace
     engine.coaching = coaching
+    engine.live_delta = live_delta
     engine.default_tempo = cfg.radio.verbosity
     # "Log that" on the radio: the feedback log (data/feedback/). Off when the question log is
     # (replays of logged questions), so a replayed "log that" isn't logged twice.

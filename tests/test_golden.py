@@ -26,7 +26,8 @@ CASES = sorted(p for p in FIXTURES.glob("*.zst") if p.with_suffix(".expected.txt
 @pytest.mark.parametrize("recording", CASES, ids=lambda p: p.stem)
 def test_golden_lap_lines(recording):
     out = io.StringIO()
-    pipeline = replay(recording, speed=None, out=out).pipeline
+    engine = replay(recording, speed=None, out=out)
+    pipeline = engine.pipeline
     got = [line for line in out.getvalue().splitlines() if line.startswith("Lap")]
     expected = [line for line in recording.with_suffix(".expected.txt").read_text().splitlines()
                 if line.startswith("Lap")]
@@ -37,3 +38,13 @@ def test_golden_lap_lines(recording):
     if calls.exists():
         got_calls = [line for line in out.getvalue().splitlines() if line.startswith("RADIO")]
         assert got_calls == calls.read_text().splitlines()
+
+    # The live lap delta (state/live_delta.py): at the line it equals the real lap difference,
+    # to within the last sample before the line (1/60 s at most, plus rounding).
+    st = pipeline.state
+    laps = {f.lap: f.lap_time_ms for f in engine.features.for_car(st.player_index)}
+    ends = engine.live_delta.lap_end
+    assert ends
+    for lap, r in ends.items():
+        real = (laps[lap] - laps[r.ref_lap]) / 1000.0
+        assert abs(r.delta_s - real) < 0.025, (lap, r, real)
