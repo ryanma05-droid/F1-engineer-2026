@@ -13,8 +13,9 @@ from engineer.radio.switch import VoiceControl, current_key
 
 
 def test_line_up_and_config():
-    assert len(ENGINEERS) == 6 and sum(e.personality is not None for e in ENGINEERS) == 1
-    assert len({e.voice for e in ENGINEERS}) == len(ENGINEERS)
+    assert len(ENGINEERS) == 7 and sum(e.personality is not None for e in ENGINEERS) == 2
+    plain = [e for e in ENGINEERS if e.personality != "gp"]      # GP shares Gary's voice
+    assert len({e.voice for e in plain}) == len(plain)
     cfg = Config()
     assert cfg.radio.voice_name == "en_GB-northern_english_male-medium"
     assert current_key(cfg) == "northern"              # existing setups: Gary

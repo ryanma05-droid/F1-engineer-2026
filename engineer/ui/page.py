@@ -295,6 +295,9 @@ ul.good li::before { content: "\2713"; position: absolute; left: 0; top: 1px; wi
         <input type="range" id="volume" min="0" max="100" step="5" value="70" aria-describedby="volumeTip">
         <output id="volumeOut" for="volume">70%</output></div>
       <div class="muted small" id="volumeTip">70% is how loud it was before. Let go and the engineer says a line at the new volume.</div>
+      <div class="vol"><label for="driverName">Your name</label>
+        <input type="text" id="driverName" maxlength="30" placeholder="mate" style="flex:1"></div>
+      <div class="muted small">What GP calls you on the radio ("Okay Ryan, ..."). Empty: "mate".</div>
       <div class="tip" id="voiceTip"></div></div>
     <div class="card" style="margin-bottom:16px"><h3>Engineer tempo (default)</h3>
       <div class="seg" id="tempoSettings"></div><div class="tip" id="tempoTipSettings"></div></div>
@@ -694,8 +697,17 @@ function renderVolume() {
   const v = S.voice.volume ?? 70;
   if (!volumeDragging && document.activeElement !== r) { r.value = v; out.textContent = v + "%"; }
 }
+function renderDriverName() {
+  const el = $("#driverName");
+  if (!el._wired) {
+    el._wired = true;
+    el.onchange = async () => { S = await post("/api/settings", {driver_name: el.value}); render(); };
+  }
+  if (document.activeElement !== el) el.value = S.voice.driver_name || "";
+}
 function renderVoice() {
   renderVolume();
+  renderDriverName();
   const v = S.voice, el = $("#voiceSettings");
   if (paint(el, ENGINEERS.map(e => `<button class="opt${e.joke ? " joke" : ""}" data-k="${e.key}"
     aria-pressed="${e.key === v.engineer}"><div class="who"><b>${esc(e.name)}</b><em>${esc(e.accent)}</em></div>

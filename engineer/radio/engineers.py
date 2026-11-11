@@ -31,7 +31,7 @@ class Engineer:
     blurb: str                       # one line for the Settings card
     voice: str                       # Piper voice (rhasspy/piper-voices)
     length_scale: float = 1.0        # < 1 talks faster
-    personality: str | None = None   # None, or "intern"
+    personality: str | None = None   # None, "intern" (Kevin) or "gp" (radio/gp.py)
     sample: str = "Box this lap, box this lap. Hards. You'll come out behind Sainz."
 
 
@@ -51,6 +51,10 @@ ENGINEERS = (
              "en_US-joe-medium", length_scale=0.88, personality="intern",
              sample="Oh! Oh, okay. Box this lap, box this lap. Hards. "
                     "Sorry. Was that loud? That felt loud."),
+    Engineer("gp", "GP", "Gary's voice with a real race engineer's manner, learned from four "
+             "seasons of broadcast team radio. Calm, short, the number twice.",
+             "en_GB-northern_english_male-medium", personality="gp",
+             sample="Box this lap, box this lap. Hards. Box and confirm, mate."),
 )
 BY_KEY = {e.key: e for e in ENGINEERS}
 DEFAULT = "northern"
@@ -271,8 +275,13 @@ class Intern:
         return " ".join(p for p in (before, text, after) if p)
 
 
-def personality(key: str | None):
+def personality(key: str | None, driver_name: str | None = None):
     """The text wrapper for an engineer: f(topic, text, t) -> text, or None to say calls as
-    they are."""
+    they are. driver_name: what GP calls you (`radio.driver_name`; unset = "mate")."""
     e = engineer(key)
-    return Intern() if e.personality == "intern" else None
+    if e.personality == "intern":
+        return Intern()
+    if e.personality == "gp":
+        from engineer.radio.gp import GPStyle
+        return GPStyle(driver_name)
+    return None

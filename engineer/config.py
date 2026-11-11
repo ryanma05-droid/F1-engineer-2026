@@ -49,6 +49,7 @@ class Radio(BaseModel):
     voice: str = "en_GB-northern_english_male-medium"   # used when no engineer is picked
     # The engineer picked in the app window (radio/engineers.py): their voice and manner.
     engineer: str | None = None
+    driver_name: str | None = None  # what GP calls you on the radio (unset: "mate")
 
     @property
     def gain(self) -> float:

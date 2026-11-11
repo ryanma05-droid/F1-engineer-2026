@@ -360,6 +360,13 @@ class AppWindow:
                 return Response(400, {"error": "volume must be 0 to 100"})
             self.voice.set_volume(volume)
             save.setdefault("radio", {})["volume_pct"] = volume
+        if "driver_name" in body:
+            name = body["driver_name"]
+            if name is not None and (not isinstance(name, str) or len(name) > 30):
+                return Response(400, {"error": "driver_name must be up to 30 characters"})
+            name = (name or "").strip() or None
+            self.voice.set_driver_name(name)
+            save.setdefault("radio", {})["driver_name"] = name
         controller = body.get("controller")
         if controller is not None:
             if controller not in ("xbox", "playstation", "off"):

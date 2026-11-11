@@ -33,7 +33,14 @@ class VoiceControl:
     def status(self) -> dict:
         return {"engineer": current_key(self.cfg), "state": self.state, "error": self.error,
                 "backend": self.audio.backend if self.audio is not None else None,
-                "volume": self.cfg.radio.volume_pct}
+                "volume": self.cfg.radio.volume_pct, "driver_name": self.cfg.radio.driver_name}
+
+    def set_driver_name(self, name: str | None) -> None:
+        """What GP calls you; takes effect from the next call."""
+        self.cfg.radio.driver_name = name
+        persona = self.engine.director.persona
+        if persona is not None and hasattr(persona, "name"):
+            persona.name = name
 
     def set_volume(self, pct: int) -> None:
         """The slider: louder or quieter from the next call on, with a line to hear it by."""
@@ -48,7 +55,7 @@ class VoiceControl:
             raise ValueError(f"unknown engineer {key!r}")
         e = engineer(key)
         self.cfg.radio.engineer = key
-        self.engine.director.persona = personality(key)
+        self.engine.director.persona = personality(key, self.cfg.radio.driver_name)
         if self.audio is None:
             return
         async with self._lock:

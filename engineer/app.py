@@ -154,7 +154,7 @@ def build_engine(cfg: Config, out: TextIO | None = None,
                                       max_answer_delay_s=cfg.voice.max_answer_delay_s,
                                       feedback=feedback, detail=cfg.radio.detail)
     engine.set_tempo(cfg.radio.verbosity)
-    engine.director.persona = personality(cfg.radio.engineer)
+    engine.director.persona = personality(cfg.radio.engineer, cfg.radio.driver_name)
     # Wording variety: each session reseeded (live: random; replay: from the session UID).
     VARIETY.enabled = cfg.radio.variety and os.environ.get("RACE_ENGINEER_VARIETY", "1") != "0"
     VARIETY.new_session(None)

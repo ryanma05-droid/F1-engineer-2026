@@ -334,6 +334,17 @@ uv run python -m engineer.report                     # driver report PDF (data/r
   `radio.voice`. `radio/switch.py` downloads a voice on first pick and restarts the audio
   process off the loop.
 
+- GP (`radio/gp.py`, 12 Nov): a seventh engineer, Gary's voice with a manner learned from 976
+  broadcast engineer lines on Verstappen's car (formuladream.app archive, 2021 and 2023-25;
+  OpenF1 timing for when they were said; study in docs/gp-radio-study.md; raw data never in the
+  repo). Wraps calls like Kevin, never changes them: `radio.driver_name` (Settings "Your name";
+  unset = "mate") on about a third of calls, never within NAME_GAP_S (25 s); "Understood." /
+  "Okay mate," before half the answers; the last gap echoed in gap calls ("One point two.",
+  "Eight tenths.", "Two seconds.", not within ECHO_GAP_S); "Box and confirm" after box calls;
+  calm openers on lost places; measured praise on passes (30 %) and at the flag; a lift at five
+  laps and one lap to go; add-ons that repeat the call are dropped (`_repeats`, echoes exempt).
+  `current_key` skips personality engineers, so an old setup with Gary's voice is still Gary.
+
 ## Push-to-talk (Phase 6)
 
 - Hold LB (XInput) or L1 (PlayStation, winmm), shared with the game -> speech process (faster-whisper, own process, default

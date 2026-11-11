@@ -797,3 +797,12 @@ load (only additions since 0.1.3); no library changes since 0.1.3. Found and fix
   0.45 s the next), so pushes stay rare; widen `push_gap_s` if you want more of them.
 - [ ] Not tried in a live race yet
 
+## GP engineer (12 Nov)
+
+- [x] Studied 971 broadcast messages on Verstappen's car (2021, 2023-25 races and sprints;
+      formuladream.app; 2022 not in the archive) and their race situations (OpenF1, sample of
+      286): docs/gp-radio-study.md
+- [x] GP in Settings: Gary's voice, that manner on top; "Your name" setting for what GP calls you
+- [x] Checked on the 7 Nov Interlagos race (68 calls)
+- [ ] Not heard live yet; tune by ear (how often the name and the add-ons come)
+
