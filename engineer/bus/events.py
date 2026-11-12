@@ -125,6 +125,9 @@ class RadioMessage(Event):
     # What the engineer actually says, when their personality adds to the call (Kevin). `text`
     # stays the call itself, so code matching on it keeps working.
     spoken: str | None = None
+    # A moment that matters (a pass, a battle, a push lap, a lost place with encouragement):
+    # said with more energy (radio/director.py EXCITED_TOPICS, tts.EXCITED).
+    excited: bool = False
 
     @property
     def said(self) -> str:

@@ -133,11 +133,17 @@ class RaceCraft(BaseModel):
     attack_gap_s: float = Field(default=4.0, gt=0)     # car ahead within this ...
     min_closing_s: float = Field(default=0.15, gt=0)   # ... and you close this much a lap
     push: bool = True                                   # "Push now!" closing in on a battle
-    push_gap_s: float = Field(default=2.0, gt=0)       # ... the car ahead/behind within this
+    push_gap_s: float = Field(default=3.0, gt=0)       # ... the car ahead/behind within this
     push_closing_s: float = Field(default=0.2, gt=0)   # ... and the gap closing this much a lap
-    battle_gap_s: float = Field(default=1.0, gt=0)     # a battle: the same car within this ...
+    drs_gap_s: float = Field(default=1.0, gt=0)        # DRS range (push stops here: defend/DRS)
+    battle_gap_s: float = Field(default=2.0, gt=0)     # a battle: the same car within this ...
     battle_laps: int = Field(default=3, ge=2)          # ... at the line this many laps running
     battle_repeat_laps: int = Field(default=3, ge=1)   # encouragement again this often
+    battle_updates: bool = True      # in a battle, the gap and which way it's going every lap
+    chatty_extra_gap_s: float = Field(default=1.0, ge=0)   # chatty: updates this much further out
+    cycle: bool = True               # "Stops all done, P six and that's real"
+    penalty_gap: bool = True         # your time penalty: the gap you need to the car behind
+    rival_pits: bool = True          # chatty: a car within two places pitting
 
 
 class Pace(BaseModel):

@@ -158,7 +158,7 @@ uv run python -m engineer.overlay --replay <file.zst> --locked   # ... fed by a 
   defending / attacking (only if you'd realistically catch them), countdown,
   finish, fastest lap (when taken from someone else), your penalties (IDs from the PDF spec),
   safety car in, damage after contact.
-- Long battles (`_battle`): the same car within `battle_gap_s` (1 s) ahead or behind at the line
+- Long battles (`_battle`): the same car within `battle_gap_s` (2 s since 12 Nov, was 1) ahead or behind at the line
   `battle_laps` (3) laps running -> encouragement (topic racecraft_battle, LOW, so not in quiet
   mode), again every `battle_repeat_laps` (3), at most 4 per car; "back and forth" wording after
   2+ swaps in this battle; not within 15 s of a defend/attack/pass call (next lap instead).
@@ -166,8 +166,8 @@ uv run python -m engineer.overlay --replay <file.zst> --locked   # ... fed by a 
   7 Nov: the Russell battle call was cleared by a flashback and never came back).
 - Push calls (12 Nov, "a mode push for undercuts and when I'm close to a battle"):
   `_push` (racecraft, topic racecraft_push, NORMAL, rank 2, left out in Quiet via
-  `TERSE_DROPS`): the car ahead or behind inside `push_gap_s` (2 s) but outside DRS range
-  (`battle_gap_s`), gap down `push_closing_s` (0.2 s) on the last lap -> "Push now! Norris is
+  `TERSE_DROPS`): the car ahead or behind inside `push_gap_s` (3 s) but outside DRS range
+  (`drs_gap_s` 1 s), gap down `push_closing_s` (0.2 s) on the last lap -> "Push now! Norris is
   ... and you're catching" / "Push now, Russell is ... back and coming". Once per car and side
   per PUSH_REPEAT_LAPS (4), not within 15 s of another race craft call. Undercut (strategy,
   topic undercut_push, kept in Quiet): your stop with the car just ahead within
@@ -181,6 +181,35 @@ uv run python -m engineer.overlay --replay <file.zst> --locked   # ... fed by a 
   UNDERCUT_SEEN_S (15 s) old (Miami, 11 Nov: at your pit entry Russell, out of his stop, was
   "just ahead" at a gap of 0, so the undercut on Antonelli 2.1 s ahead was never tracked).
   The car behind pitting (undercut on you) now adds "Push now, big laps on these."
+- Moments that matter (12 Nov, "more energetic calls ... big battles, push laps, nice moves,
+  even losing a spot, some encouragement helps"; every engineer):
+  - Delivery: `RadioCall.excited` (None = topic in `director.EXCITED_TOPICS`: passes / lost
+    places / fights, battle, push, gap, attack, defend, undercut push, cycle, penalty gap) ->
+    `RadioMessage.excited` -> `AudioProcess.say(text, origin, excited)` -> Piper with
+    `tts.EXCITED` (length_scale x0.9, noise_scale 0.85, noise_w 1.0, gain x1.15 under
+    soft_limit). The director's timing ignores it (still from the text, so replays agree).
+  - Wording: `phrases._shout` ("!") on passes ("Great move on Norris! P three."), fights,
+    lost places with stronger encouragement ("Stay with Leclerc, you'll get another go!"),
+    battles, defend/attack/DRS, start, last lap, undercut missed. GP's pass / battle add-ons lift
+    ("Get in there!", "Mega, mate!", 50 % of good passes); Kevin already covers racecraft_*.
+  - Battle updates (`_gap_update`, topic racecraft_gap, LOW, rank 1): at the end of YOUR
+    sector one (not the line, where lap calls queue and the first try lost most to the wait),
+    the nearest car within `battle_gap_s` (+ `chatty_extra_gap_s` 1 s in chatty), its gap and
+    the change since the last update ("Antonelli behind, eight tenths, you're holding them.
+    Great job, keep it up!"; change under 0.1 s = steady). Not when another race craft call
+    was said in the last 15 s or is queued (`_racecraft_busy`), nor the lap after a battle call.
+  - Stops shaken out (`_cycle`, racecraft_cycle, NORMAL, rank 2): at your line once every
+    running car (result status not 4-7) has stopped as often as you and none is in the pit
+    lane, dry only, once per stop count: "Stops all done for everyone. P six, up two places on
+    the cycle. ...!" (vs your position at the line before your pit entry).
+  - Your time penalty (`_penalty_lap`, racecraft_penalty_gap, NORMAL, rank 2): appended to the
+    PENA time-penalty call, then every lap while `penalties_s` > 0 (not within 30 s of the
+    penalty call): the nearest car behind within penalty + 1 s, the gap, how many are inside
+    it ("Push, push!" / "just outside, keep it there!"); "Nobody within your three seconds
+    behind" once when clear.
+  - Chatty: a car within two places going into the pits (`_rival_pit`, racecraft_rival_pit,
+    LOW; the car right behind is skipped while you still have a stop: the undercut call).
+  Miami replay: normal 38 -> 46 calls said.
 - Weather, rivals' penalties, rival information (12 Nov; the real radio's most common
   unprompted topics, see docs/gp-radio-study.md). Shared logic in `tools/rivals.py` (calls and
   answers agree): `gap_between` (intervals summed), `next_weather_change` (the Session packet's

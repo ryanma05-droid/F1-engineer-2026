@@ -44,9 +44,9 @@ def test_start_finish_and_countdown():
                     positions={0: 3, 1: 2, 2: 1}, names=["PLAYER", "NORRIS", "PIASTRI"],
                     extra_packets=False, chequered_flag=True)
     _, radio = run(race, duration_ms=250000)
-    assert "Lost two places at the start, long way to go." in radio
+    assert "Lost two places at the start. Long way to go, we'll get them back!" in radio
     assert "Three laps to go, P three." not in radio            # only five and one
-    assert any(r.startswith("Last lap, P three. Bring it home.") for r in radio)
+    assert any(r.startswith("Last lap, P three. Bring it home!") for r in radio)
     assert "Chequered flag, P three. Podium. Great drive." in radio
 
 
@@ -54,7 +54,7 @@ def test_a_pass_is_called_once_it_sticks_and_not_if_swapped_back():
     race = FakeRace({0: [30000] * 4, 1: [30500] * 4}, positions={0: 1, 1: 2},
                     names=["PLAYER", "NORRIS"], extra_packets=False)
     _, radio = run(race, {35: ovtk(0, 1)}, duration_ms=60000)
-    assert "Great move on Norris, P one." in radio
+    assert "Great move on Norris! P one." in radio
     # Reported as Norris passing us, but we're still ahead 4 s later: no call.
     _, radio = run(race, {35: ovtk(1, 0)}, duration_ms=60000)
     assert not any("Norris" in r for r in radio)
@@ -80,15 +80,15 @@ def test_penalty_fastest_lap_and_safety_car_in():
 
 
 def test_phrases():
-    assert phrases.start_phrase(8) == "Great start, up eight places."
-    assert phrases.pass_phrase(["Norris", "Piastri"], 5) == "Two cars in one go, P five."
-    assert phrases.lost_place_phrase("Leclerc", 4) == "Lost P three to Leclerc. Stay with Leclerc."
+    assert phrases.start_phrase(8) == "Great start, up eight places!"
+    assert phrases.pass_phrase(["Norris", "Piastri"], 5) == "Two cars in one go! P five."
+    assert phrases.lost_place_phrase("Leclerc", 4) == "Lost P three to Leclerc. Stay with Leclerc, you'll get another go!"
     assert phrases.defend_phrase("Leclerc", 800) == \
-        "Leclerc behind, eight tenths and closing, DRS range. Defend."
+        "Leclerc behind, eight tenths and closing, DRS range. Defend!"
     assert phrases.attack_phrase("Norris", 2100, 300, 4) == (
         "Norris ahead, two point one seconds. Catching three tenths a lap, on Norris in about "
-        "four laps. Keep pushing.")
-    assert phrases.drs_range_phrase("Norris") == "DRS range on Norris. Go get Norris."
+        "four laps. Keep pushing!")
+    assert phrases.drs_range_phrase("Norris") == "DRS range on Norris. Go get Norris!"
     assert phrases.finish_phrase(1, 3) == "P one! You've won it! Brilliant drive."
     assert phrases.finish_phrase(9, -2) == "Chequered flag, P nine. Tough one, we'll learn from it."
     assert phrases.penalty_phrase(4, 3, 5) == "Five second time penalty, for a collision."
@@ -118,25 +118,25 @@ def test_a_lost_place_waits_longer_and_a_quick_fight_back_is_praised():
     # Norris gets by and stays ahead: called, but only after lost_hold_s (8 s), not 4 s.
     eng, radio = run(_duel(), {35: ovtk(1, 0)}, duration_ms=60000,
                      moves={35: {0: 2, 1: 1}})
-    assert "Lost P one to Norris. Stay with Norris." in radio
+    assert "Lost P one to Norris. Stay with Norris, you'll get another go!" in radio
     # Gone for 3 s, then back past before the lost call: a good defence, not a lost place.
     _, radio = run(_duel(), {35: ovtk(1, 0), 38: ovtk(0, 1)}, duration_ms=60000,
                    moves={35: {0: 2, 1: 1}, 38: {0: 1, 1: 2}})
-    assert "Good fight, Norris couldn't make it stick, P one." in radio
+    assert "Good fight, Norris couldn't make it stick, P one!" in radio
     assert not any(r.startswith("Lost") for r in radio)
     # Lost (and told), then straight back past: "great response", not a plain pass.
     _, radio = run(_duel(), {35: ovtk(1, 0), 47: ovtk(0, 1)}, duration_ms=65000,
                    moves={35: {0: 2, 1: 1}, 47: {0: 1, 1: 2}})
-    assert "Lost P one to Norris. Stay with Norris." in radio
-    assert "Straight back past Norris, P one. Great response." in radio
+    assert "Lost P one to Norris. Stay with Norris, you'll get another go!" in radio
+    assert "Straight back past Norris, P one. Great response!" in radio
 
 
 def test_lost_place_wording():
     assert phrases.lost_place_phrase("Hamilton", 6, 1) == \
-        "Hamilton got by, P six. Stay close, the move back is on."
-    assert phrases.lost_places_phrase(3, 9) == "Lost three places, P nine. Heads down, keep at it."
+        "Hamilton got by, P six. Stay close, the move back is on!"
+    assert phrases.lost_places_phrase(3, 9) == "Lost three places, P nine. Heads down, keep at it!"
     assert phrases.fight_back_phrase("Hamilton", 5, False, 1) == \
-        "Nicely defended, back ahead of Hamilton, P five."
+        "Nicely defended, back ahead of Hamilton, P five!"
 
 
 def test_a_car_going_into_the_pits_is_not_a_pass():
@@ -151,7 +151,7 @@ def test_a_car_going_into_the_pits_is_not_a_pass():
     race = FakeRace({0: [30000] * 4, 1: [29500] * 4}, positions={0: 2, 1: 1},
                     names=["PLAYER", "ANTONELLI"], extra_packets=False)
     _, radio = run(race, {56.0: ovtk(0, 1)}, moves={56.0: {0: 1, 1: 2}}, duration_ms=75000)
-    assert any("Antonelli, P one" in r for r in radio)
+    assert any("Antonelli! P one" in r for r in radio)
 
 
 def test_a_lap_re_driven_after_a_flashback_is_not_announced_twice():
@@ -188,14 +188,14 @@ def test_a_long_battle_gets_encouragement():
                     names=["PLAYER", "NORRIS"], extra_packets=False, gap_ahead_ms={1: 700})
     _, radio = run(race, duration_ms=185000)
     assert "Norris has been on you for three laps and still hasn't got by. Brilliant work, " \
-           "stay calm." in radio, radio
+           "stay calm!" in radio, radio
 
 
 def test_battle_phrases():
     assert phrases.battle_phrase("Russell", "behind", 4) == \
-        "Russell has been on you for four laps and still hasn't got by. Brilliant work, stay calm."
+        "Russell has been on you for four laps and still hasn't got by. Brilliant work, stay calm!"
     assert phrases.battle_phrase("Russell", "ahead", 3, swaps=3) == \
-        "Proper scrap with Russell, three laps of it. Loving this, keep it clean."
+        "Proper scrap with Russell, three laps of it. Loving this, keep it clean!"
 
 
 def test_a_battle_call_lost_to_a_flashback_is_made_again():
@@ -247,6 +247,126 @@ def test_push_now_closing_on_the_car_ahead_and_the_car_behind():
 def test_push_phrases():
     assert phrases.push_defend_phrase(None, 1600).startswith("Push now, the car behind is")
     assert phrases.undercut_result_phrase("Norris", False, 800) == \
-        "Norris stayed in front, eight tenths ahead. Fresher tyres, keep pushing."
+        "Norris stayed in front, eight tenths ahead. Fresher tyres, keep pushing!"
     assert phrases.undercut_push_out_phrase("Norris") == \
         "Push now, big out lap. Norris hasn't stopped yet, the undercut's on."
+
+
+# -- 12 Nov: battles within 2 s, gap updates, stops shaken out, your penalty, energy ------------
+
+def _rig(tempo="normal"):
+    import numpy as np
+    eng = build_engine(Config(data_dir="/nonexistent-test-dir"), out=io.StringIO(),
+                       priors=WearPriors(), strategy_runner=InlineRunner(None))
+    eng.set_tempo(tempo)
+    st = eng.pipeline.state
+    st.session_uid, st.player_index, st.session_time = 1, 0, 500.0
+    st.session.session_type, st.session.total_laps, st.session.weather = 15, 14, 0
+    st.session.safety_car_status = 0
+    c = st.cars
+    c.active[:4] = True
+    c.names[:4] = ["PLAYER", "NORRIS", "ANTONELLI", "SAINZ"]
+    c.position[:4] = [2, 1, 3, 4]
+    c.delta_to_car_in_front_ms[:4] = [2500, 0, 800, 1500]
+    c.pit_status[:4] = 0
+    c.num_pit_stops[:4] = 0
+    c.lap[:4] = 6
+    c.result_status[:4] = 2
+    c.penalties_s[:4] = 0
+    said = []
+    eng.pipeline.bus.subscribe(ev.RadioMessage, lambda e: said.append((e.topic, e.text,
+                                                                      e.excited)))
+    return eng, st, c, said, np
+
+
+def _release(eng, st, dt=30.0):
+    st.session_time += dt
+    eng.director.after_packet(None)
+
+
+def test_battle_gap_updates_every_lap_at_the_end_of_sector_one():
+    eng, st, c, said, _ = _rig()
+    rc = eng.racecraft
+    assert eng.racecraft.cfg.battle_gap_s == 2.0          # a battle is within two seconds now
+    rc._gap_update(5)
+    _release(eng, st)
+    assert said[-1] == ("racecraft_gap", ("Antonelli behind, eight tenths, you're holding them. "
+                                          "Great job, keep it up!"), True)
+    c.delta_to_car_in_front_ms[2] = 500                    # closing by three tenths
+    rc._gap_update(6)
+    _release(eng, st)
+    assert said[-1][1].startswith("Antonelli behind, five tenths, closing by three tenths.")
+    # Norris ahead is 2.5 s away: outside a battle, but chatty talks about him too.
+    c.delta_to_car_in_front_ms[2] = 3000
+    n = len(said)
+    rc._gap_update(7)
+    _release(eng, st)
+    assert len(said) == n
+    eng.set_tempo("chatty")
+    rc._gap_update(8)
+    _release(eng, st)
+    assert said[-1][1].startswith("Norris ahead, two point five seconds.")
+
+
+def test_stops_shaken_out_and_your_penalty_gap():
+    eng, st, c, said, _ = _rig()
+    rc = eng.racecraft
+    rc.position_before_stop = 4
+    c.num_pit_stops[0] = 1
+    lap = ev.LapCompleted(1, st.session_time, car_idx=0, lap=9, lap_time_ms=90000,
+                          sector1_ms=None, sector2_ms=None, sector3_ms=None, invalid=False,
+                          pit_in_lap=False, pit_out_lap=False, position=2, visual_compound=None,
+                          tyre_age_laps=None)
+    rc._cycle(lap)                                         # Norris and co haven't stopped
+    assert not rc.cycle_said
+    c.num_pit_stops[1:4] = 1
+    rc._cycle(lap)
+    _release(eng, st)
+    assert said[-1] == ("racecraft_cycle", ("Stops all done for everyone. P two, up two places "
+                                            "on the cycle. Brilliant work!"), True)
+    # A three second penalty with Antonelli eight tenths behind and Sainz 2.3 s behind.
+    c.penalties_s[0] = 3
+    rc._penalty_lap()
+    _release(eng, st)
+    assert said[-1][1] == ("Antonelli eight tenths behind, you need three seconds on them, two "
+                           "cars inside it. Push, push!")
+    c.delta_to_car_in_front_ms[2] = 4500
+    rc._penalty_lap()
+    _release(eng, st)
+    assert said[-1][1] == ("Nobody within your three seconds behind. The penalty costs you "
+                           "nothing, keep it clean!")
+    n = len(said)
+    rc._penalty_lap()                                      # "clear" only once
+    _release(eng, st)
+    assert len(said) == n
+
+
+def test_chatty_hears_cars_around_you_pitting():
+    eng, st, c, said, _ = _rig("chatty")
+    c.position[3], c.position[2] = 3, 4                    # Sainz right behind ...
+    c.num_pit_stops[0] = 1                                 # ... and you've stopped
+    eng.pipeline.bus.publish(ev.PitEntry(1, st.session_time, car_idx=3, lap=6))
+    _release(eng, st)
+    assert said[-1][1] == "Sainz, just behind, is in the pits."
+    eng.set_tempo("normal")
+    n = len(said)
+    eng.pipeline.bus.publish(ev.PitEntry(1, st.session_time, car_idx=1, lap=6))
+    _release(eng, st)
+    assert len(said) == n
+
+
+def test_moments_that_matter_are_excited_for_every_engineer():
+    from engineer.radio.gp import GPStyle
+    eng, st, _c, said, _ = _rig()
+    eng.director.submit(RadioCall("racecraft_pass", "Great move on Norris! P one."))
+    _release(eng, st)
+    eng.director.submit(RadioCall("lap_delta", "One thirty."))
+    _release(eng, st)
+    eng.director.submit(RadioCall("racecraft_cycle", "Stops all done.", excited=False))
+    _release(eng, st)
+    assert [x[2] for x in said] == [True, False, False]
+    # GP echoes the gap in a battle update, like his other battle calls.
+    gp = GPStyle("Ryan")
+    out = gp("racecraft_gap", "Antonelli behind, eight tenths, you're holding them. Great job!",
+             100.0)
+    assert out.endswith("Eight tenths.")

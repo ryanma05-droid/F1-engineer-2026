@@ -36,9 +36,11 @@ _NUM = (r"(?:(?:twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety)[ -]?)?"
 _GAP = re.compile(rf"\b({_NUM}(?: point {_NUM})?) (seconds?|tenths?)\b", re.IGNORECASE)
 
 _ANSWER_IN = ["Okay {n},", "Understood.", "Yep.", "Okay,", "Copy, {n}.", "So,"]
-_PASS_OUT = ["Nicely done.", "Well controlled.", "Lovely, {n}.", "Good job.", "Very tidy."]
+# 12 Nov: "more energetic calls in moments that matter", for every engineer. GP stays short, but
+# lifts: the real radio does shout on a good move ("Get in there!").
+_PASS_OUT = ["Get in there!", "Mega, {n}!", "Lovely, {n}!", "Nicely done!", "Very tidy, well done!"]
 _LOST_IN = ["Okay, no dramas.", "Stay calm, {n}.", "Head down.", "Okay {n}, reset."]
-_BATTLE_OUT = ["Come on, {n}.", "Keep it clean.", "Good stuff.", "That's racing."]
+_BATTLE_OUT = ["Come on, {n}!", "Keep it clean!", "Good stuff!", "That's racing!"]
 _FIVE_OUT = ["{laps} of your finest, {n}. Come on.", "{laps} more, nice and tidy.",
              "{laps} to go, keep doing what you're doing."]
 _LAST_OUT = ["Bring it home, {n}.", "Nice and tidy to the flag.", "One more, {n}. Come on."]
@@ -146,10 +148,12 @@ class GPStyle:
                                          "got through", "way past"))
             if bad and r < 0.5:
                 before = self._fill(self._pick(_LOST_IN), t)
-            elif not bad and r < 0.3:
+            elif not bad and r < 0.5:
                 after = self._fill(self._pick(_PASS_OUT), t)
+        elif topic == "racecraft_cycle" and " up " in low and r < 0.5:
+            after = self._fill(self._pick(_PASS_OUT), t)
         elif topic in ("racecraft_battle", "racecraft_push", "racecraft_defend",
-                       "racecraft_attack"):
+                       "racecraft_attack", "racecraft_gap", "racecraft_penalty_gap"):
             echo = self._echo(text, t) if topic != "racecraft_battle" else ""
             if echo:
                 after = echo

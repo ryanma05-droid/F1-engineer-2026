@@ -92,3 +92,38 @@ def test_volume_slider_70_is_the_old_loudness_and_100_is_louder_without_clipping
     after, _ = b.render("x")
     rms = lambda a: float(np.sqrt(np.mean(a ** 2)))
     assert rms(after) > 1.5 * rms(before) and np.max(np.abs(after)) <= 0.99
+
+
+def test_excited_calls_are_said_faster_livelier_and_louder():
+    # 12 Nov: "more energetic calls in moments that matter". The excited flag reaches the audio
+    # process and Piper uses its own synthesis settings and a little more gain.
+    import numpy as np
+    from piper import AudioChunk
+
+    from engineer.radio.tts import EXCITED, PiperBackend
+
+    seen = []
+
+    class FakeVoice:
+        def synthesize(self, text, syn_config=None):
+            seen.append(syn_config)
+            yield AudioChunk(sample_rate=22050, sample_width=2, sample_channels=1,
+                             audio_float_array=np.full(100, 0.1, dtype=np.float32),
+                             phonemes=[], phoneme_ids=[])
+
+    b = object.__new__(PiperBackend)
+    b.voice, b._seed, b.syn = FakeVoice(), 0, None
+    b.settings = AudioSettings(voice_model=None, radio_effect=False, volume=0.5)
+    b.syn_excited = "excited-config"
+    calm, _ = b.render("Great move!")
+    loud, _ = b.render("Great move!", excited=True)
+    assert seen == [None, "excited-config"]
+    assert np.allclose(loud, calm * EXCITED["gain"])
+    # The queue carries the flag; an old two-item message still works.
+    ap = AudioProcess(AudioSettings(voice_model=None, backend="null", show_latency=False))
+    assert ap.start(wait_ready_s=30) == "null"
+    ap.say("Great move on Norris!", None, excited=True)
+    ap._calls.put(("Radio check.", None))
+    assert ap.status.get(timeout=10)[:2] == ("spoke", "Great move on Norris!")
+    assert ap.status.get(timeout=10)[:2] == ("spoke", "Radio check.")
+    ap.close()

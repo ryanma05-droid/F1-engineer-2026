@@ -39,7 +39,7 @@ def start_voice(cfg: Config, engine) -> AudioProcess:
         print(f"  (Using the {'Windows' if backend == 'pyttsx3' else 'Mac'} voice. For the "
               f"engineer's voice run setup again, or: python -m engineer.radio.setup_voice)")
     engine.pipeline.bus.subscribe(ev.RadioMessage,
-                                  lambda e: audio.say(e.said, e.origin_t_ns))
+                                  lambda e: audio.say(e.said, e.origin_t_ns, e.excited))
     return audio
 
 

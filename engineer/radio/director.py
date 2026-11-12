@@ -49,6 +49,7 @@ class RadioCall:
     wait_for_straight: bool = True    # False for urgent calls that can't wait for a straight
     must_say: bool = False            # after max_wait_s: said even mid-corner, not dropped
     origin_t_ns: int | None = None    # arrival time of the triggering packet (latency readout)
+    excited: bool | None = None       # said with more energy; None = by topic (EXCITED_TOPICS)
     queued_at: float = field(default=0.0, init=False)
 
 
@@ -172,6 +173,7 @@ class QuietZones:
 # line, and "Got it back from Russell" and "Last lap" expired behind it.
 _RANK = {"box": 3, "safety_car": 3, "racecraft_countdown": 2, "racecraft_pass": 2,
          "racecraft_defend": 2, "racecraft_attack": 2, "racecraft_penalty": 2,
+         "racecraft_penalty_gap": 2, "racecraft_cycle": 2, "racecraft_gap": 1,
          "racecraft_damage": 2, "racecraft_push": 2, "undercut_push": 2, "rival_penalty": 2,
          "racecraft_battle": 1}
 
@@ -197,7 +199,14 @@ TERSE_DROPS = {"racecraft_push"}
 # Coaching mode keeps the radio about driving: the coaching call after each lap carries the lap
 # time and the gap to the fastest car, so these are left out. Strategy, box calls, safety car,
 # tyre warnings, the start/finish and your answers stay.
-COACHING_DROPS = {"lap_delta", "racecraft_pass", "racecraft_attack", "racecraft_defend"}
+COACHING_DROPS = {"lap_delta", "racecraft_pass", "racecraft_attack", "racecraft_defend",
+                  "racecraft_gap", "racecraft_rival_pit"}
+# The moments that matter (12 Nov: "more energetic calls in moments that matter: big battles,
+# push laps, nice moves, even losing a spot, some encouragement helps"): said faster, livelier
+# and a touch louder by every engineer (tts.EXCITED). A call can say otherwise with `excited`.
+EXCITED_TOPICS = {"racecraft_pass", "racecraft_battle", "racecraft_push", "racecraft_gap",
+                  "racecraft_attack", "racecraft_defend", "undercut_push", "racecraft_cycle",
+                  "racecraft_penalty_gap"}
 
 
 class RadioDirector:
@@ -333,7 +342,9 @@ class RadioDirector:
         self.bus.publish(ev.RadioMessage(
             self.state.session_uid or 0, t, topic=call.topic, text=call.text,
             priority=call.priority, queued_at=call.queued_at, origin_t_ns=call.origin_t_ns,
-            spoken=spoken if spoken != call.text else None))
+            spoken=spoken if spoken != call.text else None,
+            excited=call.excited if call.excited is not None
+            else call.topic in EXCITED_TOPICS))
         return spoken or call.text
 
     def _now(self) -> float:

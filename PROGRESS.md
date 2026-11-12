@@ -868,6 +868,10 @@ From the real radio study's most common unprompted topics.
       then whether it worked); before, nothing was said
 - [x] New questions understood: undercut, "will <driver> pit?", "how am I looking to <driver>",
       battle / progress with a driver, "chatty mode" / "quiet mode"
-- [ ] Proposed, not built: a call when the stops shake out, the gap you need after a time
-      penalty, gap updates every lap in a battle, chatty mode saying more often (it now only
-      changes the wording: 39 calls vs 38 on this race)
+- [x] Built (12 Nov): a call when the stops shake out, the gap you need after a time penalty,
+      gap updates every lap in a battle (battles now within 2 s), chatty adds cars around you
+      pitting and battle updates a second further out
+- [x] Moments that matter said with energy by every engineer: faster, livelier, louder voice
+      settings and "!" wording on passes, fights, lost places (with encouragement), battles,
+      push laps; GP lifts too. Miami replay: 38 -> 46 calls in normal
+- [ ] Hear the excited voice on Windows and tune `tts.EXCITED` if it's too much or too little

@@ -1,19 +1,22 @@
 RADIO    30.9s  Warning for a collision.
 RADIO    77.7s  Lap one, one seventeen six.
-RADIO    80.0s  Great start, up nine places.  (held 2.3s)
-RADIO   102.5s  Good fight, Verstappen couldn't make it stick, P nine.
-RADIO   115.5s  Great move on Sainz, P eight.  (held 5.0s)
-RADIO   118.5s  Two cars in one go, P six.
+RADIO    80.0s  Great start, up nine places!  (held 2.3s)
+RADIO   102.5s  Good fight, Verstappen couldn't make it stick, P nine!
+RADIO   115.5s  Great move on Sainz! P eight.  (held 5.0s)
+RADIO   118.5s  Two cars in one go! P six.
 RADIO   147.3s  One oh nine six.
-RADIO   170.3s  Nicely defended, back ahead of Piastri, P six.  (held 0.4s)
-RADIO   193.3s  Lovely move on Hamilton, P five.  (held 5.0s)
+RADIO   170.3s  Nicely defended, back ahead of Piastri, P six!  (held 0.4s)
+RADIO   173.6s  Russell behind, four tenths, you're holding them. Great job, keep it up!  (held 9.0s)
+RADIO   193.3s  Lovely move on Hamilton! P five.  (held 5.0s)
 RADIO   216.9s  One oh nine five, same again, but gained in sector two.
 RADIO   224.3s  Tyres: front right worst at eleven percent, about four percent a lap.  (held 7.3s)
 RADIO   229.1s  Turn seven, losing two tenths to the car ahead. Get on the power much earlier.  (held 12.1s)
-RADIO   253.5s  Good job, that's one more, P four.  (held 5.6s)
-RADIO   262.5s  Great move on Antonelli, P three.  (held 4.9s)
+RADIO   239.7s  Hamilton behind, four tenths, you're holding them. Great job, keep it up!  (held 6.0s)
+RADIO   253.5s  Good job, that's one more! P four.  (held 5.6s)
+RADIO   262.5s  Great move on Antonelli! P three.  (held 4.9s)
 RADIO   286.1s  One oh nine one, four tenths quicker, gained in sector one.
-RADIO   293.4s  Last lap, P three. Bring it home.  (held 7.3s)
+RADIO   293.4s  Last lap, P three. Bring it home!  (held 7.3s)
 RADIO   296.4s  Turn four, losing two tenths to the car ahead. Brake slightly later, then carry a bit more speed through the corner.  (held 10.3s)
+RADIO   308.9s  Antonelli behind, a tenth, you're holding them. Great job, keep it up!  (held 5.9s)
 RADIO   355.2s  One oh nine one, same again, but gained in sector three.
 RADIO   355.3s  Chequered flag, P three. Up fifteen places from the grid, great drive.

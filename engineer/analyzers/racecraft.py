@@ -17,13 +17,22 @@ Races only. Each call is said once per situation, with its own rules so it isn't
 - Attacking: the car ahead is within `attack_gap_s` (4 s), you've closed at least
   `min_closing_s` (0.15 s) a lap over the last two laps, and at that rate you'd catch it before
   the flag ("realistic"). Then "DRS range on Norris" the first time you get within 1 s.
-- Long battles: the same car within `battle_gap_s` (1 s) ahead or behind at the line for
+- Long battles: the same car within `battle_gap_s` (2 s, 12 Nov; was 1) ahead or behind at the line for
   `battle_laps` (3) laps running gets encouragement ("Russell has been on you for four laps and
   still hasn't got by. Brilliant work, stay calm."), again every `battle_repeat_laps` (3) while
   it lasts, at most BATTLE_MAX_CALLS per car; "back and forth" wording once you've swapped places
   twice. Not on a lap that already had a defend/attack/DRS/pass call about it.
-- Push (12 Nov): closing in on a battle, the car ahead or behind inside `push_gap_s` (2 s) but
-  outside DRS range (`battle_gap_s`), the gap down `push_closing_s` (0.2 s) on the last lap:
+- Battle updates (12 Nov): every lap a car is within `battle_gap_s` (plus `chatty_extra_gap_s` in
+  chatty), the gap and which way it went: "Antonelli behind, eight tenths, you're holding him.
+  Great job!" (topic racecraft_gap, LOW). Not on a lap with another race craft call.
+- Stops shaken out (12 Nov): once every running car has stopped as often as you, "Stops all
+  done, P six, and that's real. Up two on the cycle!" (topic racecraft_cycle).
+- Your time penalty (12 Nov): with the penalty call, and every lap after, the gap you need to the
+  car behind ("Antonelli one second behind, you need three seconds on him. Push!"), once "clear"
+  when nobody is within it (topic racecraft_penalty_gap).
+- Chatty (12 Nov): a car within two places going into the pits (topic racecraft_rival_pit).
+- Push (12 Nov): closing in on a battle, the car ahead or behind inside `push_gap_s` (3 s) but
+  outside DRS range (`drs_gap_s`), the gap down `push_closing_s` (0.2 s) on the last lap:
   "Push now! Norris is one point four ahead and you're catching. Big lap, get into DRS." /
   "Push now, Russell is one point six back and coming. Keep them out of DRS." Once per car per
   PUSH_REPEAT_LAPS, not right after another race craft call, not in Quiet.
@@ -67,6 +76,9 @@ TRACK_LIMITS = {7, 27, 28, 29}   # infringement IDs (spec): corner cutting, trac
 BATTLE_MAX_CALLS = 4         # encouragement per car per race
 PUSH_REPEAT_LAPS = 4         # "push now" again for the same car after this many laps
 BATTLE_QUIET_S = 15.0        # not right after another race craft call
+RETIRED = {4, 5, 6, 7}       # result status (spec): DNF, disqualified, not classified, retired
+PENALTY_CLOSE_S = 1.0        # a car just outside your penalty (within this more) is still named
+RIVAL_PIT_PLACES = 2         # chatty: cars this many places ahead/behind pitting
 
 
 LOST_REPEAT_S = 60.0         # the same lost place isn't said again this soon (flashbacks)
@@ -91,6 +103,7 @@ class RaceCraftAnalyzer:
         self._reset()
         bus.subscribe(ev.LapCompleted, self.on_lap)
         bus.subscribe(ev.GameEvent, self.on_game_event)
+        bus.subscribe(ev.SectorCompleted, self._on_sector)
         bus.subscribe(ev.SessionStarted, lambda e: self._reset())
         bus.subscribe(ev.Flashback, lambda e: self._on_flashback())
         bus.subscribe(ev.PitEntry, self._on_pit_entry)
@@ -128,6 +141,13 @@ class RaceCraftAnalyzer:
         # Battle calls not on the radio yet: text -> (car, said lap and count before). A
         # flashback or an expired wait puts them back (Brazil, 7 Nov: two lost to flashbacks).
         self.battle_pending: dict[str, tuple[int, int | None, int]] = {}
+        self.gap_seen: dict[int, tuple[str, float, int]] = {}   # car -> (side, gap ms, your lap)
+        self.battle_said_lap: int | None = None              # your lap ended by a battle call
+        self.cycle_said: set[int] = set()                    # your stop counts already called
+        self.last_position: int | None = None                # at your last line crossing
+        self.position_before_stop: int | None = None
+        self.penalty_clear_said = False
+        self.penalty_said_at = -math.inf                     # the penalty call with its gap
 
     def _on_flashback(self) -> None:
         self.swaps.clear()
@@ -156,7 +176,11 @@ class RaceCraftAnalyzer:
             self.battle_pending.pop(e.text, None)
 
     def _on_pit_entry(self, e: ev.PitEntry) -> None:
+        if e.car_idx != self.state.player_index:
+            self._rival_pit(e.car_idx)
+            return
         if e.car_idx == self.state.player_index:
+            self.position_before_stop = self.last_position
             # Cars going by while you stop aren't overtakes (Melbourne, 2 Nov: ten "lost"
             # places around the stop). Covers the in lap and the out lap.
             self.pit_laps = 2
@@ -184,12 +208,12 @@ class RaceCraftAnalyzer:
 
     def _say(self, topic: str, text: str | None, priority: int = Priority.NORMAL,
              max_wait_s: float = 10.0, wait_for_straight: bool = True,
-             must_say: bool = False) -> None:
+             must_say: bool = False, excited: bool | None = None) -> None:
         if text:
             self.director.submit(RadioCall(topic=topic, text=text, priority=priority,
                                            max_wait_s=max_wait_s,
                                            wait_for_straight=wait_for_straight,
-                                           must_say=must_say))
+                                           must_say=must_say, excited=excited))
 
     # -- laps ------------------------------------------------------------------------------------
 
@@ -209,14 +233,20 @@ class RaceCraftAnalyzer:
                 gained = int(grid) + 1 - e.position      # grid position is zero-based
                 if gained != 0:
                     self._say("racecraft_start", phrases.start_phrase(gained))
+        if e.position is not None and not e.pit_in_lap:
+            self.last_position = e.position
         if total and e.lap >= total:
             self._finish(e)
             return
+        self._cycle(e)
         if self._under_sc() or e.safety_car:
             self.ahead_gaps.clear()                       # gaps behind the SC mean nothing
+            self.gap_seen.clear()
             return
         self._attack(e)
-        self._battle(e)
+        if self._battle(e):
+            self.battle_said_lap = e.lap
+        self._penalty_lap()
         if self.cfg.countdown and total:
             to_go = total - e.lap
             if to_go in (COUNTDOWN_LAPS, 1):
@@ -229,26 +259,41 @@ class RaceCraftAnalyzer:
                     Priority.NORMAL if to_go == 1 else Priority.LOW, max_wait_s=30.0,
                     must_say=to_go == 1)        # Jeddah, 9 Nov: "Last lap" was dropped
 
-    def _battle(self, e: ev.LapCompleted) -> None:
-        """Encouragement in a battle that goes on for laps (see the module notes)."""
-        if not self.cfg.battles:
-            return
-        if e.pit_in_lap or e.pit_out_lap or self.pit_laps or e.lap < 2:
-            self.battles.clear()
-            return
+    def _close_cars(self, limit_ms: float) -> dict[int, tuple[str, float]]:
+        """The cars just ahead and just behind within limit_ms: car -> (side, gap ms)."""
         c, me = self.state.cars, self.state.player_index
-        limit = self.cfg.battle_gap_s * 1000
-        near: dict[int, str] = {}
+        near: dict[int, tuple[str, float]] = {}
         ahead = self._car_at(c.position[me] - 1)
         gap = c.delta_to_car_in_front_ms[me]
-        if ahead is not None and not np.isnan(gap) and 0 < gap <= limit \
+        if ahead is not None and not np.isnan(gap) and 0 < gap <= limit_ms \
                 and not c.pit_status[ahead] > 0:
-            near[ahead] = "ahead"
+            near[ahead] = ("ahead", float(gap))
         behind = self._car_at(c.position[me] + 1)
         if behind is not None and not c.pit_status[behind] > 0:
             g = c.delta_to_car_in_front_ms[behind]
-            if not np.isnan(g) and 0 < g <= limit:
-                near[behind] = "behind"
+            if not np.isnan(g) and 0 < g <= limit_ms:
+                near[behind] = ("behind", float(g))
+        return near
+
+    def _racecraft_busy(self, t: float) -> bool:
+        """Another race craft call said in the last BATTLE_QUIET_S, or one waiting to be said."""
+        recent = max((v for k, v in self.director.last_said.items()
+                      if k.startswith("racecraft_") and k != "racecraft_countdown"),
+                     default=-math.inf)
+        return t - recent < BATTLE_QUIET_S or any(
+            q.topic.startswith("racecraft_") and q.topic != "racecraft_countdown"
+            for q in self.director.queue)
+
+    def _battle(self, e: ev.LapCompleted) -> bool:
+        """Encouragement in a battle that goes on for laps (see the module notes). True if a
+        call was made."""
+        if not self.cfg.battles:
+            return False
+        if e.pit_in_lap or e.pit_out_lap or self.pit_laps or e.lap < 2:
+            self.battles.clear()
+            return False
+        near = {car: side for car, (side, _) in
+                self._close_cars(self.cfg.battle_gap_s * 1000).items()}
         # A streak continues from the previous lap (or the same lap re-driven after a flashback).
         streaks = {}
         for car in near:
@@ -265,13 +310,13 @@ class RaceCraftAnalyzer:
                 continue
             due.append((laps, near[car] == "ahead", car))
         if not due:
-            return
+            return False
         t = self.state.session_time or 0.0
         recent = max((self.director.last_said.get(k, -math.inf) for k in
                       ("racecraft_defend", "racecraft_attack", "racecraft_pass")),
                      default=-math.inf)
         if t - recent < BATTLE_QUIET_S:
-            return                                           # next lap, if it's still on
+            return False                                     # next lap, if it's still on
         laps, _, car = max(due)
         before = (car, self.battle_said.get(car), self.battle_calls.get(car, 0))
         self.battle_said[car] = e.lap
@@ -282,6 +327,117 @@ class RaceCraftAnalyzer:
         text = phrases.battle_phrase(self._name(car), near[car], laps, swaps)
         self.battle_pending[text] = before
         self._say("racecraft_battle", text, Priority.LOW, max_wait_s=15.0)
+        return True
+
+    def _on_sector(self, e: ev.SectorCompleted) -> None:
+        if e.car_idx == self.state.player_index and e.sector == 1 and self._active():
+            self._gap_update(e.lap)
+
+    def _gap_update(self, lap: int) -> None:
+        """In a battle, every lap at the end of sector one: the gap and which way it went since
+        the last one (12 Nov). Not at the line, where the lap time and the other lap calls
+        queue (the first try there lost most of them to the wait)."""
+        cfg, c, me = self.cfg, self.state.cars, self.state.player_index
+        if not (cfg.battles and cfg.battle_updates) or self.pit_laps or c.pit_status[me] > 0 \
+                or lap < 3 or self._under_sc():
+            self.gap_seen.clear()
+            return
+        extra = cfg.chatty_extra_gap_s if self.director.tempo == "chatty" else 0.0
+        close = self._close_cars((cfg.battle_gap_s + extra) * 1000)
+        prev, self.gap_seen = self.gap_seen, {car: (side, gap, lap)
+                                              for car, (side, gap) in close.items()}
+        if not close or self.battle_said_lap == lap - 1 \
+                or self._racecraft_busy(self.state.session_time or 0.0):
+            return
+        car, (side, gap) = min(close.items(), key=lambda kv: kv[1][1])
+        p = prev.get(car)
+        change = gap - p[1] if p is not None and p[0] == side and p[2] == lap - 1 else None
+        self._say("racecraft_gap", phrases.battle_gap_phrase(self._name(car), side, gap, change),
+                  Priority.LOW, max_wait_s=20.0)
+
+    def _stops(self, car: int) -> int:
+        n = self.state.cars.num_pit_stops[car]
+        return 0 if np.isnan(n) else int(n)
+
+    def _cycle(self, e: ev.LapCompleted) -> None:
+        """Once every running car has stopped as often as you: where that leaves you (12 Nov;
+        Miami: 18 cars stopped on laps 7-8 and you went P19 -> P6 without a word)."""
+        s, c, me = self.state, self.state.cars, self.state.player_index
+        mine = self._stops(me)
+        if not self.cfg.cycle or mine < 1 or mine in self.cycle_said or e.pit_in_lap \
+                or c.pit_status[me] > 0 or (s.session.weather or 0) >= 3 or e.position is None:
+            return
+        others = [int(j) for j in np.flatnonzero(c.active) if j != me
+                  and c.result_status[j] not in RETIRED]
+        if any(c.pit_status[j] > 0 or self._stops(j) < mine for j in others):
+            return
+        self.cycle_said.add(mine)
+        before = self.position_before_stop
+        gained = before - e.position if before is not None else None
+        self._say("racecraft_cycle", phrases.cycle_phrase(e.position, gained), Priority.NORMAL,
+                  max_wait_s=20.0, excited=gained is not None and gained > 0)
+
+    def _penalty_cars(self, seconds: float) -> list[tuple[int, float]]:
+        """The cars behind within your penalty (plus PENALTY_CLOSE_S): (car, gap ms), nearest
+        first."""
+        c, me = self.state.cars, self.state.player_index
+        out, total, pos = [], 0.0, c.position[me]
+        limit = (seconds + PENALTY_CLOSE_S) * 1000
+        while not np.isnan(pos):
+            pos += 1
+            car = self._car_at(pos)
+            if car is None or np.isnan(c.delta_to_car_in_front_ms[car]):
+                break
+            total += float(c.delta_to_car_in_front_ms[car])
+            if total > limit:
+                break
+            if not c.pit_status[car] > 0:
+                out.append((car, total))
+        return out
+
+    def _penalty_gap_text(self, seconds: float) -> str | None:
+        cars = self._penalty_cars(seconds)
+        inside = [x for x in cars if x[1] < seconds * 1000]
+        if not cars:
+            if self.penalty_clear_said:
+                return None
+            self.penalty_clear_said = True
+            return phrases.penalty_clear_phrase(int(seconds))
+        self.penalty_clear_said = False
+        car, gap = cars[0]
+        return phrases.penalty_gap_phrase(self._name(car), gap, int(seconds), len(inside))
+
+    def _penalty_lap(self) -> None:
+        """Your time penalty, every lap until it's served: the gap you need (12 Nov; Miami:
+        three seconds on lap 13 with Antonelli one second behind, and nothing said about it)."""
+        c, me = self.state.cars, self.state.player_index
+        sec = c.penalties_s[me]
+        if not (self.cfg.penalties and self.cfg.penalty_gap) or np.isnan(sec) or sec <= 0:
+            self.penalty_clear_said = False
+            return
+        if (self.state.session_time or 0.0) - self.penalty_said_at < BATTLE_QUIET_S * 2:
+            return                                  # just said with the penalty itself
+        text = self._penalty_gap_text(float(sec))
+        if text:
+            self._say("racecraft_penalty_gap", text, Priority.NORMAL, max_wait_s=20.0)
+
+    def _rival_pit(self, car: int) -> None:
+        """Chatty: a car within two places going into the pits."""
+        c, me = self.state.cars, self.state.player_index
+        if not self._active() or not self.cfg.rival_pits or self.director.tempo != "chatty" \
+                or self._under_sc() or c.pit_status[me] > 0:
+            return
+        lap = c.lap[me]
+        if np.isnan(lap) or lap < 2 or np.isnan(c.position[car]) or np.isnan(c.position[me]):
+            return
+        diff = int(c.position[car] - c.position[me])
+        # The car right behind pitting while you still have a stop is the strategy's undercut
+        # call; not twice.
+        if diff == 0 or abs(diff) > RIVAL_PIT_PLACES or (diff == 1 and self._stops(me) == 0):
+            return
+        self._say("racecraft_rival_pit", phrases.rival_pit_phrase(
+            self._name(car), "ahead" if diff < 0 else "behind", abs(diff),
+            self._stops(car) + 1), Priority.LOW, max_wait_s=15.0)
 
     def _penalty_reminder(self, me: int) -> str:
         """For the countdown: a time penalty on the car just ahead or behind (12 Nov)."""
@@ -380,7 +536,7 @@ class RaceCraftAnalyzer:
         cfg = self.cfg
         if not cfg.push or prev is None or lap < 2 or self.pit_laps or self._under_sc():
             return
-        if not (cfg.battle_gap_s * 1000 < gap <= cfg.push_gap_s * 1000):
+        if not (cfg.drs_gap_s * 1000 < gap <= cfg.push_gap_s * 1000):
             return                          # too far, or already in DRS (defend/DRS calls)
         if prev - gap < cfg.push_closing_s * 1000 or self.state.cars.pit_status[car] > 0:
             return
@@ -438,6 +594,13 @@ class RaceCraftAnalyzer:
                 text = phrases.track_limits_warning_phrase(self.track_warnings)
             else:
                 text = phrases.penalty_phrase(d["penaltyType"], d["infringementType"], d["time"])
+                # A time penalty: what it means, at once (the per-lap update follows).
+                if text and d["penaltyType"] == 4 and self.cfg.penalty_gap \
+                        and 0 < d["time"] < 255:
+                    self.penalty_clear_said = False
+                    self.penalty_said_at = e.session_time
+                    more = self._penalty_gap_text(float(d["time"]))
+                    text += " " + more if more else ""
             self._say("racecraft_penalty", text, max_wait_s=15.0)
         elif e.code == "SCAR" and self.cfg.safety_car and d["eventType"] == 1:
             # The game can send the same SCAR twice (18-lap Austria race: both at 321.6 s).

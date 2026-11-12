@@ -84,11 +84,17 @@ racecraft:              # the human side: battles, passes, start/finish, penalti
   attack_gap_s: 4.0     # car ahead within this, and
   min_closing_s: 0.15   # you're closing this much a lap, and you'd catch it before the flag
   push: true            # "Push now! Norris is one point four ahead and you're catching."
-  push_gap_s: 2.0       # ... the car ahead or behind within this (and outside DRS range)
+  push_gap_s: 3.0       # ... the car ahead or behind within this (and outside DRS range)
   push_closing_s: 0.2   # ... and the gap closed this much on the last lap
-  battle_gap_s: 1.0     # a long battle: the same car within this at the line ...
+  drs_gap_s: 1.0        # DRS range: inside it it's defend / DRS calls, not "push"
+  battle_gap_s: 2.0     # a battle: the same car within this at the line (gap updates every lap) ...
   battle_laps: 3        # ... this many laps running: "Third lap with Russell on you, ..."
   battle_repeat_laps: 3 # encouragement again this often while it lasts
+  battle_updates: true  # in a battle: "Antonelli behind, eight tenths, holding him. Great job!"
+  chatty_extra_gap_s: 1.0   # chatty: those updates for cars this much further away too
+  cycle: true           # once everyone has stopped as often as you: "P six, and that's real"
+  penalty_gap: true     # your time penalty: the gap you need to the car behind, every lap
+  rival_pits: true      # chatty: "Sainz ahead is in the pits"
 
 pace:                   # save or push, from your tyres against the plan
   enabled: true

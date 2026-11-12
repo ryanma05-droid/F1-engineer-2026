@@ -42,6 +42,12 @@ class AudioSettings:
     length_scale: float = 1.0        # Piper: < 1 talks faster (radio/engineers.py)
 
 
+# A moment that matters (RadioMessage.excited): Piper talks this much faster, with more pitch
+# and timing variation (noise scales above the voices' usual 0.667 / 0.8), and a little louder
+# (soft_limit keeps the peaks clean). Same voice, more urgency.
+EXCITED = {"speed": 0.9, "noise_scale": 0.85, "noise_w_scale": 1.0, "gain": 1.15}
+
+
 # The volume slider (app window, 0-100). 70 % is the loudness from before the slider; above it the
 # voice gets up to BOOST_DB louder at 100 % (10 dB: about 3x the level, roughly twice as loud to the
 # ear). The radio clip already peaks at 0.8, so the extra comes from a soft limiter that squeezes
@@ -121,11 +127,21 @@ class PiperBackend:
         if settings.length_scale != 1.0:
             from piper import SynthesisConfig
             self.syn = SynthesisConfig(length_scale=settings.length_scale)
+        self.syn_excited = None
+        try:
+            from piper import SynthesisConfig
+            self.syn_excited = SynthesisConfig(
+                length_scale=settings.length_scale * EXCITED["speed"],
+                noise_scale=EXCITED["noise_scale"], noise_w_scale=EXCITED["noise_w_scale"])
+        except (ImportError, TypeError) as exc:   # an older piper: the plain voice for all
+            log.warning("excited delivery not available: %s", exc)
         self._seed = 0
         self.render("Radio check.")    # warm-up: the first synthesis is much slower
 
-    def render(self, text: str) -> tuple[np.ndarray, int]:
+    def render(self, text: str, excited: bool = False) -> tuple[np.ndarray, int]:
         syn = getattr(self, "syn", None)
+        if excited and getattr(self, "syn_excited", None) is not None:
+            syn = self.syn_excited
         chunks = list(self.voice.synthesize(text, syn_config=syn) if syn
                       else self.voice.synthesize(text))
         sr = chunks[0].sample_rate
@@ -134,12 +150,13 @@ class PiperBackend:
             from engineer.radio.effects import radio_effect
             self._seed += 1
             audio = radio_effect(audio, sr, seed=self._seed)
-        return soft_limit(audio * self.settings.volume), sr
+        gain = EXCITED["gain"] if excited else 1.0
+        return soft_limit(audio * self.settings.volume * gain), sr
 
-    def speak(self, text: str, on_start) -> None:
+    def speak(self, text: str, on_start, excited: bool = False) -> None:
         import sounddevice as sd
 
-        audio, sr = self.render(text)
+        audio, sr = self.render(text, excited)
         on_start()
         sd.play(audio, sr, device=self.device)
         sd.wait()
@@ -224,7 +241,8 @@ def audio_main(calls, status, settings: AudioSettings) -> None:
             if hasattr(backend, "set_volume"):
                 backend.set_volume(settings.volume)
             continue
-        text, origin_t_ns = item
+        text, origin_t_ns, *rest = item
+        excited = bool(rest and rest[0])
         latency = {}
 
         def on_start():
@@ -232,7 +250,10 @@ def audio_main(calls, status, settings: AudioSettings) -> None:
                 latency["s"] = (time.time_ns() - origin_t_ns) / 1e9
 
         try:
-            backend.speak(text, on_start)
+            if excited and backend.name == "piper":
+                backend.speak(text, on_start, excited=True)
+            else:
+                backend.speak(text, on_start)
         except Exception as exc:
             # e.g. the sound device disappeared. Piper -> Windows voice -> text only.
             print(f"[radio] could not speak ({exc}); switching to a fallback voice", flush=True)
@@ -285,9 +306,9 @@ class AudioProcess:
         self.backend = None
         return self.start(wait_ready_s)
 
-    def say(self, text: str, origin_t_ns: int | None = None) -> None:
+    def say(self, text: str, origin_t_ns: int | None = None, excited: bool = False) -> None:
         if self._calls is not None:
-            self._calls.put((text, origin_t_ns))
+            self._calls.put((text, origin_t_ns, excited))
 
     def set_volume(self, gain: float) -> None:
         """Change the loudness without reloading the voice (the slider)."""
