@@ -22,41 +22,31 @@ folder and offers to bring your recordings, history, reports and settings over (
 
 ### New in this version
 
-- **Talk strategy with the engineer**: say "finish on softs", "max fifty percent", "one stop
-  only", "no hards", "I want to go long" or "let's box on lap twelve" and the plan follows,
-  read back with what it costs against the engineer's own plan. Risky requests get pushback
-  ("that's past our limit, puncture risk, but it's your call"). "Back to your plan" clears them.
-  When a riskier plan is worth it, the engineer asks "Want it?": say yes or no. Ask "why?",
-  "are you sure?", "how much do I need to save?", "can I push?", or say "I'm managing" and the
-  engineer tells you two laps later what it changed. When the tyres won't make the plan you'll
-  hear "manage the tyres, save about one percent a lap".
-- **Console only** (no push-to-talk): pick "Console only" as the controller and the engineer
-  volunteers what you can't ask: other strategy options with their pros and cons, push and
-  manage calls, and the gaps ahead and behind every few laps.
-- **GP**, a new engineer in Settings: Gary's voice with the manner of a real race engineer,
-  learned from four seasons of broadcast team radio. Calm, short, the gap said twice, "box and
-  confirm". Put your name in Settings ("Your name") and GP uses it.
-- **Weather**: rain coming from the game's forecast ("rain expected in about ten minutes,
-  around lap twelve, sixty percent chance"), rain starting and easing. "Will it rain?" answers
-  with the forecast.
-- **Penalties**: your track-limit warnings counted ("that's two"); a time penalty on a car near
-  you and what it means ("you're inside it, stay there and you're ahead"); "Any penalties?".
-- **The cars around you**: "Norris ahead is struggling, losing four tenths a lap"; "expect
-  Bortoleto to pit soon"; ask "How's Russell looking?" for his tyres, stops and pace against yours.
-- **Push calls**: "push in, it's the undercut on Norris", "big out lap", then whether the undercut
-  worked; "push now" when the car ahead or behind is closing in; encouragement in a battle that
-  lasts a few laps.
-- **More answers**: "Where's my teammate?", "How long did the pit stop take?", "his last lap
-  relative to mine", a bit of hype on request, "pit strat", wing damage from lap one.
-- **Fixes from your races**: lap times are said at tracks where the line is close to turn 1
-  (Baku); box calls and "last lap" are never dropped; a lap re-driven after a flashback isn't
-  announced twice; a car going into the pits isn't called a pass; the most urgent calls go before
-  corner tips; Kevin and the others repeat themselves less.
-- **Updates install more reliably**: the app no longer starts the driver report while an update
-  installs, waits for itself to close, and tells you if an install didn't finish.
+- **More energy when it matters**: passes, fights, battles, push laps and the undercut are said
+  faster, livelier and a touch louder by every engineer ("Great move on Norris! P three."). Lose
+  a place and you get encouragement ("Stay close, the move back is on!"). GP lifts too ("Get in
+  there!").
+- **Battles**: any car within two seconds. Every lap of a battle you hear the gap and which way
+  it's going ("Antonelli behind, one point four, you're holding them. Great job, keep it up!").
+- **When the stops shake out**: "Stops all done for everyone. P six, up two places on the cycle."
+- **Your time penalty**: the gap you need to the car behind, every lap until it's served ("you
+  need three seconds on Antonelli. Push, push!"), and when you're clear of it.
+- **Chatty mode says more**: cars around you pitting, and battle updates for cars a bit further
+  away.
+- **Undercuts**: your stop is now tracked as an undercut even when another car is coming out
+  of the pits as you go in ("Push now, big out lap", then whether it worked).
+- **New questions**: "Is this an undercut opportunity?", "Do you think Ocon will pit?", "How am
+  I looking to Kimi?", "What about this battle with Norris?", "Go chatty mode", "Quiet mode",
+  "Will I need to pit again?".
+- **Lap delta overlay** (PC, borderless windowed): a small window over the game with your delta
+  to your previous lap at every point of the lap, and what each corner cost. Turn it on in
+  Settings > Lap delta overlay; "Move overlay" to drag and resize it, then "Lock here".
+- **Tyre history fix**: several races in one online lobby are no longer mixed into one track's
+  tyre wear history (fixed by itself on the first start).
 
-Already on 0.1.5 or 0.1.6? The app shows "Download and install" by itself; settings and
-recordings are kept.
+On 0.1.7? The app shows "Download and install" by itself; settings and recordings are kept.
+On 0.1.6 or older, install this one by hand once (download below, run it over the old one):
+those versions' in-app installer was the broken one.
 
 ### Mac (Apple Silicon, for F1 25 on Xbox / PlayStation)
 
