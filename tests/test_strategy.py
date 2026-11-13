@@ -610,3 +610,29 @@ def test_undercut_target_survives_the_pit_lane_shuffle():
     assert sa._undercut_target() == (1, 0)
     st.session_time = 530.0                           # seen too long ago: not a target
     assert sa._undercut_target() is None
+
+
+def test_boxing_with_the_car_you_meant_to_undercut_is_not_an_undercut():
+    # Spa, 13 Nov: the box call named the undercut on Antonelli, who pitted half a second ahead
+    # of you; then "Antonelli stayed in front, fresher tyres" with both on new tyres.
+    from engineer.bus import events as ev
+    eng = build_engine(Config(data_dir="/nonexistent-test-dir"), out=io.StringIO(),
+                       priors=WearPriors(), strategy_runner=InlineRunner(None))
+    st, sa = eng.pipeline.state, eng.strategy
+    st.session_uid, st.player_index, st.session_time = 1, 0, 560.0
+    st.session.session_type, st.session.total_laps = 15, 11
+    c = st.cars
+    c.active[:2] = True
+    c.names[:2] = ["PLAYER", "ANTONELLI"]
+    c.position[:2] = [7, 6]
+    c.lap[:2] = 5
+    c.num_pit_stops[:2] = 0
+    sa.undercut_on = (1, 0)
+    c.pit_status[:2] = [0, 1]                         # Antonelli in first
+    eng.pipeline.bus.publish(ev.PitEntry(1, 565.7, car_idx=0, lap=5))
+    assert sa.undercut_on is None
+    # ... and the other way round: you're in the pits when they come in.
+    sa.undercut_on = (1, 0)
+    c.pit_status[:2] = [1, 0]
+    eng.pipeline.bus.publish(ev.PitEntry(1, 566.0, car_idx=1, lap=5))
+    assert sa.undercut_on is None

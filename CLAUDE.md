@@ -236,6 +236,16 @@ uv run python -m engineer.overlay --replay <file.zst> --locked   # ... fed by a 
   lap"); "do you think Ocon will pit?", "how am I looking to Kimi?", "battle with / progress to
   / what about <driver>" (rival; asked about pitting and no stops yet in the dry adds "They still
   have to stop."); "chatty mode" / "quiet mode" by name; "will I need to pit again?" (plan).
+  Spa, 13 Nov: "Confirm." (intent confirm: "Copy, box this lap, hards." on the box lap, else
+  "Copy."); "At what?" / "Confirm percentages." = repeat; "Shorten that, log it." logs the last
+  question with the words before "log it" as a note; an "unknown" question naming a driver is
+  answered as rival ("Can I get handled? Or Leclerc?"); true_position names two cars then "and
+  N others" (`phrases._few`; it read out eleven names).
+- Passes, fights and lost places are `must_say` (Spa, 13 Nov: taking the lead from Leclerc in
+  the middle sector expired waiting for a straight): after 8 s they go at the next gap.
+- Undercut: a target that boxes with you (in the pit lane at your pit entry, or pitting while
+  you're in the pits) is dropped (`StrategyAnalyzer._covered`; Spa: Antonelli pitted 0.5 s
+  ahead and you heard "Antonelli stayed in front, fresher tyres").
 - Passes: a car in the pit lane when the pass settles (4 s on) wasn't passed on track, so no call
   (Baku, 7 Nov: OVTK came on the pit entry road, before pit status changed; Antonelli's stop
   became "Good move, P two"). The "pace dropping" call is skipped on an in-lap.

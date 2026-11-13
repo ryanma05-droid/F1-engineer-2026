@@ -330,13 +330,26 @@ class StrategyAnalyzer:
         if e.car_idx == p:
             if self.undercut_on is None:
                 self.undercut_on = self._undercut_target()     # stopped without a box call
+            elif self._covered(self.undercut_on):
+                # Spa, 13 Nov: the box call named the undercut on Antonelli, who pitted half a
+                # second ahead of you; then "Antonelli stayed in front, fresher tyres" while
+                # you were both on the same new tyres. Boxing together isn't an undercut.
+                self.undercut_on = None
             self.box_lap = None
             self.half_said = False
             # The plan from here is announced again after the stop ("Copy, softs. Plan is no
             # more stops, ...").
             self.announced = self.pending_change = self.decision = None
             return
+        if self.undercut_on is not None and e.car_idx == self.undercut_on[0] \
+                and self.state.cars.pit_status[p] > 0:
+            self.undercut_on = None            # they boxed while you're in the pits: covered
         self._undercut_check(e.car_idx)
+
+    def _covered(self, target: tuple[int, int]) -> bool:
+        """The car you were undercutting is in the pits too, or has stopped since."""
+        car, stops = target
+        return self.state.cars.pit_status[car] > 0 or self._stops_of(car) > stops
 
     def _on_said(self, e: ev.RadioMessage) -> None:
         if e.topic == "strategy_plan":

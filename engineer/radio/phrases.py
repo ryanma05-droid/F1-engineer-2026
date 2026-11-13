@@ -699,6 +699,14 @@ def _names(names: list[str | None]) -> str:
     return names[0] if len(names) == 1 else ", ".join(names[:-1]) + " and " + names[-1]
 
 
+def _few(names: list[str | None], keep: int = 2) -> str:
+    """'Gasly and Stroll' / 'Gasly, Stroll and nine others'."""
+    if len(names) <= keep + 1:
+        return _names(names)
+    rest = len(names) - keep
+    return f"{', '.join(n or 'a car' for n in names[:keep])} and {number_words(rest)} others"
+
+
 def true_position_phrase(on_road: int, real: int, to_stop: list, passing: list) -> str:
     """'P seven on the road. Norris and Leclerc ahead still have to stop: about P five once
     they do.' / 'P seven, and that's real: the cars around you have stopped the same.'"""
@@ -706,11 +714,12 @@ def true_position_phrase(on_road: int, real: int, to_stop: list, passing: list) 
         return _sentence(f"{say_position(on_road)}, and that's real",
                          "the cars around you have stopped the same")
     bits = [_sentence(f"{say_position(on_road)} on the road")]
+    # Spa, 13 Nov: eleven names in one answer ("shorten that"): two, then how many more.
     if to_stop:
         verb = "still has" if len(to_stop) == 1 else "still have"
-        bits.append(_sentence(f"{_names(to_stop)} ahead {verb} to stop"))
+        bits.append(_sentence(f"{_few(to_stop)} ahead {verb} to stop"))
     if passing:
-        bits.append(_sentence(f"after your stop {_names(passing)} will be ahead"))
+        bits.append(_sentence(f"after your stop {_few(passing)} will be ahead"))
     bits.append(_sentence(f"about {say_position(real)} once it all shakes out"))
     return " ".join(bits)
 

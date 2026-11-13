@@ -245,3 +245,54 @@ def test_undercut_and_will_they_pit_answers():
     eng.pipeline.bus.publish(ev.QuestionAsked(1, st.session_time, text="Undercut?", stt_ms=1000))
     eng.director.after_packet(None)
     assert said[2] == "You're in, Antonelli hasn't stopped, big out lap, push from the pit exit."
+
+
+def test_spa_questions():
+    # 13 Nov Spa: "Confirm." after the box call, "At what?" / "Confirm percentages." after a
+    # tyre answer, "Shorten that, log it." all got "Say again".
+    assert match("Confirm.").name == "confirm"
+    assert match("Box, confirm.").name == "confirm"
+    assert match("At what?").name == "repeat"
+    assert match("Confirm percentages.").name == "repeat"
+    assert match("Shorten that, log it.").name == "log_question"
+    assert match("Log that.").name == "log_question"
+    # Still what they were.
+    assert match("Confirm the plan with hards").name != "confirm"
+    # Eleven names was too many: two, then how many more.
+    assert phrases.true_position_phrase(15, 4, ["Gasly", "Stroll", "Bortoleto", "Norris"], []) \
+        == ("P fifteen on the road. Gasly, Stroll and two others ahead still have to stop. "
+            "About P four once it all shakes out.")
+    assert "Gasly, Stroll and Norris ahead" in phrases.true_position_phrase(
+        15, 12, ["Gasly", "Stroll", "Norris"], [])
+
+
+def test_a_garbled_question_naming_a_driver_gets_that_driver():
+    import io
+
+    from engineer.app import build_engine
+    from engineer.config import Config
+    from engineer.features.priors import WearPriors
+    eng = build_engine(Config(data_dir="/nonexistent-test-dir"), out=io.StringIO(),
+                       priors=WearPriors())
+    st = eng.pipeline.state
+    st.session_uid, st.player_index = 1, 0
+    st.session.session_type, st.session.total_laps, st.session.weather = 15, 11, 0
+    c = st.cars
+    c.active[:2] = True
+    c.position[:2] = [2, 1]
+    c.delta_to_car_in_front_ms[:2] = [1500, 0]
+    c.lap[:2], c.last_lap_time_ms[:2] = 8, 110000
+    c.names[:2] = ["PLAYER", "LECLERC"]
+    c.visual_compound[:2], c.tyre_age_laps[:2], c.num_pit_stops[:2] = 17, 3, 1
+    said = []
+    eng.pipeline.bus.subscribe(ev.RadioMessage, lambda e: said.append(e.text)
+                               if e.topic == "answer" else None)
+    st.session_time = 800.0
+    eng.pipeline.bus.publish(ev.QuestionAsked(1, 800.0, text="Can I get handled? Or Leclerc?",
+                                              stt_ms=1000))
+    eng.director.after_packet(None)
+    assert said[0].startswith("Leclerc, P one, one point five seconds ahead."), said
+    st.session_time = 830.0
+    eng.pipeline.bus.publish(ev.QuestionAsked(1, 830.0, text="Confirm.", stt_ms=1000))
+    eng.director.after_packet(None)
+    assert said[1] == "Copy."

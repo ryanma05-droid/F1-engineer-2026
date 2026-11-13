@@ -32,6 +32,7 @@ from engineer.tools.queries import lap_delta
 from engineer.voice.dialogue import parse_prefs
 from engineer.voice.feedback import FeedbackLog
 from engineer.voice.intents import (
+    Intent,
     driver_in,
     lap_in,
     laps_in,
@@ -130,6 +131,11 @@ class QuestionAnswerer:
             self.log.write(entry)
             self.director.stop_listening()
             return
+        # A driver named in something nothing else matched (Spa, 13 Nov: "Can I get handled?
+        # Or Leclerc?", a gap question misheard): what we know about that driver.
+        if intent.name == "unknown" and driver_in(e.text, self.state.cars.names) is not None:
+            intent = Intent("rival", intent.text)
+            entry["intent"] = "rival (driver named)"
         handler = getattr(self, f"_a_{intent.name}", None)
         self.heard = e.text
         failed = False
@@ -173,6 +179,13 @@ class QuestionAnswerer:
         question: ..."), the one just asked ("log that"), or, if neither, the next one."""
         self._log_next_until = None
         said = log_text(e.text) if command else e.text
+        # "Shorten that, log it." (Spa, 13 Nov): the words before are a note on the last answer.
+        note = None
+        tail = re.search(r"[\s,.;:!-]*\b(?:log|flag|note)\s+(?:it|that|this)\W*$", e.text,
+                         re.IGNORECASE)
+        if command and tail and tail.start() > 0:
+            note = e.text[:tail.start()].strip(" ,.;:!-") or None
+            said = ""
         prev = self._prev if self._prev and time.monotonic() - self._prev["at"] \
             <= LOG_LAST_WITHIN_S else None
         flagged = {"time": entry["time"], "session_uid": entry["session_uid"],
@@ -187,7 +200,12 @@ class QuestionAnswerer:
         elif prev is not None:
             flagged.update(question=prev["heard"], source="last question",
                            answer=prev["answer"], intent_then=prev["intent"])
+            if note:
+                flagged["note"] = note
             reply = "copy, logged that one"
+        elif note:
+            flagged.update(question=note, source="said", intent_then=match(note).name)
+            reply = "copy, logged"
         else:
             self._log_next_until = time.monotonic() + LOG_NEXT_WITHIN_S
             entry["answer"] = text = phrases._sentence("go ahead, what's the question")
@@ -423,6 +441,15 @@ class QuestionAnswerer:
             return phrases._sentence("no strategy calls in this race") if not sa._active() \
                 else phrases._sentence("too late for that one")
         return None
+
+    def _a_confirm(self) -> str:
+        """"Confirm." after a box call: the driver confirming it."""
+        sa = self.engine.strategy
+        stop = sa.announced.next_stop if sa.announced is not None else None
+        lap = self._lap()
+        if sa.box_lap is not None and lap is not None and sa.box_lap == lap and stop is not None:
+            return phrases._sentence("copy, box this lap", phrases.say_compound(stop.compound))
+        return phrases._sentence("copy")
 
     def _a_repeat(self) -> str:
         # 2 Nov: "Repeat the call and strategy" got the last radio call (a pass), not the plan.

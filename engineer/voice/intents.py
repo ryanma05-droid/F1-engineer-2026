@@ -64,7 +64,12 @@ RULES: list[tuple[str, list[str]]] = [
     ("log_question", [r"^(please |can you |could you )?(log|flag|note|mark)\b",
                       r"^(please |can you |could you )?lock (that|this|it|the following|the last|"
                       r"the previous|my|a|question)\b",
-                      r"\b(log|add|put) (that|this|it) (to|in|on) (the |my )?(feedback|log|list)\b"]),
+                      r"\b(log|add|put) (that|this|it) (to|in|on) (the |my )?(feedback|log|list)\b",
+                      # Spa, 13 Nov: "Shorten that, log it." (a note on the last answer)
+                      r"\b(log|flag|note) (it|that|this)\W*$"]),
+    # Spa, 13 Nov: "Confirm." after the box call (the driver confirming, as in "box, confirm").
+    ("confirm", [r"^(box\W+)?(and\W+)?(confirm|confirmed|box confirmed)\W*$",
+                 r"^(copy|understood),? (box|boxing)\b"]),
     # 13 Nov: strategy as a dialogue. Your preferences steer the plan (voice/dialogue.py reads
     # them); offers are answered yes / no; "why?", "are you sure?"; race pace.
     ("prefs_clear", [r"\bback to (your|the|our|original) (plan|strategy|call)\b",
@@ -101,7 +106,10 @@ RULES: list[tuple[str, list[str]]] = [
                    r"\bi('ll| will) (push|manage|save)\b"]),
     ("radio_check", [r"\bradio check\b", r"\bcan you hear me\b", r"\bdo you (read|copy)\b"]),
     # 29 Oct Imola: "Repeat that."
-    ("repeat", [r"\brepeat\b", r"\bsay (that|it) again\b", r"\bcome again\b",
+    # Spa, 13 Nov: "At what?", "Confirm percentages." right after a tyre answer.
+    ("repeat", [r"^at what\W*$", (r"^confirm (the |those |that )?(percent\w*|numbers?|gaps?|"
+                                  r"times?|that)\W*$"),
+                r"\brepeat\b", r"\bsay (that|it) again\b", r"\bcome again\b",
                 r"\bwhat did you (just )?say\b", r"\bdidn't (catch|hear) that\b"]),
     # 11 Nov Miami: "Go chatty mode." The modes by name (Quiet is the app's name for terse).
     ("tempo_terse", [r"\b(quiet|terse) mode\b", r"\b(go|switch|change|put me)( back)? (to |in ?to )?(quiet|terse)\b"]),

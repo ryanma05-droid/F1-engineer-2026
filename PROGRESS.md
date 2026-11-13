@@ -875,3 +875,15 @@ From the real radio study's most common unprompted topics.
       settings and "!" wording on passes, fights, lost places (with encouragement), battles,
       push laps; GP lifts too. Miami replay: 38 -> 46 calls in normal
 - [ ] Hear the excited voice on Windows and tune `tts.EXCITED` if it's too much or too little
+
+## Spa race diagnostic (13 Nov)
+
+- [x] Taking the lead (Leclerc) and the Hamilton pass were dropped waiting for a straight: pass
+      calls now always come out
+- [x] "Undercut on Antonelli" when he pitted with you, then "stayed in front, fresher tyres"
+- [x] Questions: "Confirm.", "At what?", "Confirm percentages.", "Shorten that, log it.", a
+      misheard question naming Leclerc; "track position" listed eleven names (now two + count)
+- [ ] Live, the strategy had no plan on laps 3-4 ("No plan yet") and called mediums for lap 5
+      with no warning; on replay the plan comes on lap 2 (hards, mediums as the gamble).
+      Solves take 0.06 s with 2,000 laps of history here, so it's the PC: need the log lines
+      around "strategy" from that race

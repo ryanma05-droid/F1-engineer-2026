@@ -651,14 +651,16 @@ class RaceCraftAnalyzer:
             heard = x.at - self.lost_said.get(x.other, -math.inf) <= self.cfg.fight_window_s
             self.last_pass_call = t
             self._say("racecraft_pass", phrases.fight_back_phrase(
-                self._name(x.other), pos, heard, self.fights_said), max_wait_s=8.0)
+                self._name(x.other), pos, heard, self.fights_said), max_wait_s=8.0,
+                must_say=True)
             self.fights_said += 1
             for f_ in fights:
                 self.passed_by.pop(f_.other, None)
         elif len(gained) > len(lost):
             self.last_pass_call = t
             self._say("racecraft_pass", phrases.pass_phrase(
-                [self._name(x.other) for x in gained], pos, self.passes_said), max_wait_s=8.0)
+                [self._name(x.other) for x in gained], pos, self.passes_said), max_wait_s=8.0,
+                must_say=True)       # Spa, 13 Nov: taking the lead expired waiting for a straight
             self.passes_said += 1
         elif lost and not gained:
             # Already said (the game re-sends a pass after a flashback): not again.
@@ -670,7 +672,7 @@ class RaceCraftAnalyzer:
             text = phrases.lost_place_phrase(names[0], pos, self.lost_calls) if len(lost) == 1 \
                 else phrases.lost_places_phrase(len(lost), pos)
             self.lost_pending[text] = [x.other for x in lost]
-            self._say("racecraft_pass", text, max_wait_s=8.0)
+            self._say("racecraft_pass", text, max_wait_s=8.0, must_say=True)
             self.lost_calls += 1
 
     def _contact_damage(self) -> None:
