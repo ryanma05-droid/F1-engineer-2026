@@ -153,6 +153,17 @@ class PiperBackend:
         gain = EXCITED["gain"] if excited else 1.0
         return soft_limit(audio * self.settings.volume * gain), sr
 
+    def set_device(self, spec: str | int | None) -> None:
+        """Another output (Settings > Audio devices), from the next call on."""
+        try:
+            import sounddevice as sd
+            sd._terminate()             # PortAudio only sees devices plugged in since a restart
+            sd._initialize()
+        except Exception:               # no PortAudio (tests) or an older sounddevice
+            pass
+        self.settings.output_device = spec
+        self.device, self.device_name = resolve_output_device(spec)
+
     def speak(self, text: str, on_start, excited: bool = False) -> None:
         import sounddevice as sd
 
@@ -236,10 +247,15 @@ def audio_main(calls, status, settings: AudioSettings) -> None:
         item = calls.get()
         if item is None:
             break
-        if isinstance(item, dict):              # the volume slider: from the next call on
-            settings.volume = float(item["volume"])
-            if hasattr(backend, "set_volume"):
-                backend.set_volume(settings.volume)
+        if isinstance(item, dict):
+            if "volume" in item:                # the volume slider: from the next call on
+                settings.volume = float(item["volume"])
+                if hasattr(backend, "set_volume"):
+                    backend.set_volume(settings.volume)
+            if "output_device" in item:         # Settings > Audio devices (14 Nov)
+                settings.output_device = item["output_device"]
+                if hasattr(backend, "set_device"):
+                    backend.set_device(item["output_device"])
             continue
         text, origin_t_ns, *rest = item
         excited = bool(rest and rest[0])
@@ -315,6 +331,12 @@ class AudioProcess:
         self.settings.volume = gain
         if self._calls is not None:
             self._calls.put({"volume": gain})
+
+    def set_output(self, device: str | int | None) -> None:
+        """Speak on another device from the next call (no voice reload)."""
+        self.settings.output_device = device
+        if self._calls is not None:
+            self._calls.put({"output_device": device})
 
     def close(self, timeout_s: float = 5.0) -> None:
         if self._proc is None:

@@ -182,6 +182,8 @@ button { font: inherit; color: inherit; }
 .toggle input:checked::after { transform: translateX(20px); background: #fff; }
 .toggle input:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
 .toggle input:disabled { opacity: .5; cursor: default; }
+.aud { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+@media (max-width: 640px) { .aud { grid-template-columns: 1fr; } }
 .ovrow { display: flex; align-items: center; gap: 12px; margin-top: 14px; flex-wrap: wrap; }
 .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 16px; }
 .kpi .v { font-size: 26px; font-weight: 750; }
@@ -311,6 +313,17 @@ ul.good li::before { content: "\2713"; position: absolute; left: 0; top: 1px; wi
         <input type="text" id="driverName" maxlength="30" placeholder="mate" style="flex:1"></div>
       <div class="muted small">What GP calls you on the radio ("Okay Ryan, ..."). Empty: "mate".</div>
       <div class="tip" id="voiceTip"></div></div>
+    <div class="card" style="margin-bottom:16px"><h3><span class="grow">Audio devices</span><span class="muted small" id="audNote"></span></h3>
+      <div class="pre-form aud">
+        <div><label for="audIn">Microphone (what you talk into)</label><select id="audIn"></select></div>
+        <div><label for="audOut">Engineer's voice (where you hear it)</label><select id="audOut"></select></div>
+      </div>
+      <div class="ovrow"><button class="btn" id="audTest">Test microphone</button>
+        <button class="btn" id="audRefresh">Refresh list</button>
+        <span class="muted small" id="audResult" aria-live="polite"></span></div>
+      <div class="tip">Plugged your headset into the controller or a USB adapter? Pick its
+        microphone here. If the test hears the game or the engineer instead of you, the wrong
+        device is picked: anything named <b>Stereo Mix</b> or <b>Loopback</b> records what the PC plays.</div></div>
     <div class="card" style="margin-bottom:16px"><h3>Engineer tempo (default)</h3>
       <div class="seg" id="tempoSettings"></div><div class="tip" id="tempoTipSettings"></div></div>
     <div class="card" style="margin-bottom:16px"><h3>Corner advice</h3>
@@ -803,8 +816,58 @@ function renderOverlay() {
   }
 }
 
+/* ---- audio devices (14 Nov) ---- */
+let AUD = null, audLoading = false;
+async function loadAudio() {
+  if (audLoading) return;
+  audLoading = true;
+  try { AUD = await (await fetch("/api/audio")).json(); } catch (e) { AUD = {inputs: [], outputs: [], error: "couldn't list devices"}; }
+  audLoading = false;
+  $("#audIn")._html = $("#audOut")._html = null;
+  renderAudio();
+}
+function audOptions(list, chosen, isMic) {
+  const def = list.find(d => d.default);
+  let html = `<option value="">Windows default${def ? " (" + esc(def.name) + ")" : ""}</option>`;
+  let found = !chosen;
+  for (const d of list) {
+    const sel = chosen && d.name.toLowerCase().includes(String(chosen).toLowerCase()) && !found;
+    if (sel) found = true;
+    html += `<option value="${esc(d.name)}"${sel ? " selected" : ""}>${esc(d.name)}${isMic && d.loopback ? " (records the PC's sound, not a mic)" : ""}</option>`;
+  }
+  if (!found) html += `<option value="${esc(chosen)}" selected>${esc(chosen)} (not plugged in)</option>`;
+  return html;
+}
+async function audioPost(body) {
+  const r = await post("/api/audio", body);
+  if (r.error) { $("#audResult").textContent = r.error + "."; return; }
+  S = r; render();
+}
+function renderAudio() {
+  const a = S.audio || {}, inEl = $("#audIn"), outEl = $("#audOut");
+  if (!inEl._wired) {
+    inEl._wired = true;
+    inEl.onchange = () => audioPost({input: inEl.value || null});
+    outEl.onchange = () => audioPost({output: outEl.value || null});
+    $("#audTest").onclick = () => { $("#audResult").textContent = "Listening for 4 seconds: say something…"; audioPost({action: "test"}); };
+    $("#audRefresh").onclick = loadAudio;
+  }
+  if (!AUD) { if (!audLoading && $("#view-settings").classList.contains("on")) loadAudio(); return; }
+  if (document.activeElement !== inEl) paint(inEl, audOptions(AUD.inputs || [], a.input, true));
+  if (document.activeElement !== outEl) paint(outEl, audOptions(AUD.outputs || [], a.output, false));
+  $("#audTest").disabled = !a.listening;
+  $("#audNote").textContent = AUD.error ? AUD.error : a.mic ? "listening on " + a.mic : "";
+  const t = a.test, res = $("#audResult");
+  if (!a.listening) res.textContent = "Turn on push to talk (Your controller) to use the microphone.";
+  else if (t && t.state === "listening") res.textContent = "Listening for 4 seconds: say something…";
+  else if (t && t.state === "done") res.textContent = (t.level_db <= -60 || !t.heard)
+    ? "Heard nothing from " + t.mic + ". Pick another microphone above."
+    : "Heard: “" + t.heard + "” (" + Math.round(t.level_db) + " dB) on " + t.mic + ". Not what you said? Pick another microphone.";
+}
+
 function renderSettings() {
   renderOverlay();
+  renderAudio();
   controllerButtons($("#ctrlSettings"), S.controller.type, setController, S.console_player);
   const del = $("#detailSettings");
   if (paint(del, DETAILS.map(([k, n, d]) => `<button class="opt" data-k="${k}"
@@ -872,6 +935,7 @@ document.querySelectorAll(".tab").forEach(t => t.onclick = () => {
   document.querySelectorAll(".tab").forEach(x => x.setAttribute("aria-selected", x === t));
   document.querySelectorAll(".view").forEach(v => v.classList.toggle("on", v.id === "view-" + t.dataset.view));
   if (t.dataset.view === "report") { reportStamp = S ? S.report.stamp : undefined; loadReport(); }
+  if (t.dataset.view === "settings") loadAudio();
 });
 $("#build").onclick = async () => { await post("/api/report/build"); tick(); };
 $("#openPdf").onclick = () => window.open("/report/latest.pdf", "_blank");

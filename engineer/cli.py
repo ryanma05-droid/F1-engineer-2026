@@ -105,6 +105,9 @@ class PushToTalkControl:
         self.ptt = self.speech = self.task = None
         self.state, self.error = "off", None
         self._connected, self._checked = 0, -math.inf
+        self.mic: str | None = None            # the microphone in use (its name)
+        self.test: dict | None = None          # the last mic check (Settings > Audio devices)
+        self.on_test = None                    # cli: say what the mic check heard
 
     def wanted(self, cfg: Config) -> bool:
         return self.allowed and cfg.voice.enabled and cfg.platform == "pc"
@@ -131,8 +134,34 @@ class PushToTalkControl:
             self.error = "Push to talk couldn't start (the console window says why)."
             return
         self.ptt, self.speech = got
-        self.task = asyncio.create_task(_ptt_loop(self.engine, self.ptt, self.speech))
+        desc = self.speech.description or ""
+        self.mic = desc.split("microphone: ", 1)[1] if "microphone: " in desc else None
+        self.task = asyncio.create_task(_ptt_loop(self.engine, self.ptt, self.speech, self))
         self.state = "ready"
+
+    def set_input(self, device: str | None) -> None:
+        """Another microphone (Settings > Audio devices): live, no model reload."""
+        self.cfg.voice.input_device = device
+        self.test = None
+        if self.speech is not None:
+            self.speech.set_input(device)
+
+    def mic_test(self) -> bool:
+        """Listen for 4 s and report what was heard. False when push-to-talk isn't running."""
+        if self.speech is None:
+            return False
+        self.test = {"state": "listening"}
+        self.speech.test(MIC_TEST_S)
+        return True
+
+    def on_message(self, msg: tuple) -> None:
+        if msg[0] == "mic":
+            self.mic = msg[1]
+        elif msg[0] == "test":
+            _, text, level, name = msg
+            self.test = {"state": "done", "heard": text, "level_db": level, "mic": name}
+            if self.on_test is not None:
+                self.on_test(self.test)
 
     def stop(self) -> None:
         if self.task:
@@ -150,7 +179,18 @@ class PushToTalkControl:
                 "error": self.error}
 
 
-async def _ptt_loop(engine, ptt, speech) -> None:
+MIC_TEST_S = 4.0
+
+
+def mic_check_text(result: dict) -> str:
+    """What the engineer says after a mic check."""
+    heard = (result.get("heard") or "").strip().rstrip(".")
+    if result.get("level_db", -100) <= -60 or not heard:
+        return "Mic check. I didn't hear anything."
+    return f"Mic check. I heard: {heard}."
+
+
+async def _ptt_loop(engine, ptt, speech, owner=None) -> None:
     """Poll the button every 20 ms and pass what was heard to the engine as a question."""
     state, bus = engine.pipeline.state, engine.pipeline.bus
     while True:
@@ -167,6 +207,8 @@ async def _ptt_loop(engine, ptt, speech) -> None:
                     engine.director.stop_listening()
             elif msg[0] == "error":
                 log.warning("push-to-talk: %s", msg[1])
+            elif owner is not None:
+                owner.on_message(msg)
         await asyncio.sleep(0.02)
 
 
@@ -214,6 +256,8 @@ async def _run(cfg: Config, record: bool | None, voice: bool, ptt_on: bool = Tru
     if audio:
         audio.say("Radio check.")
     ptt = PushToTalkControl(cfg, engine, allowed=ptt_on)
+    if audio is not None:
+        ptt.on_test = lambda r: audio.say(mic_check_text(r))
     await ptt.apply(cfg)
     # First time with the app window: the welcome waits for the setup questions (it names the
     # push-to-talk button the driver picks there).

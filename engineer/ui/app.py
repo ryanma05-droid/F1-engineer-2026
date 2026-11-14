@@ -91,6 +91,8 @@ class AppWindow:
             ("POST", "/api/upload"): self._api_upload,
             ("POST", "/api/update"): self._api_update,
             ("POST", "/api/overlay"): self._api_overlay,
+            ("GET", "/api/audio"): self._api_audio_devices,
+            ("POST", "/api/audio"): self._api_audio,
         })
         self._prerace_busy = False
 
@@ -225,6 +227,7 @@ class AppWindow:
             "coaching": self._coaching(),
             "prerace": self._prerace(),
             "voice": self.voice.status(),
+            "audio": self._audio_status(),
             "uploads": self.uploader.status() if self.uploader is not None else None,
             "update": self.updater.status() if self.updater is not None
             else {"current": VERSION, "enabled": False, "available": False},
@@ -326,6 +329,58 @@ class AppWindow:
         else:
             return Response(400, {"error": "action must be download, install, dismiss, check "
                                            "or auto"})
+        if save:
+            try:
+                save_local(save, self.config_path)
+            except OSError as exc:
+                log.warning("could not save settings (%s)", exc)
+        return Response(200, self.snapshot())
+
+    # -- audio devices (14 Nov: a headset's game sound came in as the microphone) -------------
+
+    def _audio_status(self) -> dict:
+        ptt = self.ptt
+        return {"input": self.cfg.voice.input_device, "output": self.cfg.radio.output_device,
+                "mic": getattr(ptt, "mic", None), "test": getattr(ptt, "test", None),
+                "listening": ptt is not None and getattr(ptt, "speech", None) is not None,
+                "voice_on": self.voice.audio is not None}
+
+    async def _api_audio_devices(self, _body) -> Response:
+        """The PC's microphones and speakers, for the pickers (asked when Settings opens)."""
+        from engineer.audio_devices import list_devices
+        try:
+            found = await asyncio.to_thread(list_devices)
+        except Exception as exc:                # no sound system (a server, tests)
+            log.warning("could not list audio devices: %s", exc)
+            found = {"inputs": [], "outputs": [], "error": "couldn't list this PC's devices"}
+        return Response(200, {**found, **self._audio_status()})
+
+    async def _api_audio(self, body: dict) -> Response:
+        """{"input": name|null} / {"output": name|null} (null = the Windows default), or
+        {"action": "test"}: a 4 s mic check."""
+        save: dict = {}
+        for key, section, field in (("input", "voice", "input_device"),
+                                    ("output", "radio", "output_device")):
+            if key not in body:
+                continue
+            name = body[key]
+            if name is not None and (not isinstance(name, str) or not name.strip()
+                                     or len(name) > 200):
+                return Response(400, {"error": f"{key} must be a device name or null"})
+            name = name.strip() if name else None
+            if key == "input":
+                self.cfg.voice.input_device = name
+                if self.ptt is not None:
+                    self.ptt.set_input(name)
+            else:
+                self.voice.set_output(name)
+            save.setdefault(section, {})[field] = name
+        if body.get("action") == "test":
+            if self.ptt is None or not self.ptt.mic_test():
+                return Response(400, {"error": "turn on push to talk (Your controller) to use "
+                                               "the microphone"})
+        elif "action" in body:
+            return Response(400, {"error": "action must be test"})
         if save:
             try:
                 save_local(save, self.config_path)

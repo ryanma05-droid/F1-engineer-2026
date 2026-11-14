@@ -49,6 +49,14 @@ class VoiceControl:
             self.audio.set_volume(self.cfg.radio.gain)
             self.audio.say(VOLUME_CHECK)
 
+    def set_output(self, device: str | None) -> None:
+        """The engineer's voice on another device (Settings > Audio devices), with a line to
+        hear it by."""
+        self.cfg.radio.output_device = device
+        if self.audio is not None:
+            self.audio.set_output(device)
+            self.audio.say(VOLUME_CHECK)
+
     async def switch(self, key: str, download=None) -> None:
         """Make `key` the engineer. download(voice, folder): the voice downloader (tests)."""
         if key not in BY_KEY:

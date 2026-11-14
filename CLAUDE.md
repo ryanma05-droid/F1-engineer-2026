@@ -341,6 +341,18 @@ uv run python -m engineer.overlay --replay <file.zst> --locked   # ... fed by a 
   corner", phrases.advice: size words from the measurement vs REASON_THRESHOLDS, causes in
   driving order, late throttle covers a slow exit) or "specific" (the metres/kph).
   `Engine.set_detail`, Settings tab, or "give me the numbers" / "keep it simple".
+- Audio devices (14 Nov; a PlayStation player holding L1 got his headset's game sound, not his
+  voice: the Windows default recording device wasn't his mic). Settings card "Audio devices":
+  microphone and engineer-output pickers (`GET /api/audio` -> `audio_devices.list_devices`, off
+  the loop, PortAudio restarted so new headsets show: the default devices' host API only (MME,
+  which resamples for the 16 kHz stream), each name once, default first, loopback-style inputs
+  flagged "records the PC's sound"); `POST /api/audio` {"input"|"output": name|null,
+  "action": "test"} saves `voice.input_device` / `radio.output_device` to config.local.yaml and
+  applies live: the speech worker reopens the mic (("mic", spec)), the audio process re-resolves
+  its output ({"output_device": spec}, `PiperBackend.set_device`) and says a radio check. Mic
+  check: the worker records 4 s (("test", s) -> `mic_test`: text, RMS dB, mic name), the window
+  shows it and the engineer says "Mic check. I heard: ..." (`cli.mic_check_text`). Needs
+  push-to-talk on. Devices are stored by name and matched by substring when opened.
 - PlayStation push-to-talk: winmm joystick API (`PlayStationButton`, L1 = button 5), plus the
   Xbox LB through XInput for Steam Input. Not yet tried on a real DualSense.
 

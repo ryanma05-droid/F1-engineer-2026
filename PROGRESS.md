@@ -891,6 +891,8 @@ From the real radio study's most common unprompted topics.
 ## Next version (0.1.9): ready, not published (14 Nov)
 
 - [x] Release notes written (docs/release-notes.md): the Spa diagnostic fixes
+- [x] Audio devices in Settings: microphone and engineer output pickers, live, with a mic test
+      (a PlayStation player's headset sound came in as the mic). Not tried on Windows yet
 - [x] In-app update: no history add / upload at shutdown when installing (they kept the installer
       waiting for minutes behind a closed window); done on the next start instead
 - [ ] Publish only when asked: run the release workflow with version 0.1.9 (tag pushes don't

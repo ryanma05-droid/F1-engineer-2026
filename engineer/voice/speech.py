@@ -235,8 +235,10 @@ class _Mic:
 
 
 def speech_main(inbox, outbox, settings: SpeechSettings) -> None:
-    """Worker process. Messages in: ("start", id), ("stop", id), ("cancel", id), None = quit.
-    Out: ("ready", description), ("error", message), ("heard", id, text, wav_path, stt_ms)."""
+    """Worker process. Messages in: ("start", id), ("stop", id), ("cancel", id),
+    ("mic", device) = switch microphone, ("test", seconds) = a mic check, None = quit.
+    Out: ("ready", description), ("error", message), ("heard", id, text, wav_path, stt_ms),
+    ("mic", name), ("test", text, level_db, name)."""
     logging.basicConfig(level=logging.INFO)
     model = None
     try:
@@ -258,6 +260,14 @@ def speech_main(inbox, outbox, settings: SpeechSettings) -> None:
             mic.close()
             return
         kind, qid = msg
+        if kind == "mic":                    # picked in the app window (14 Nov)
+            mic.spec = qid
+            mic.reopen()
+            outbox.put(("mic", mic.name))
+            continue
+        if kind == "test":
+            outbox.put(mic_test(mic, model, settings, float(qid)))
+            continue
         if kind == "start":
             if mic.stalled():
                 # The microphone stopped sending (headset unplugged or switched, the default
@@ -290,6 +300,32 @@ def speech_main(inbox, outbox, settings: SpeechSettings) -> None:
                 outbox.put(("error", f"recognition failed: {exc}"))
                 continue
             outbox.put(("heard", qid, text, wav, (time.perf_counter() - t0) * 1000))
+
+
+def level_db(audio: np.ndarray) -> float:
+    """Loudness of a recording: RMS in dB below full scale (-100 for silence)."""
+    if audio.size == 0:
+        return -100.0
+    rms = float(np.sqrt(np.mean(np.square(audio, dtype=np.float64))))
+    return round(20 * np.log10(rms), 1) if rms > 1e-5 else -100.0
+
+
+def mic_test(mic, model, settings: SpeechSettings, seconds: float) -> tuple:
+    """Record `seconds` and say what was heard and how loud: ("test", text, level_db, name).
+    Answers "is it my microphone?" (14 Nov: a headset's game sound came in instead)."""
+    if mic.stalled():
+        mic.reopen()
+    mic.start_recording()
+    time.sleep(seconds)
+    audio, blocks = mic.stop_recording()
+    if blocks == 0:
+        return ("test", "", -100.0, mic.name)
+    try:
+        text = transcribe(model, audio, settings.beam_size) if model is not None else ""
+    except Exception as exc:
+        log.warning("mic test recognition failed: %s", exc)
+        text = ""
+    return ("test", text, level_db(audio), mic.name)
 
 
 class SpeechProcess:
@@ -346,6 +382,15 @@ class SpeechProcess:
 
     def cancel(self) -> None:
         self.inbox.put(("cancel", self._id))
+
+    def set_input(self, device: str | int | None) -> None:
+        """Switch microphone without reloading speech recognition."""
+        self.settings = replace(self.settings, input_device=device)
+        self.inbox.put(("mic", device))
+
+    def test(self, seconds: float = 4.0) -> None:
+        """A mic check: the result comes back from poll() as ("test", text, level_db, name)."""
+        self.inbox.put(("test", seconds))
 
     def poll(self) -> list[tuple]:
         out = []

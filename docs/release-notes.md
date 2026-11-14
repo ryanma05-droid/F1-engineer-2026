@@ -33,6 +33,11 @@ folder and offers to bring your recordings, history, reports and settings over (
   take minutes with nothing on screen, so it looked like the update had failed. (This helps
   from the next update on; to get this version from 0.1.8, wait for the black console window to
   say "Installing Race Engineer", or install it by hand.)
+- **Pick your microphone and speakers**: Settings > Audio devices lists this PC's microphones
+  and outputs. Choose which one you talk into and where the engineer's voice plays, then press
+  **Test microphone**: say something and the engineer tells you what it heard. If it hears the
+  game instead of you, pick another microphone (a headset plugged into a PlayStation controller
+  shows up as its own microphone).
 - **More answers on the radio**: say "Confirm" after a box call ("Copy, box this lap, hards");
   "At what?" or "Confirm percentages" repeats the last call; "Shorten that, log it" logs the
   last answer with your note; a question the engineer doesn't catch but that names a driver
