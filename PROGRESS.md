@@ -887,3 +887,9 @@ From the real radio study's most common unprompted topics.
       with no warning; on replay the plan comes on lap 2 (hards, mediums as the gamble).
       Solves take 0.06 s with 2,000 laps of history here, so it's the PC: need the log lines
       around "strategy" from that race
+
+## Next version (0.1.9): ready, not published (14 Nov)
+
+- [x] Release notes written (docs/release-notes.md): the Spa diagnostic fixes
+- [ ] Publish only when asked: run the release workflow with version 0.1.9 (tag pushes don't
+      get through from the cloud session). Waiting on the strategy-delay log first may add a fix

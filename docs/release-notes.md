@@ -22,31 +22,19 @@ folder and offers to bring your recordings, history, reports and settings over (
 
 ### New in this version
 
-- **More energy when it matters**: passes, fights, battles, push laps and the undercut are said
-  faster, livelier and a touch louder by every engineer ("Great move on Norris! P three."). Lose
-  a place and you get encouragement ("Stay close, the move back is on!"). GP lifts too ("Get in
-  there!").
-- **Battles**: any car within two seconds. Every lap of a battle you hear the gap and which way
-  it's going ("Antonelli behind, one point four, you're holding them. Great job, keep it up!").
-- **When the stops shake out**: "Stops all done for everyone. P six, up two places on the cycle."
-- **Your time penalty**: the gap you need to the car behind, every lap until it's served ("you
-  need three seconds on Antonelli. Push, push!"), and when you're clear of it.
-- **Chatty mode says more**: cars around you pitting, and battle updates for cars a bit further
-  away.
-- **Undercuts**: your stop is now tracked as an undercut even when another car is coming out
-  of the pits as you go in ("Push now, big out lap", then whether it worked).
-- **New questions**: "Is this an undercut opportunity?", "Do you think Ocon will pit?", "How am
-  I looking to Kimi?", "What about this battle with Norris?", "Go chatty mode", "Quiet mode",
-  "Will I need to pit again?".
-- **Lap delta overlay** (PC, borderless windowed): a small window over the game with your delta
-  to your previous lap at every point of the lap, and what each corner cost. Turn it on in
-  Settings > Lap delta overlay; "Move overlay" to drag and resize it, then "Lock here".
-- **Tyre history fix**: several races in one online lobby are no longer mixed into one track's
-  tyre wear history (fixed by itself on the first start).
+- **Every pass is announced**: passes, fights and lost places no longer get dropped when
+  there's no straight coming (at Spa, taking the lead in the middle sector was never said).
+- **No false undercuts**: when the car you were undercutting pits at the same time as you, the
+  engineer no longer calls it an undercut or tells you they "stayed in front on fresher tyres".
+- **Shorter track position answer**: "Where am I in track position?" names two cars still to
+  stop, then how many more, instead of reading out the whole list.
+- **More answers on the radio**: say "Confirm" after a box call ("Copy, box this lap, hards");
+  "At what?" or "Confirm percentages" repeats the last call; "Shorten that, log it" logs the
+  last answer with your note; a question the engineer doesn't catch but that names a driver
+  gets that driver's gap, tyres and pace.
 
-On 0.1.7? The app shows "Download and install" by itself; settings and recordings are kept.
-On 0.1.6 or older, install this one by hand once (download below, run it over the old one):
-those versions' in-app installer was the broken one.
+On 0.1.7 or 0.1.8? The app shows "Download and install" by itself; settings and recordings are
+kept. On 0.1.6 or older, install this one by hand once (download below, run it over the old one).
 
 ### Mac (Apple Silicon, for F1 25 on Xbox / PlayStation)
 
