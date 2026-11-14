@@ -188,3 +188,19 @@ def test_a_failed_install_is_reported_next_start(tmp_path):
     (tmp_path / "install.log").write_text("Installation process succeeded.\nLog closed.\n",
                                           encoding="utf-8")
     assert last_install(tmp_path, "0.1.7")["ok"] is True
+
+
+def test_an_update_leaves_this_runs_races_for_the_next_start(tmp_path):
+    # 14 Nov: "Install and restart" closed the window, then adding this run's races to the
+    # history and uploading every recording kept the installer waiting for minutes, and the
+    # update looked broken. The races are remembered and added on the first start after it.
+    from engineer.updates import defer_history, take_deferred
+    a, b = tmp_path / "a.zst", tmp_path / "b.zst"
+    a.write_bytes(b"x")
+    b.write_bytes(b"y")
+    folder = tmp_path / "updates"
+    defer_history(folder, [a])
+    defer_history(folder, [a, b])                  # a second try at the update: no repeats
+    b.unlink()                                      # gone since: skipped
+    assert take_deferred(folder) == [a]
+    assert take_deferred(folder) == []              # taken once

@@ -193,6 +193,7 @@ async def _run(cfg: Config, record: bool | None, voice: bool, ptt_on: bool = Tru
         refresh_stints(cfg.features_path)
     except Exception as exc:
         log.warning("could not refresh the tyre history: %s", exc)
+    history_job = _add_deferred_history(cfg)       # races left for after an update
     from engineer.strategy.runner import WorkerRunner
     strategy_runner = WorkerRunner(cfg.features_path)     # strategy sims in their own process
     # Real F1 pit losses per track, a starting value until the game's own stops are timed.
@@ -305,7 +306,18 @@ async def _run(cfg: Config, record: bool | None, voice: bool, ptt_on: bool = Tru
             engine.answers.feedback.write_markdown()
         print(f"Stopped. {listener.packets_received} packets received, "
               f"{pipeline.bad_packets} rejected, {pipeline.unknown_packets} unknown id.")
-        if recorder and cfg.features_auto_add and recorder.paths_this_run:
+        if history_job is not None:
+            history_job.join()                          # never two writers on the tables
+        # Installing an update: straight to the installer (14 Nov: adding this run's races and
+        # uploading at shutdown kept it waiting for minutes behind a closed window, so the
+        # update looked broken). The races are added on the next start, and the background
+        # uploader sends what's pending then.
+        installing = updater.install_requested
+        if installing and recorder and cfg.features_auto_add and recorder.paths_this_run:
+            from engineer.updates import defer_history
+            defer_history(updater.folder, [p for p in recorder.paths_this_run if p.exists()])
+            print("This session goes into your tyre and strategy history after the update.")
+        elif recorder and cfg.features_auto_add and recorder.paths_this_run:
             # Installed app: add this run's races to the tyre/strategy history (no manual build).
             from engineer.features.tables import add_recordings
             print("Adding this session to your tyre and strategy history (Ctrl+C to skip)...")
@@ -316,7 +328,7 @@ async def _run(cfg: Config, record: bool | None, voice: bool, ptt_on: bool = Tru
                 print("Skipped.")
             except Exception as exc:
                 log.warning("could not update the history: %s", exc)
-        if recorder and cfg.upload.auto:
+        if recorder and cfg.upload.auto and not installing:
             # Shutting down anyway, so a blocking upload is fine here.
             from engineer.ingest.share import upload_pending
             print("Uploading recordings not sent yet to GitHub (Ctrl+C again to skip)...")
@@ -330,6 +342,28 @@ async def _run(cfg: Config, record: bool | None, voice: bool, ptt_on: bool = Tru
             from engineer.report.daily import start_in_background
             start_in_background(cfg, config_path)
         updater.run_if_requested()          # last: the installer replaces the app's files
+
+
+def _add_deferred_history(cfg: Config):
+    """Races left by an update's shutdown go into the tyre history now, in a thread (the
+    tables are only written here and at shutdown, which waits for it). None if there are none."""
+    from engineer.updates import take_deferred
+    paths = take_deferred(cfg.data_path / "updates")
+    if not paths or not cfg.features_auto_add:
+        return None
+    import threading
+
+    def run():
+        from engineer.features.tables import add_recordings
+        try:
+            add_recordings(paths, cfg.features_path, progress=lambda *a: None)
+            log.info("added %d recording(s) from before the update to the history", len(paths))
+        except Exception as exc:
+            log.warning("could not add the races from before the update: %s", exc)
+
+    job = threading.Thread(target=run, name="history-after-update", daemon=True)
+    job.start()
+    return job
 
 
 def _sessions(config_path: Path | None) -> None:

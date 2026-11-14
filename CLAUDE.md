@@ -582,6 +582,12 @@ uv run python -m engineer.overlay --replay <file.zst> --locked   # ... fed by a 
   doing the updating; installer.iss changes apply to the installer being run. `updates.auto_download` fetches
   it ahead whenever no session is live; installing is always a click. Mac: a link to the .dmg.
   v0.1.4 and earlier have no updater: the first version with it has to be installed by hand.
+  Install requested = no blocking work at shutdown (14 Nov: the window closed, then adding the
+  run's races to the history and uploading every recording kept the installer waiting for
+  minutes, so updates looked broken and were closed or re-launched mid-way): this run's
+  recordings go in data/updates/after_update.json (`defer_history`) and are added in a thread
+  on the next start (`cli._add_deferred_history`, joined before the shutdown writes); uploads
+  are left to the next start's background uploader. Applies from the version after 0.1.8.
 - The installed app adds each run's recordings to `laps`/`stints` when it closes
   (`features_auto_add`), so the tyre/strategy history grows without a manual build.
 - Stints are per session UID, track, session type and "part" (a car's lap number dropping by 2+

@@ -891,5 +891,7 @@ From the real radio study's most common unprompted topics.
 ## Next version (0.1.9): ready, not published (14 Nov)
 
 - [x] Release notes written (docs/release-notes.md): the Spa diagnostic fixes
+- [x] In-app update: no history add / upload at shutdown when installing (they kept the installer
+      waiting for minutes behind a closed window); done on the next start instead
 - [ ] Publish only when asked: run the release workflow with version 0.1.9 (tag pushes don't
       get through from the cloud session). Waiting on the strategy-delay log first may add a fix

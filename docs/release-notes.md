@@ -28,6 +28,11 @@ folder and offers to bring your recordings, history, reports and settings over (
   engineer no longer calls it an undercut or tells you they "stayed in front on fresher tyres".
 - **Shorter track position answer**: "Where am I in track position?" names two cars still to
   stop, then how many more, instead of reading out the whole list.
+- **Updates install straight away**: "Install and restart" now goes straight to the installer.
+  Before, the app first added the race to your history and uploaded recordings, which could
+  take minutes with nothing on screen, so it looked like the update had failed. (This helps
+  from the next update on; to get this version from 0.1.8, wait for the black console window to
+  say "Installing Race Engineer", or install it by hand.)
 - **More answers on the radio**: say "Confirm" after a box call ("Copy, box this lap, hards");
   "At what?" or "Confirm percentages" repeats the last call; "Shorten that, log it" logs the
   last answer with your note; a question the engineer doesn't catch but that names a driver

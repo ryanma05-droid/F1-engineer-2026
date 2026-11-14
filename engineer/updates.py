@@ -48,6 +48,10 @@ WAIT_EXIT_S = 60             # longest wait for the app to exit before installin
 SILENT_ARGS = ["/SILENT", "/SP-", "/SUPPRESSMSGBOXES", "/NORESTART", "/CLOSEAPPLICATIONS"]
 LOG_NAME = "install.log"
 LOG_OK = "Installation process succeeded"   # Inno Setup writes this line on success
+# This run's recordings, to add to the tyre history on the first start after an update (14 Nov:
+# adding them and uploading every recording at shutdown kept the installer waiting for minutes
+# behind a closed window, and the update looked like it failed).
+DEFERRED_NAME = "after_update.json"
 
 
 def parse_version(v: str | None) -> tuple[int, ...] | None:
@@ -167,6 +171,29 @@ def run_installer(path: Path, log_path: Path | None = None, wait_pid: int | None
     cmd = installer_command(path, log_path, wait_pid if wait_pid is not None else os.getpid())
     flags = 0x00000008 | 0x00000200 | 0x08000000  # DETACHED, NEW_PROCESS_GROUP, NO_WINDOW
     subprocess.Popen(cmd, creationflags=flags, close_fds=True)
+
+
+def defer_history(folder: Path, paths: list[Path]) -> None:
+    """Remember recordings to add to the tyre history after the update."""
+    path = Path(folder) / DEFERRED_NAME
+    try:
+        old = json.loads(path.read_text(encoding="utf-8")) if path.exists() else []
+    except (OSError, ValueError):
+        old = []
+    keep = list(dict.fromkeys([*old, *(str(p) for p in paths)]))
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(keep), encoding="utf-8")
+
+
+def take_deferred(folder: Path) -> list[Path]:
+    """The recordings left for after an update (the list is cleared), only those still there."""
+    path = Path(folder) / DEFERRED_NAME
+    try:
+        names = json.loads(path.read_text(encoding="utf-8"))
+        path.unlink()
+    except (OSError, ValueError):
+        return []
+    return [Path(n) for n in names if Path(n).exists()]
 
 
 def last_install(folder: Path, current: str) -> dict | None:
